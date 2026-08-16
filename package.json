@@ -1,0 +1,50 @@
+{
+  "name": "dsh-mayori",
+  "version": "0.1.0",
+  "description": "A DeepSeek Harness bundle for persistent, collaborative role-playing games",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check index.js && node --test"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "packageManager": "pnpm@11.7.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dmitryplyaskin/Mayori.git"
+  },
+  "homepage": "https://github.com/dmitryplyaskin/Mayori#readme",
+  "bugs": {
+    "url": "https://github.com/dmitryplyaskin/Mayori/issues"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "cordis",
+    "role-playing-game",
+    "rpg",
+    "game-master"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1"
+  }
+}
