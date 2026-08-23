@@ -12,6 +12,8 @@
   },
   "files": [
     "index.js",
+    "src/character-card.js",
+    "src/character-library-host.js",
     "lib/client.js",
     "lib/client.js.map",
     "cordis.patch.yml",
@@ -55,10 +57,12 @@
     }
   },
   "dependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "peerDependencies": {
-    "react": "^18.2.0"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "tsdown": "^0.22.14"

@@ -8,9 +8,18 @@
  */
 
 import z from '@deepseek-ai/schemastery'
+import { homedir } from 'node:os'
+import { join, resolve } from 'node:path'
+
+import { registerCharacterLibrary } from './src/character-library-host.js'
 
 export const name = 'mayori-director'
 export const inject = ['systemPrompt']
+
+const configuredDshHome = typeof process.env.DSH_HOME === 'string' && process.env.DSH_HOME.trim() !== ''
+  ? process.env.DSH_HOME
+  : join(homedir(), '.dsh')
+const DEFAULT_CHARACTERS_PATH = join(resolve(configuredDshHome), 'mayori', 'characters')
 
 /** Configuration accepted by the Mayori director plugin. */
 export const Config = z.object({
@@ -18,6 +27,7 @@ export const Config = z.object({
   languagePolicy: z.string().default('Reply in the language used by the player unless they request another.'),
   campaignStyle: z.string().default('Collaborative, character-driven role-playing with consequential choices.'),
   additionalInstructions: z.string().default(''),
+  charactersPath: z.string().default(DEFAULT_CHARACTERS_PATH),
 })
 
 const DEFAULTS = Object.freeze({
@@ -25,6 +35,7 @@ const DEFAULTS = Object.freeze({
   languagePolicy: 'Reply in the language used by the player unless they request another.',
   campaignStyle: 'Collaborative, character-driven role-playing with consequential choices.',
   additionalInstructions: '',
+  charactersPath: DEFAULT_CHARACTERS_PATH,
 })
 
 /** Resolve Loader-normalized config and fail loudly for direct invalid calls. */
@@ -41,6 +52,10 @@ function resolveConfig(config = {}) {
     throw new TypeError('additionalInstructions must be a string')
   }
   resolved.additionalInstructions = resolved.additionalInstructions.trim()
+  if (typeof resolved.charactersPath !== 'string' || resolved.charactersPath.trim().length === 0) {
+    throw new TypeError('charactersPath must be a non-empty string')
+  }
+  resolved.charactersPath = resolve(resolved.charactersPath.trim())
   return resolved
 }
 
@@ -73,9 +88,11 @@ export function buildDirectorPrompt(config = {}) {
  * @returns {void}
  */
 export function apply(ctx, config = {}) {
+  const resolved = resolveConfig(config)
   ctx.systemPrompt.section({
     name: 'mayori:director',
     order: 10,
-    text: buildDirectorPrompt(config),
+    text: buildDirectorPrompt(resolved),
   })
+  registerCharacterLibrary(ctx, resolved.charactersPath)
 }

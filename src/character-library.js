@@ -1,14 +1,8 @@
-/** Character-library capability: Service Definition plus IndexedDB Provider. */
-
-import { importCharacterCardFile } from './character-card.js'
+/** Browser proxy for the Host-owned Character Library Service. */
 
 const EMPTY_SNAPSHOT = Object.freeze({ status: 'loading', cards: Object.freeze([]), error: null, revision: 0 })
 
-/**
- * Service Definition for the browser-local imported Character Card library.
- * Providers publish immutable snapshots and own persistence; UI consumers do
- * not reach IndexedDB directly.
- */
+/** Service Definition consumed by gallery UI. */
 export class CharacterLibraryService {
   getSnapshot() { throw new Error('CharacterLibraryService.getSnapshot() is not implemented') }
   subscribe() { throw new Error('CharacterLibraryService.subscribe() is not implemented') }
@@ -16,48 +10,36 @@ export class CharacterLibraryService {
   remove() { throw new Error('CharacterLibraryService.remove() is not implemented') }
 }
 
-function requestResult(request) {
-  return new Promise((resolve, reject) => {
-    request.addEventListener('success', () => { resolve(request.result) }, { once: true })
-    request.addEventListener('error', () => { reject(request.error ?? new Error('IndexedDB request failed')) }, { once: true })
-  })
+function toBase64(bytes) {
+  const chunkSize = 0x8000
+  let binary = ''
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))
+  }
+  return btoa(binary)
 }
 
-function transactionDone(transaction) {
-  return new Promise((resolve, reject) => {
-    transaction.addEventListener('complete', resolve, { once: true })
-    transaction.addEventListener('abort', () => { reject(transaction.error ?? new Error('IndexedDB transaction aborted')) }, { once: true })
-    transaction.addEventListener('error', () => { reject(transaction.error ?? new Error('IndexedDB transaction failed')) }, { once: true })
-  })
+function unwrap(result) {
+  if (result.ok) return result.value
+  throw new Error(typeof result.error === 'string' ? result.error : 'Не удалось выполнить операцию с библиотекой.')
 }
 
-function openDatabase(indexedDb) {
-  return new Promise((resolve, reject) => {
-    const request = indexedDb.open('mayori-character-library', 1)
-    request.addEventListener('upgradeneeded', () => {
-      const database = request.result
-      if (!database.objectStoreNames.contains('characters')) {
-        const store = database.createObjectStore('characters', { keyPath: 'id' })
-        store.createIndex('importedAt', 'importedAt')
-      }
-    })
-    request.addEventListener('success', () => { resolve(request.result) }, { once: true })
-    request.addEventListener('error', () => { reject(request.error ?? new Error('IndexedDB open failed')) }, { once: true })
+async function call(endpoint, payload) {
+  const response = await fetch(`/mayori/characters/${endpoint}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
   })
+  const result = await response.json().catch(() => ({ ok: false, error: `HTTP ${response.status}` }))
+  if (!response.ok && result.ok !== false) throw new Error(`HTTP ${response.status}`)
+  return unwrap(result)
 }
 
-/** IndexedDB Provider. Imported cards survive browser reloads on this origin. */
-export class IndexedDbCharacterLibraryProvider extends CharacterLibraryService {
-  #indexedDb
-  #database
+/** Client Provider that keeps only an observable snapshot; Host owns persistence. */
+export class RemoteCharacterLibraryProvider extends CharacterLibraryService {
   #snapshot = EMPTY_SNAPSHOT
   #listeners = new Set()
   #loading
-
-  constructor(indexedDb = globalThis.indexedDB) {
-    super()
-    this.#indexedDb = indexedDb
-  }
 
   getSnapshot = () => this.#snapshot
 
@@ -69,36 +51,24 @@ export class IndexedDbCharacterLibraryProvider extends CharacterLibraryService {
 
   async importFiles(files) {
     await this.#ensureLoaded()
-    if (this.#snapshot.status === 'error') throw new Error(this.#snapshot.error)
-    const settled = await Promise.allSettled([...files].map(file => importCharacterCardFile(file)))
-    const records = settled.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
-    const rejected = settled.flatMap((result, index) => result.status === 'rejected'
-      ? [{ name: files[index]?.name ?? 'character-card', error: result.reason instanceof Error ? result.reason.message : String(result.reason) }]
-      : [])
-    if (records.length > 0) {
-      const database = await this.#db()
-      const transaction = database.transaction('characters', 'readwrite')
-      const store = transaction.objectStore('characters')
-      for (const record of records) store.put(record)
-      await transactionDone(transaction)
-      await this.#reload()
+    const prepared = await Promise.all([...files].map(async file => ({
+      name: file.name || 'character-card',
+      type: file.type || '',
+      base64: toBase64(new Uint8Array(await file.arrayBuffer())),
+    })))
+    const result = { imported: 0, rejected: [] }
+    for (let offset = 0; offset < prepared.length; offset += 2) {
+      const partial = await call('import', { files: prepared.slice(offset, offset + 2) })
+      result.imported += partial.imported
+      result.rejected.push(...partial.rejected)
     }
-    return { imported: records.length, rejected }
+    await this.#reload()
+    return result
   }
 
   async remove(id) {
-    await this.#ensureLoaded()
-    const database = await this.#db()
-    const transaction = database.transaction('characters', 'readwrite')
-    transaction.objectStore('characters').delete(id)
-    await transactionDone(transaction)
+    await call('remove', { id })
     await this.#reload()
-  }
-
-  async #db() {
-    if (this.#indexedDb === undefined) throw new Error('IndexedDB недоступен в этом браузере.')
-    this.#database ??= openDatabase(this.#indexedDb)
-    return this.#database
   }
 
   async #ensureLoaded() {
@@ -109,12 +79,8 @@ export class IndexedDbCharacterLibraryProvider extends CharacterLibraryService {
   }
 
   async #reload() {
-    const database = await this.#db()
-    const transaction = database.transaction('characters', 'readonly')
-    const cards = await requestResult(transaction.objectStore('characters').getAll())
-    await transactionDone(transaction)
-    cards.sort((left, right) => right.importedAt - left.importedAt || left.name.localeCompare(right.name))
-    this.#publish('ready', cards, null)
+    const result = await call('list', {})
+    this.#publish('ready', Array.isArray(result.cards) ? result.cards : [], null)
   }
 
   #publish(status, cards, error) {

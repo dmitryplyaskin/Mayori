@@ -1,6 +1,7 @@
-/** Gallery Consumer for the browser-local Character Library Service. */
+/** Full-screen Gallery Consumer for the Host-owned Character Library. */
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 
 const EMPTY_ARRAY = Object.freeze([])
 
@@ -20,10 +21,27 @@ function icon(name) {
   if (name === 'upload') return <svg {...common}><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
   if (name === 'close') return <svg {...common}><path d="m6 6 12 12M18 6 6 18"/></svg>
   if (name === 'trash') return <svg {...common}><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5"/></svg>
+  if (name === 'search') return <svg {...common}><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+  if (name === 'filter') return <svg {...common}><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+  if (name === 'play') return <svg {...common}><path d="m9 7 8 5-8 5z"/></svg>
+  if (name === 'edit') return <svg {...common}><path d="m4 20 4.2-1 10.6-10.6a2 2 0 0 0-2.8-2.8L5.4 16.2z"/><path d="m14.8 6.8 2.8 2.8"/></svg>
   return null
 }
 
+function text(value) {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : null
+}
+
+function cardTags(card) {
+  return Array.isArray(card.data.tags)
+    ? card.data.tags.filter(value => typeof value === 'string' && value.trim() !== '').map(value => value.trim())
+    : EMPTY_ARRAY
+}
+
 function safeAssetUri(card) {
+  if (typeof card.image === 'string' && /^data:image\/(?:png|jpe?g|webp|gif);base64,/i.test(card.image)) {
+    return card.image
+  }
   const assets = Array.isArray(card.data.assets) ? card.data.assets : EMPTY_ARRAY
   const main = assets.find(asset => asset?.type === 'icon' && asset?.name === 'main')
     ?? assets.find(asset => asset?.type === 'icon')
@@ -45,88 +63,177 @@ function useCardImage(card) {
   return source
 }
 
-function text(value) {
-  return typeof value === 'string' && value.trim() !== '' ? value.trim() : null
+function CardPortrait({ card, className = '' }) {
+  const source = useCardImage(card)
+  return source === null
+    ? <span className={`mayori-card-fallback ${className}`} aria-hidden="true">{card.name.slice(0, 1).toUpperCase()}</span>
+    : <img className={className} src={source} alt={`Портрет: ${card.name}`} />
 }
 
-function CharacterCard({ card, onRemove }) {
-  const source = useCardImage(card)
-  const description = text(card.data.description) ?? text(card.data.personality)
-  const tags = Array.isArray(card.data.tags)
-    ? card.data.tags.filter(value => typeof value === 'string' && value.trim() !== '').slice(0, 5)
-    : EMPTY_ARRAY
-  const details = [
-    ['Описание', text(card.data.description)],
-    ['Характер', text(card.data.personality)],
-    ['Сценарий', text(card.data.scenario)],
-    ['Первое сообщение', text(card.data.first_mes)],
-  ].filter(([, value]) => value !== null)
+function ImportControl({ busy, inputRef, onFiles, compact = false }) {
+  return (
+    <label className={`mayori-import-button${compact ? ' mayori-import-compact' : ''}`} aria-disabled={busy || undefined}>
+      {icon('upload')}
+      <span>{busy ? 'Импорт…' : 'Импортировать'}</span>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".png,.json,image/png,application/json"
+        multiple
+        disabled={busy}
+        onChange={(event) => { void onFiles(event.currentTarget.files ?? []) }}
+      />
+    </label>
+  )
+}
+
+function CharacterCard({ card, onPlay, onEdit }) {
+  const tags = cardTags(card).slice(0, 3)
   return (
     <li className="mayori-card">
       <article>
-        <div className="mayori-card-media">
-          {source === null
-            ? <span className="mayori-card-fallback" aria-hidden="true">{card.name.slice(0, 1).toUpperCase()}</span>
-            : <img src={source} alt={`Портрет: ${card.name}`} />}
-          <span className="mayori-card-version">v{card.specVersion}</span>
-        </div>
+        <div className="mayori-card-media"><CardPortrait card={card} /></div>
         <div className="mayori-card-body">
           <div className="mayori-card-heading">
-            <div>
-              <h3>{card.name}</h3>
-              <p className="mayori-card-byline">{text(card.data.creator) ?? 'Автор не указан'}</p>
-            </div>
-            <button
-              type="button"
-              className="mayori-icon-action"
-              aria-label={`Удалить карточку ${card.name}`}
-              onClick={() => { onRemove(card) }}
-            >
-              {icon('trash')}
-            </button>
+            <h3>{card.name}</h3>
+            <p>{text(card.data.creator) ?? 'Автор не указан'}</p>
           </div>
-          {description !== null && <p className="mayori-card-summary">{description}</p>}
           {tags.length > 0 && (
             <ul className="mayori-tags" aria-label="Теги">
               {tags.map((tag, index) => <li key={`${tag}-${index}`}>{tag}</li>)}
             </ul>
           )}
-          {card.warnings.length > 0 && <p className="mayori-card-warning">{card.warnings.join(' ')}</p>}
-          {details.length > 0 && (
-            <details className="mayori-card-details">
-              <summary>Подробнее</summary>
-              <dl>
-                {details.map(([label, value]) => (
-                  <div key={label}>
-                    <dt>{label}</dt>
-                    <dd>{value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </details>
-          )}
+          <div className="mayori-card-actions">
+            <button type="button" className="mayori-card-play" onClick={() => { onPlay(card) }}>
+              {icon('play')}<span>Играть</span>
+            </button>
+            <button type="button" className="mayori-card-edit" onClick={(event) => { onEdit(card, event.currentTarget) }}>
+              {icon('edit')}<span>Изменить</span>
+            </button>
+          </div>
         </div>
       </article>
     </li>
   )
 }
 
+function CharacterInfoDialog({ card, onClose, onRemove, triggerRef }) {
+  const dialogRef = useRef(null)
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (dialog === null) return
+    if (card !== null && !dialog.open) dialog.showModal()
+    if (card === null && dialog.open) dialog.close()
+  }, [card])
+
+  const finishClose = () => {
+    onClose()
+    requestAnimationFrame(() => { triggerRef.current?.focus() })
+  }
+  if (card === null) return <dialog ref={dialogRef} className="mayori-character-dialog" onClose={finishClose} />
+
+  const sections = [
+    ['Описание', text(card.data.description)],
+    ['Характер', text(card.data.personality)],
+    ['Сценарий', text(card.data.scenario)],
+    ['Первое сообщение', text(card.data.first_mes)],
+    ['Пример диалога', text(card.data.mes_example)],
+    ['Заметки автора', text(card.data.creator_notes)],
+  ].filter(([, value]) => value !== null)
+  const tags = cardTags(card)
+  return (
+    <dialog
+      ref={dialogRef}
+      className="mayori-character-dialog"
+      aria-labelledby="mayori-character-title"
+      onClose={finishClose}
+      onCancel={(event) => { event.preventDefault(); dialogRef.current?.close() }}
+    >
+      <div className="mayori-character-shell">
+        <header className="mayori-character-header">
+          <div>
+            <h2 id="mayori-character-title">{card.name}</h2>
+            <p>{text(card.data.creator) ?? 'Автор не указан'}</p>
+          </div>
+          <button type="button" className="mayori-icon-action" aria-label="Закрыть информацию" onClick={() => { dialogRef.current?.close() }}>
+            {icon('close')}
+          </button>
+        </header>
+        <div className="mayori-character-content">
+          <div className="mayori-character-portrait"><CardPortrait card={card} /></div>
+          <div className="mayori-character-details">
+            {tags.length > 0 && <ul className="mayori-tags" aria-label="Теги">{tags.map((tag, index) => <li key={`${tag}-${index}`}>{tag}</li>)}</ul>}
+            {card.warnings.length > 0 && <p className="mayori-card-warning">{card.warnings.join(' ')}</p>}
+            {sections.length > 0 ? (
+              <dl>
+                {sections.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+              </dl>
+            ) : <p className="mayori-character-empty">У этой карточки нет дополнительного описания.</p>}
+            <dl className="mayori-character-meta">
+              <div><dt>Файл</dt><dd>{card.sourceName}</dd></div>
+              <div><dt>Добавлен</dt><dd>{new Intl.DateTimeFormat('ru', { dateStyle: 'medium', timeStyle: 'short' }).format(card.importedAt)}</dd></div>
+            </dl>
+          </div>
+        </div>
+        <footer className="mayori-character-footer">
+          <button type="button" className="mayori-danger-button" onClick={() => { void onRemove(card, dialogRef.current) }}>
+            {icon('trash')}<span>Удалить персонажа</span>
+          </button>
+          <button type="button" className="mayori-secondary-button" onClick={() => { dialogRef.current?.close() }}>Закрыть</button>
+        </footer>
+      </div>
+    </dialog>
+  )
+}
+
+function Filters({ cards, query, setQuery, sort, setSort, creator, setCreator, portrait, setPortrait, selectedTags, setSelectedTags, onReset }) {
+  const creators = useMemo(() => [...new Set(cards.map(card => text(card.data.creator)).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right, 'ru')), [cards])
+  const tags = useMemo(() => {
+    const counts = new Map()
+    for (const card of cards) for (const tag of cardTags(card)) counts.set(tag, (counts.get(tag) ?? 0) + 1)
+    return [...counts].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], 'ru'))
+  }, [cards])
+  const toggleTag = (tag) => {
+    setSelectedTags(selectedTags.includes(tag) ? selectedTags.filter(value => value !== tag) : [...selectedTags, tag])
+  }
+  return (
+    <div className="mayori-filter-fields">
+      <label className="mayori-search">
+        <span>Поиск</span>
+        <span className="mayori-search-control">{icon('search')}<input type="search" value={query} placeholder="Имя, автор, описание" onChange={event => { setQuery(event.currentTarget.value) }} /></span>
+      </label>
+      <label className="mayori-filter-control"><span>Сортировка</span><select value={sort} onChange={event => { setSort(event.currentTarget.value) }}><option value="newest">Сначала новые</option><option value="name">По имени</option><option value="creator">По автору</option></select></label>
+      <label className="mayori-filter-control"><span>Автор</span><select value={creator} onChange={event => { setCreator(event.currentTarget.value) }}><option value="all">Все авторы</option>{creators.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+      <fieldset className="mayori-filter-group">
+        <legend>Портрет</legend>
+        {[['all', 'Все'], ['with', 'С портретом'], ['without', 'Без портрета']].map(([value, label]) => <label key={value}><input type="radio" name="mayori-portrait" value={value} checked={portrait === value} onChange={() => { setPortrait(value) }} /><span>{label}</span></label>)}
+      </fieldset>
+      {tags.length > 0 && (
+        <fieldset className="mayori-filter-group mayori-tag-filter">
+          <legend>Теги</legend>
+          <div>{tags.map(([tag, count]) => <label key={tag}><input type="checkbox" checked={selectedTags.includes(tag)} onChange={() => { toggleTag(tag) }} /><span>{tag}</span><small>{count}</small></label>)}</div>
+        </fieldset>
+      )}
+      <button type="button" className="mayori-reset-button" onClick={onReset}>Сбросить фильтры</button>
+    </div>
+  )
+}
+
 function CharacterGalleryDialog({ library, open, onClose, openerRef }) {
   const dialogRef = useRef(null)
   const inputRef = useRef(null)
+  const detailTriggerRef = useRef(null)
   const snapshot = useSyncExternalStore(library.subscribe, library.getSnapshot, library.getSnapshot)
   const [query, setQuery] = useState('')
+  const [sort, setSort] = useState('newest')
+  const [creator, setCreator] = useState('all')
+  const [portrait, setPortrait] = useState('all')
+  const [selectedTags, setSelectedTags] = useState([])
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [selectedCard, setSelectedCard] = useState(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState(null)
-  const normalizedQuery = query.trim().toLocaleLowerCase()
-  const cards = useMemo(() => snapshot.cards.filter((card) => {
-    if (normalizedQuery === '') return true
-    const haystack = [card.name, card.data.creator, ...(Array.isArray(card.data.tags) ? card.data.tags : [])]
-      .filter(value => typeof value === 'string')
-      .join('\n')
-      .toLocaleLowerCase()
-    return haystack.includes(normalizedQuery)
-  }), [normalizedQuery, snapshot.cards])
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -135,11 +242,33 @@ function CharacterGalleryDialog({ library, open, onClose, openerRef }) {
     if (!open && dialog.open) dialog.close()
   }, [open])
 
+  const normalizedQuery = query.trim().toLocaleLowerCase('ru')
+  const cards = useMemo(() => {
+    const filtered = snapshot.cards.filter((card) => {
+      if (creator !== 'all' && text(card.data.creator) !== creator) return false
+      const source = safeAssetUri(card)
+      if (portrait === 'with' && source === null) return false
+      if (portrait === 'without' && source !== null) return false
+      const tags = cardTags(card)
+      if (!selectedTags.every(tag => tags.includes(tag))) return false
+      if (normalizedQuery === '') return true
+      const haystack = [card.name, card.data.creator, card.data.description, card.data.personality, ...tags]
+        .filter(value => typeof value === 'string').join('\n').toLocaleLowerCase('ru')
+      return haystack.includes(normalizedQuery)
+    })
+    return [...filtered].sort((left, right) => {
+      if (sort === 'name') return left.name.localeCompare(right.name, 'ru')
+      if (sort === 'creator') return (text(left.data.creator) ?? '').localeCompare(text(right.data.creator) ?? '', 'ru') || left.name.localeCompare(right.name, 'ru')
+      return right.importedAt - left.importedAt || left.name.localeCompare(right.name, 'ru')
+    })
+  }, [creator, normalizedQuery, portrait, selectedTags, snapshot.cards, sort])
+
   const finishClose = () => {
+    setSelectedCard(null)
+    setFiltersOpen(false)
     onClose()
     requestAnimationFrame(() => { openerRef.current?.focus() })
   }
-
   const importFiles = async (fileList) => {
     if (fileList.length === 0) return
     setBusy(true)
@@ -147,13 +276,7 @@ function CharacterGalleryDialog({ library, open, onClose, openerRef }) {
     try {
       const result = await library.importFiles(fileList)
       const rejected = result.rejected.map(item => `${item.name}: ${item.error}`)
-      setNotice({
-        kind: rejected.length > 0 ? 'error' : 'success',
-        text: [
-          result.imported > 0 ? `Импортировано: ${result.imported}.` : '',
-          ...rejected,
-        ].filter(Boolean).join(' '),
-      })
+      setNotice({ kind: rejected.length > 0 ? 'error' : 'success', text: [result.imported > 0 ? `Импортировано: ${result.imported}.` : '', ...rejected].filter(Boolean).join(' ') })
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) })
     } finally {
@@ -161,117 +284,86 @@ function CharacterGalleryDialog({ library, open, onClose, openerRef }) {
       if (inputRef.current !== null) inputRef.current.value = ''
     }
   }
-
-  const remove = async (card) => {
-    if (!window.confirm(`Удалить карточку «${card.name}» из галереи?`)) return
+  const remove = async (card, infoDialog) => {
+    if (!window.confirm(`Удалить персонажа «${card.name}» из галереи?`)) return
     try {
       await library.remove(card.id)
-      setNotice({ kind: 'success', text: `Карточка «${card.name}» удалена.` })
+      infoDialog?.close()
+      setNotice({ kind: 'success', text: `Персонаж «${card.name}» удалён.` })
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) })
     }
   }
-
+  const resetFilters = () => {
+    setQuery(''); setSort('newest'); setCreator('all'); setPortrait('all'); setSelectedTags([])
+  }
   return (
-    <dialog
-      ref={dialogRef}
-      className="mayori-gallery-dialog"
-      aria-labelledby="mayori-gallery-title"
-      onClose={finishClose}
-      onCancel={() => { onClose() }}
-      onKeyDown={(event) => {
-        if (event.key !== 'Escape') return
-        event.preventDefault()
-        dialogRef.current?.close()
-      }}
-    >
-      <div className="mayori-gallery-shell">
-        <header className="mayori-gallery-header">
-          <div>
-            <p className="mayori-gallery-kicker">Character Card v2–v3</p>
-            <h2 id="mayori-gallery-title">Галерея персонажей</h2>
-          </div>
-          <button type="button" className="mayori-icon-action mayori-close" aria-label="Закрыть галерею" onClick={() => { dialogRef.current?.close() }}>
-            {icon('close')}
-          </button>
-        </header>
-
-        <div className="mayori-gallery-toolbar">
-          <label className="mayori-import-button" aria-disabled={busy || undefined}>
-            {icon('upload')}
-            <span>{busy ? 'Импорт…' : 'Импортировать'}</span>
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".png,.json,image/png,application/json"
-              multiple
-              disabled={busy}
-              onChange={(event) => { void importFiles(event.currentTarget.files ?? []) }}
-            />
-          </label>
-          <label className="mayori-search">
-            <span>Поиск</span>
-            <input
-              type="search"
-              value={query}
-              placeholder="Имя, автор или тег"
-              onChange={event => { setQuery(event.currentTarget.value) }}
-            />
-          </label>
-        </div>
-
-        <div className="mayori-gallery-status" role="status" aria-live="polite">
-          {notice !== null && <p className={notice.kind === 'error' ? 'mayori-error' : 'mayori-success'}>{notice.text}</p>}
-          {snapshot.status === 'error' && <p className="mayori-error">{snapshot.error}</p>}
-          {snapshot.status === 'ready' && snapshot.cards.length > 0 && (
-            <p>{normalizedQuery === '' ? `Карточек: ${snapshot.cards.length}` : `Найдено: ${cards.length}`}</p>
-          )}
-        </div>
-
-        <section className="mayori-gallery-content" aria-label="Импортированные персонажи">
-          {snapshot.status === 'loading' && <p className="mayori-empty">Загружаем библиотеку…</p>}
-          {snapshot.status === 'ready' && cards.length === 0 && (
-            <div className="mayori-empty">
-              <span className="mayori-empty-icon">{icon('gallery')}</span>
-              <h3>{snapshot.cards.length === 0 ? 'Здесь пока пусто' : 'Ничего не найдено'}</h3>
-              <p>{snapshot.cards.length === 0
-                ? 'Импортируйте PNG или JSON с Character Card v2/v3.'
-                : 'Попробуйте изменить поисковый запрос.'}</p>
+    <>
+      <dialog
+        ref={dialogRef}
+        className="mayori-gallery-dialog"
+        aria-labelledby="mayori-gallery-title"
+        onClose={finishClose}
+        onCancel={(event) => { event.preventDefault(); dialogRef.current?.close() }}
+      >
+        <div className="mayori-gallery-shell">
+          <header className="mayori-gallery-header">
+            <div className="mayori-gallery-title">
+              <h2 id="mayori-gallery-title">Персонажи</h2>
+              <p>{snapshot.status === 'ready' ? `${snapshot.cards.length} в галерее` : 'Загрузка…'}</p>
             </div>
-          )}
-          {cards.length > 0 && (
-            <ul className="mayori-card-grid">
-              {cards.map(card => <CharacterCard key={card.id} card={card} onRemove={remove} />)}
-            </ul>
-          )}
-        </section>
-      </div>
-    </dialog>
+            <div className="mayori-gallery-header-actions">
+              <button type="button" className="mayori-filter-toggle" aria-controls="mayori-filter-panel" aria-expanded={filtersOpen} onClick={() => { setFiltersOpen(value => !value) }}>{icon('filter')}<span>Фильтры</span></button>
+              <ImportControl busy={busy} inputRef={inputRef} onFiles={importFiles} compact />
+              <button type="button" className="mayori-icon-action" aria-label="Закрыть галерею" onClick={() => { dialogRef.current?.close() }}>{icon('close')}</button>
+            </div>
+          </header>
+          <div className="mayori-gallery-workspace">
+            {filtersOpen && <button type="button" className="mayori-filter-scrim" aria-label="Закрыть фильтры" onClick={() => { setFiltersOpen(false) }} />}
+            <aside id="mayori-filter-panel" className={`mayori-filter-panel${filtersOpen ? ' is-open' : ''}`} aria-label="Фильтры персонажей">
+              <div className="mayori-filter-panel-header"><h3>Фильтры</h3><button type="button" className="mayori-icon-action" aria-label="Закрыть фильтры" onClick={() => { setFiltersOpen(false) }}>{icon('close')}</button></div>
+              <ImportControl busy={busy} inputRef={inputRef} onFiles={importFiles} />
+              <Filters cards={snapshot.cards} query={query} setQuery={setQuery} sort={sort} setSort={setSort} creator={creator} setCreator={setCreator} portrait={portrait} setPortrait={setPortrait} selectedTags={selectedTags} setSelectedTags={setSelectedTags} onReset={resetFilters} />
+            </aside>
+            <main className="mayori-gallery-main" id="mayori-gallery-content">
+              <div className="mayori-gallery-results">
+                <p role="status" aria-live="polite">{snapshot.status === 'ready' ? `Показано ${cards.length} из ${snapshot.cards.length}` : ''}</p>
+              </div>
+              <div className="mayori-gallery-notice" role="status" aria-live="polite">
+                {notice !== null && <p className={notice.kind === 'error' ? 'mayori-error' : 'mayori-success'}>{notice.text}</p>}
+                {snapshot.status === 'error' && <p className="mayori-error">{snapshot.error}</p>}
+              </div>
+              {snapshot.status === 'loading' && <p className="mayori-empty">Загружаем галерею…</p>}
+              {snapshot.status === 'ready' && cards.length === 0 && (
+                <div className="mayori-empty">
+                  <span className="mayori-empty-icon">{icon('gallery')}</span>
+                  <h3>{snapshot.cards.length === 0 ? 'Персонажей пока нет' : 'Ничего не найдено'}</h3>
+                  <p>{snapshot.cards.length === 0 ? 'Импортируйте PNG или JSON, чтобы добавить первого персонажа.' : 'Измените запрос или сбросьте фильтры.'}</p>
+                </div>
+              )}
+              {cards.length > 0 && <ul className="mayori-card-grid">{cards.map(card => <CharacterCard key={card.id} card={card} onPlay={(item) => { setNotice({ kind: 'success', text: `Игра с «${item.name}» появится позже.` }) }} onEdit={(item, trigger) => { detailTriggerRef.current = trigger; setSelectedCard(item) }} />)}</ul>}
+            </main>
+          </div>
+        </div>
+      </dialog>
+      <CharacterInfoDialog card={selectedCard} onClose={() => { setSelectedCard(null) }} onRemove={remove} triggerRef={detailTriggerRef} />
+    </>
   )
 }
 
-/** Sidebar slot entry and modal gallery consumer. */
+/** Sidebar slot entry and full-screen gallery consumer. */
 export function CharacterGalleryAction({ wide, library }) {
   const [open, setOpen] = useState(false)
   const openerRef = useRef(null)
   return (
     <>
-      <button
-        ref={openerRef}
-        type="button"
-        className="mayori-gallery-trigger"
-        aria-label={wide ? undefined : 'Галерея персонажей'}
-        onClick={() => { setOpen(true) }}
-      >
-        {icon('gallery')}
-        {wide && <span>Персонажи</span>}
+      <button ref={openerRef} type="button" className="mayori-gallery-trigger" aria-label={wide ? undefined : 'Персонажи'} onClick={() => { setOpen(true) }}>
+        {icon('gallery')}{wide && <span>Персонажи</span>}
       </button>
-      <CharacterGalleryDialog
-        library={library}
-        open={open}
-        onClose={() => { setOpen(false) }}
-        openerRef={openerRef}
-      />
+      {createPortal(
+        <CharacterGalleryDialog library={library} open={open} onClose={() => { setOpen(false) }} openerRef={openerRef} />,
+        document.body,
+      )}
     </>
   )
 }

@@ -81,7 +81,7 @@ pnpm dsh --profile mayori
 Отдельный путь credentials не даёт настройкам Mayori перезаписать общее
 `$DSH_HOME/.credentials.yaml`.
 
-В dump должны присутствовать слой `dsh-mayori`, persona Mayori и строка `mayori-director`. После запуска Web в boot graph должен появиться browser module `dsh-mayori`, а sidebar wordmark должен отображаться как `Mayori`.
+В dump должны присутствовать слой `dsh-mayori`, persona Mayori, строка `mayori-director` и `charactersPath`, указывающий на `$DSH_HOME/mayori/characters`. После запуска Web в boot graph должен появиться browser module `dsh-mayori`, а вместо stock workspace/sidebar shell — панель `Mayori Engine` с пунктами `Персонажи` и `Настройки`. Импортируйте тестовую карточку и проверьте, что она появилась в файловом каталоге и остаётся доступной после смены браузера или порта.
 
 Launcher поддерживает произвольные профили через `--profile`. Алиас `dsh web`
 встроен в DSH отдельно; установка bundle сама по себе не добавляет формы

@@ -1,4 +1,4 @@
-/** Character Card v2/v3 decoding shared by the browser provider and tests. */
+/** Character Card v2/v3 decoding shared by the Host provider and tests. */
 
 const PNG_SIGNATURE = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10])
 const UTF8 = new TextDecoder('utf-8', { fatal: true })
@@ -148,10 +148,10 @@ export async function characterCardId(card) {
   return hex(new Uint8Array(digest))
 }
 
-/** Convert a File-like object into the durable library record. */
-export async function importCharacterCardFile(file, now = Date.now()) {
-  const bytes = new Uint8Array(await file.arrayBuffer())
-  const parsed = parseCharacterCardBytes(bytes, file.type ?? '', file.name ?? '')
+/** Convert source bytes into a durable library record. */
+export async function importCharacterCardBytes(bytes, options = {}) {
+  const { mediaType = '', fileName = 'character-card', now = Date.now() } = options
+  const parsed = parseCharacterCardBytes(bytes, mediaType, fileName)
   return {
     id: await characterCardId(parsed.card),
     spec: parsed.card.spec,
@@ -161,7 +161,21 @@ export async function importCharacterCardFile(file, now = Date.now()) {
     card: parsed.card,
     warnings: parsed.warnings,
     importedAt: now,
-    sourceName: file.name || 'character-card',
-    image: parsed.imageBytes === null ? null : new Blob([parsed.imageBytes], { type: 'image/png' }),
+    sourceName: fileName || 'character-card',
+    imageBytes: parsed.imageBytes,
+  }
+}
+
+/** Convert a File-like object into the durable library record. */
+export async function importCharacterCardFile(file, now = Date.now()) {
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const record = await importCharacterCardBytes(bytes, {
+    mediaType: file.type ?? '',
+    fileName: file.name ?? '',
+    now,
+  })
+  return {
+    ...record,
+    image: record.imageBytes === null ? null : new Blob([record.imageBytes], { type: 'image/png' }),
   }
 }

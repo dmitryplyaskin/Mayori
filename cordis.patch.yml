@@ -15,3 +15,4 @@
         languagePolicy: Reply in the language used by the player unless they request another.
         campaignStyle: Collaborative, character-driven role-playing with consequential choices.
         additionalInstructions: ''
+        charactersPath: !!js dshHomePath('mayori', 'characters')
