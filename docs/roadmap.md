@@ -6,6 +6,9 @@ Roadmap разбит на вертикальные срезы: каждый эт
 
 - устанавливаемый bundle;
 - RPG persona и director prompt section;
+- browser-plugin branding smoke test;
+- отдельный профиль `mayori`, изолированный от штатного `web`;
+- импорт Character Card v2/v3 и browser-local галерея;
 - конфигурация языка, стиля и дополнительных инструкций;
 - unit tests и smoke-процедура.
 

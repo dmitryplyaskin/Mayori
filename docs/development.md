@@ -15,24 +15,82 @@ pnpm run check
 
 `check` проверяет синтаксис entry point и запускает unit tests через встроенный `node:test`. Исходник поставляется как ESM JavaScript, поэтому GitHub-установка не требует build script.
 
+Browser half собирается отдельно в формат lazy client module, который ожидает Web DSH:
+
+```sh
+pnpm run bundle
+```
+
+Команда создаёт `lib/client.js` и source map. Оба artifact входят в Git, чтобы установка из GitHub не выполняла код сборки на машине пользователя.
+
 ## Проверка в локальном DSH
 
-Из каталога рядом с Mayori:
+Для разработки используйте отдельный Harness home, чтобы профиль, настройки,
+credentials и сессии Mayori не затрагивали обычный `~/.dsh`. В PowerShell:
 
-```sh
-dsh plugin --profile mayori-dev add ./Mayori
-dsh --profile mayori-dev --dump-config
-dsh --profile mayori-dev
+```powershell
+$env:DSH_HOME = 'C:\pet_projects\Mayori\.dsh-dev'
 ```
 
-Для source checkout DeepSeek Harness используйте его launcher:
+В source checkout DeepSeek Harness сначала установите Mayori. Эта команда
+создаст отсутствующий профиль и добавит bundle:
 
-```sh
-pnpm dsh plugin --profile mayori-dev add ../Mayori
-pnpm dsh --profile mayori-dev --dump-config
+```powershell
+pnpm dsh plugin --profile mayori add C:\pet_projects\Mayori
 ```
 
-В dump должны присутствовать слой `dsh-mayori`, persona Mayori и строка `mayori-director`.
+Новый профиль с произвольным именем DSH инициализирует только с
+`@deepseek-ai/dsh-base`. Поэтому после первой установки добавьте встроенный Web
+bundle перед Mayori в `$DSH_HOME/profiles/mayori/package.json`, сохранив
+созданные поля `dependencies`:
+
+```json
+{
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-mayori"
+      ]
+    }
+  }
+}
+```
+
+После этого проверьте и запустите именованный профиль штатной формой CLI:
+
+```powershell
+pnpm dsh --profile mayori --dump-config
+pnpm dsh --profile mayori
+```
+
+Для проверки рядом с обычным `web` задайте профилю Mayori отдельный origin в
+`$DSH_HOME/profiles/mayori/cordis.patch.yml`:
+
+```yaml
+- id: credentials
+  config:
+    path: !!js dshHomePath('profiles/mayori/.credentials.yaml')
+- id: webserver
+  config:
+    host: !!js ctx.webStartup.host ?? '127.0.0.1'
+    port: 3081
+```
+
+Отдельный путь credentials не даёт настройкам Mayori перезаписать общее
+`$DSH_HOME/.credentials.yaml`.
+
+В dump должны присутствовать слой `dsh-mayori`, persona Mayori и строка `mayori-director`. После запуска Web в boot graph должен появиться browser module `dsh-mayori`, а sidebar wordmark должен отображаться как `Mayori`.
+
+Launcher поддерживает произвольные профили через `--profile`. Алиас `dsh web`
+встроен в DSH отдельно; установка bundle сама по себе не добавляет формы
+`dsh mayori` или `npx @deepseek-ai/dsh mayori`.
+
+Не устанавливайте Mayori через `--profile web`: её browser half содержит
+root-scoped branding и gallery contributions, поэтому такая установка намеренно
+изменит обычный Web UI. Для очистки ошибочной установки используйте
+`pnpm dsh plugin --profile web remove dsh-mayori`.
 
 ## Добавление функции
 
