@@ -32,10 +32,11 @@ test('rejects blank required configuration', () => {
   )
 })
 
-test('registers one ordered system-prompt section', () => {
+test('registers one ordered system-prompt section', async () => {
   const sections = []
-  let provided
+  const provided = []
   let rpcRegistration
+  let registrationReady
   const ctx = {
     systemPrompt: {
       section(section) {
@@ -43,14 +44,23 @@ test('registers one ordered system-prompt section', () => {
       },
     },
     reflect: {
-      provide(name, service) { provided = { name, service } },
+      provide(name, service) { provided.push({ name, service }) },
     },
     inject(services, callback) {
-      assert.deepEqual(services, ['webServer'])
-      callback({
+      assert.deepEqual(services, ['webServer', 'agents'])
+      registrationReady = callback({
+        reflect: {
+          provide(name, service) { provided.push({ name, service }) },
+        },
+        agents: { get() { return undefined }, list() { return [] } },
+        on(event, listener) {
+          assert.ok(event === 'agent/created' || event === 'agent/disposed')
+          assert.equal(typeof listener, 'function')
+        },
         effect(factory, label) {
-          assert.equal(label, 'mayori: character library route')
-          factory()
+          if (label === 'mayori: character library route') factory()
+          else if (label.startsWith('mayori: active character context')) return factory()
+          else assert.fail(`unexpected effect: ${label}`)
         },
         webServer: {
           register(route) { rpcRegistration = route; return () => {} },
@@ -59,15 +69,23 @@ test('registers one ordered system-prompt section', () => {
     },
   }
 
-  apply(ctx, { campaignStyle: 'A compact one-shot.', charactersPath: './test-characters' })
+  apply(ctx, {
+    campaignStyle: 'A compact one-shot.',
+    charactersPath: './test-characters',
+    campaignsPath: './test-campaigns',
+  })
+  await registrationReady
 
   assert.equal(sections.length, 1)
   assert.equal(sections[0].name, 'mayori:director')
   assert.equal(sections[0].order, 10)
   assert.match(sections[0].text, /A compact one-shot\./)
-  assert.equal(provided.name, 'mayoriCharacters')
-  assert.equal(provided.service.constructor.name, 'FileSystemCharacterLibraryProvider')
-  assert.match(provided.service.root, /test-characters$/)
+  assert.equal(provided[0].name, 'mayoriCharacters')
+  assert.equal(provided[0].service.constructor.name, 'FileSystemCharacterLibraryProvider')
+  assert.match(provided[0].service.root, /test-characters$/)
+  assert.equal(provided[1].name, 'mayoriCharacterSessions')
+  assert.equal(provided[1].service.constructor.name, 'PersistentCharacterSessionProvider')
+  assert.match(provided[1].service.defaultCampaignPath, /test-campaigns[\\/]default$/)
   assert.equal(rpcRegistration.kind, 'prefix')
   assert.equal(rpcRegistration.path, '/mayori/characters')
 })

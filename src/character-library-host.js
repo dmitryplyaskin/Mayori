@@ -8,6 +8,7 @@ import { resolve } from 'node:path'
 import { Service } from '@deepseek-ai/cordis'
 
 import { importCharacterCardBytes } from './character-card.js'
+import { PersistentCharacterSessionProvider } from './character-play-host.js'
 
 const RECORD_FORMAT = 1
 const CARD_ID = /^[a-f0-9]{64}$/
@@ -228,23 +229,25 @@ export class FileSystemCharacterLibraryStore {
 
 /** Cordis Provider that publishes the filesystem implementation through ctx. */
 export class FileSystemCharacterLibraryProvider extends CharacterLibraryService {
-  #store
+  _store
 
   constructor(ctx, config) {
     super(ctx)
-    this.#store = new FileSystemCharacterLibraryStore(config.root)
+    this._store = new FileSystemCharacterLibraryStore(config.root)
   }
 
-  get root() { return this.#store.root }
-  list() { return this.#store.list() }
-  import(payload) { return this.#store.import(payload) }
-  remove(id) { return this.#store.remove(id) }
+  get root() { return this._store.root }
+  list() { return this._store.list() }
+  import(payload) { return this._store.import(payload) }
+  remove(id) { return this._store.remove(id) }
 }
 
 /** Register the Host library and its reversible browser transport. */
-export function registerCharacterLibrary(ctx, root) {
+export function registerCharacterLibrary(ctx, root, campaignsRoot) {
   const library = new FileSystemCharacterLibraryProvider(ctx, { root })
-  ctx.inject(['webServer'], (consumerCtx) => {
+  ctx.inject(['webServer', 'agents'], async (consumerCtx) => {
+    const characterSessions = new PersistentCharacterSessionProvider(consumerCtx, library, { campaignsRoot })
+    await characterSessions.restoreActiveAgents()
     const route = {
       kind: 'prefix',
       path: ROUTE_PATH,
@@ -270,6 +273,11 @@ export function registerCharacterLibrary(ctx, root) {
             if (payload === null || typeof payload !== 'object') throw new TypeError('Ожидался идентификатор карточки.')
             await library.remove(payload.id)
             sendJson(res, 200, { ok: true, value: { removed: true } })
+          } else if (endpoint === 'prepare-campaign') {
+            sendJson(res, 200, { ok: true, value: await characterSessions.prepareCampaign() })
+          } else if (endpoint === 'play') {
+            if (payload === null || typeof payload !== 'object') throw new TypeError('Ожидались персонаж и сессия.')
+            sendJson(res, 200, { ok: true, value: await characterSessions.select(payload.sessionId, payload.characterId) })
           } else sendJson(res, 404, { ok: false, error: 'Неизвестная операция библиотеки.' })
         } catch (error) {
           sendJson(res, 400, { ok: false, error: message(error) })

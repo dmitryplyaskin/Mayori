@@ -8,6 +8,8 @@ export class CharacterLibraryService {
   subscribe() { throw new Error('CharacterLibraryService.subscribe() is not implemented') }
   importFiles() { throw new Error('CharacterLibraryService.importFiles() is not implemented') }
   remove() { throw new Error('CharacterLibraryService.remove() is not implemented') }
+  prepareCampaign() { throw new Error('CharacterLibraryService.prepareCampaign() is not implemented') }
+  play() { throw new Error('CharacterLibraryService.play() is not implemented') }
 }
 
 function toBase64(bytes) {
@@ -69,6 +71,14 @@ export class RemoteCharacterLibraryProvider extends CharacterLibraryService {
   async remove(id) {
     await call('remove', { id })
     await this.#reload()
+  }
+
+  async play(characterId, sessionId) {
+    return call('play', { characterId, sessionId })
+  }
+
+  async prepareCampaign() {
+    return call('prepare-campaign', {})
   }
 
   async #ensureLoaded() {

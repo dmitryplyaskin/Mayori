@@ -4,7 +4,7 @@
 
 - Node.js `^22.19.0` или `>=24.0.0`;
 - pnpm 11;
-- локальный или установленный DeepSeek Harness для интеграционного smoke test.
+- DeepSeek Harness `0.2.1-alpha.1` для интеграционного smoke test; полный форк не нужен.
 
 ## Быстрый цикл
 
@@ -81,7 +81,27 @@ pnpm dsh --profile mayori
 Отдельный путь credentials не даёт настройкам Mayori перезаписать общее
 `$DSH_HOME/.credentials.yaml`.
 
-В dump должны присутствовать слой `dsh-mayori`, persona Mayori, строка `mayori-director` и `charactersPath`, указывающий на `$DSH_HOME/mayori/characters`. После запуска Web в boot graph должен появиться browser module `dsh-mayori`, а вместо stock workspace/sidebar shell — панель `Mayori Engine` с пунктами `Персонажи` и `Настройки`. Импортируйте тестовую карточку и проверьте, что она появилась в файловом каталоге и остаётся доступной после смены браузера или порта.
+В dump должны присутствовать слой `dsh-mayori`, `system-prompt.config.personaPrefix` с ролью Mayori, preset `mayori` с `plugins: []`, выбранный default `mayori`, строка `mayori-director` и пути `charactersPath` / `campaignsPath`. После запуска Web в boot graph должен появиться browser module `dsh-mayori`, штатные brand slots должны показывать `Mayori Engine`, а sidebar region — галерею. Collapse, New Session и Settings остаются штатными. На чистом профиле импортируйте карточку, нажмите `Играть` и проверьте автоматическое создание каталога и Workspace, затем открытие именованного чата. Удалите карточку после выбора, перезапустите Host и продолжите чат: snapshot должен восстановиться из `campaignsPath/selections`, а фактически переданный модели контекст — присутствовать в штатном session log.
+
+Для проверки опубликованного пакета вместо source launcher используйте `pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.1`. Все проверки делайте с отдельным `DSH_HOME`; реальный профиль игрока автоматически не переустанавливается.
+
+### Keyless smoke
+
+В изолированном профиле добавьте тестовый overlay (не в профиль игрока):
+
+```yaml
+- id: session-telemetry-otel
+  disabled: true
+- insert:
+    - id: mayori-smoke-probe
+      name: C:/pet_projects/Mayori/scripts/dsh-smoke-probe.js
+```
+
+После установки checkout и сборки browser half запустите `pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.1 --patch <absolute-smoke-overlay.yml> --profile mayori --no-open --port 3090`. Launcher-параметры, включая `--patch`, должны находиться перед app-параметрами `--no-open` / `--port`.
+
+`node scripts/smoke-dsh.js http://127.0.0.1:3090` импортирует карточку, создаёт RPG-сессию, сохраняет выбор, удаляет исходную карточку и проводит ход через детерминированный тестовый LLM provider. Проверяются logged context, ответ и отсутствие coding tools. Скрипт печатает sessionId; после остановки и повторного запуска Host выполните `node scripts/smoke-dsh.js http://127.0.0.1:3090 <sessionId>` для проверки продолжения. Probe не входит в опубликованный пакет, использует локальный тестовый origin и не обращается к реальному LLM API.
+
+Карточка smoke test содержит `{{char}}` в разных регистрах и модельных полях, `{{user}}`, неизвестные и вложенные макросы, команды состояния/случайности, ошибочные группы и совпадения с переменными DSH (`cwd`, `model`). Скрипт проверяет подстановку имени и буквальное сохранение остальных выражений как в запросе модели, так и в session log, включая продолжение после перезапуска. Unit tests используют renderer опубликованного `@deepseek-ai/dsh-system-prompt`, а не копию его логики, и проверяют teardown переменной вместе с контекстом.
 
 Launcher поддерживает произвольные профили через `--profile`. Алиас `dsh web`
 встроен в DSH отдельно; установка bundle сама по себе не добавляет формы

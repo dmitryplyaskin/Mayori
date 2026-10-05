@@ -1,9 +1,10 @@
 /** Mayori browser plugin: custom RPG sidebar plus the Character Library UI. */
 
 import { RemoteCharacterLibraryProvider } from './character-library.js'
-import { MayoriSidebar } from './sidebar.jsx'
+import { startCharacterSession } from './play-character.js'
+import { MayoriSidebar, MayoriMark, MayoriBrandName } from './sidebar.jsx'
 
-export const inject = ['slots', 'layout']
+export const inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace']
 
 /** Plugin-owned style; removed with the client fiber. */
 export const BRAND_STYLE = String.raw`
@@ -11,48 +12,6 @@ export const BRAND_STYLE = String.raw`
   display: flex; flex: 1; min-block-size: 0; flex-direction: column;
   color: var(--dsw-alias-label-primary); font-size: 14px; overflow: hidden;
 }
-/* ui-sidebar has no brand/new-action seats. Once the public workspace region
-   is occupied by Mayori, remove those two stock chrome rows and let this
-   region supply the brand and toggle. Settings remains in its native seat. */
-div:has(> div > div > .mayori-sidebar-shell) > :nth-child(1),
-div:has(> div > div > .mayori-sidebar-shell) > :nth-child(2) { display: none; }
-div:has(> div > .mayori-sidebar-shell),
-div:has(> .mayori-sidebar-shell) {
-  margin-inline: 0; padding-inline: 0; overflow: visible;
-}
-.mayori-sidebar-header {
-  display: flex; flex: none; align-items: center; justify-content: flex-end; gap: 8px;
-  block-size: 60px; box-sizing: border-box; margin-block-end: 16px; padding: 8px 0 8px 4px;
-  overflow: hidden;
-}
-.mayori-sidebar-collapsed .mayori-sidebar-header {
-  justify-content: flex-start; block-size: 36px; margin-block-end: 20px; padding: 0;
-}
-.mayori-brand { display: flex; flex: 1; align-items: center; min-inline-size: 0; overflow: hidden; }
-.mayori-brand-mark {
-  display: inline-grid; place-items: center; flex: none; inline-size: 32px; block-size: 32px;
-  margin-inline-end: 10px; border-radius: 10px; background: var(--dsw-alias-label-primary);
-  color: var(--dsw-specific-sidebar-fill);
-}
-.mayori-brand-name {
-  overflow: hidden; font-size: 20px; font-weight: 650; line-height: 1;
-  letter-spacing: -0.035em; text-overflow: ellipsis; white-space: nowrap;
-}
-.mayori-brand-engine {
-  flex: none; align-self: flex-end; margin-block-end: 5px; margin-inline-start: 6px;
-  color: var(--dsw-alias-label-secondary); font-size: 10px; font-weight: 600;
-  line-height: 1; letter-spacing: 0.08em; text-transform: uppercase;
-}
-.mayori-sidebar-toggle {
-  position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none;
-  inline-size: 36px; block-size: 36px; padding: 0; border: 0; border-radius: 10px;
-  background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer;
-}
-.mayori-sidebar-toggle:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
-.mayori-sidebar-collapsed .mayori-sidebar-toggle { color: var(--dsw-alias-label-primary); }
-.mayori-sidebar-collapsed .mayori-sidebar-panel-icon { display: none; }
-.mayori-sidebar-collapsed .mayori-sidebar-toggle:hover .mayori-sidebar-panel-icon { display: block; }
-.mayori-sidebar-collapsed .mayori-sidebar-toggle:hover .mayori-sidebar-rail-mark { display: none; }
 .mayori-sidebar-navigation {
   display: flex; flex: 1; min-block-size: 0; flex-direction: column; gap: 8px;
   margin-inline: -2px; overflow-x: hidden; overflow-y: auto;
@@ -204,6 +163,7 @@ body[data-ds-dark-theme] .mayori-card-media img { outline-color: oklch(1 0 0 / 0
 }
 .mayori-card-actions button > svg, .mayori-danger-button > svg { inline-size: 17px; block-size: 17px; }
 .mayori-card-play { background: var(--dsw-alias-label-primary) !important; color: var(--dsw-alias-bg-l1, var(--dsw-specific-sidebar-fill)) !important; border-color: transparent !important; }
+.mayori-card-play:disabled { opacity: 0.62; cursor: progress; }
 .mayori-card-edit:hover, .mayori-secondary-button:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .mayori-empty {
   display: grid; place-items: center; align-content: center; min-block-size: 280px;
@@ -295,14 +255,26 @@ export function apply(ctx) {
     return () => { style.remove() }
   }, 'mayori: client styles')
 
-  // Shadow only the public workspace/session region. The stock shell keeps
-  // its fold-state machine and Settings seat; unload reveals WorkspaceBrowser.
+  ctx.slots.inject('sidebar.brand.mark', () => ctx.slots.register({
+    name: 'sidebar.brand.mark', priority: -100,
+  }, MayoriMark))
+  ctx.slots.inject('sidebar.brand.name', () => ctx.slots.register({
+    name: 'sidebar.brand.name', priority: -100,
+  }, MayoriBrandName))
+  ctx.slots.inject('conversation.hero.brand.mark', () => ctx.slots.register({
+    name: 'conversation.hero.brand.mark', priority: -100,
+  }, MayoriMark))
   ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({
     name: 'sidebar.workspaces',
     priority: -100,
     inject: () => ({
       library,
-      toggleSidebar: () => { ctx.layout.toggleSidebar() },
+      startCharacter: card => startCharacterSession({
+        sessions: ctx.sessions,
+        workspaces: ctx.workspaces,
+        uiWorkspace: ctx.uiWorkspace,
+        library,
+      }, card),
     }),
   }, MayoriSidebar))
 }

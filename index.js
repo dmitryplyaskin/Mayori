@@ -20,6 +20,7 @@ const configuredDshHome = typeof process.env.DSH_HOME === 'string' && process.en
   ? process.env.DSH_HOME
   : join(homedir(), '.dsh')
 const DEFAULT_CHARACTERS_PATH = join(resolve(configuredDshHome), 'mayori', 'characters')
+const DEFAULT_CAMPAIGNS_PATH = join(resolve(configuredDshHome), 'mayori', 'campaigns')
 
 /** Configuration accepted by the Mayori director plugin. */
 export const Config = z.object({
@@ -28,6 +29,7 @@ export const Config = z.object({
   campaignStyle: z.string().default('Collaborative, character-driven role-playing with consequential choices.'),
   additionalInstructions: z.string().default(''),
   charactersPath: z.string().default(DEFAULT_CHARACTERS_PATH),
+  campaignsPath: z.string().default(DEFAULT_CAMPAIGNS_PATH),
 })
 
 const DEFAULTS = Object.freeze({
@@ -36,6 +38,7 @@ const DEFAULTS = Object.freeze({
   campaignStyle: 'Collaborative, character-driven role-playing with consequential choices.',
   additionalInstructions: '',
   charactersPath: DEFAULT_CHARACTERS_PATH,
+  campaignsPath: DEFAULT_CAMPAIGNS_PATH,
 })
 
 /** Resolve Loader-normalized config and fail loudly for direct invalid calls. */
@@ -56,6 +59,10 @@ function resolveConfig(config = {}) {
     throw new TypeError('charactersPath must be a non-empty string')
   }
   resolved.charactersPath = resolve(resolved.charactersPath.trim())
+  if (typeof resolved.campaignsPath !== 'string' || resolved.campaignsPath.trim().length === 0) {
+    throw new TypeError('campaignsPath must be a non-empty string')
+  }
+  resolved.campaignsPath = resolve(resolved.campaignsPath.trim())
   return resolved
 }
 
@@ -92,7 +99,8 @@ export function apply(ctx, config = {}) {
   ctx.systemPrompt.section({
     name: 'mayori:director',
     order: 10,
+    interpolate: false,
     text: buildDirectorPrompt(resolved),
   })
-  registerCharacterLibrary(ctx, resolved.charactersPath)
+  registerCharacterLibrary(ctx, resolved.charactersPath, resolved.campaignsPath)
 }

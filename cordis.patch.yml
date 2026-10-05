@@ -3,11 +3,27 @@
 
 - id: system-prompt
   config:
-    persona: >-
+    personaPrefix: >-
       You are Mayori, an AI game master for persistent, collaborative role-playing games.
       Facilitate play as a fair and responsive narrator, not as a coding assistant.
+    personaSuffix: ''
+
+- id: agent-preset-registry
+  config:
+    default: mayori
+    selectedDefault: mayori
+
+- id: ui-brand-official
+  disabled: true
 
 - insert:
+    - id: preset-mayori
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: mayori
+        name: Mayori
+        description: Character-driven role-playing without coding tools.
+        plugins: []
     - id: mayori-director
       name: dsh-mayori
       config:
@@ -16,3 +32,4 @@
         campaignStyle: Collaborative, character-driven role-playing with consequential choices.
         additionalInstructions: ''
         charactersPath: !!js dshHomePath('mayori', 'characters')
+        campaignsPath: !!js dshHomePath('mayori', 'campaigns')

@@ -15,7 +15,7 @@ dsh-mayori bundle
 └── lib/client.js
     ├── замещает project/session region через публичный `sidebar.workspaces` slot
     ├── сохраняет штатный `sidebar.settings` consumer
-    └── добавляет RPC proxy и полноэкранную gallery action
+    └── добавляет RPC proxy, полноэкранную gallery action и запуск character chat
 ```
 
 Bundle является слоем композиции, а не отдельным приложением. Поддерживаемая deployment-композиция монтирует его в отдельный именованный профиль `mayori` поверх встроенного Web bundle; штатный профиль `web` не содержит Mayori. Это граница всего browser plugin: branding, Character Library и gallery action существуют на уровне профиля, а не переключаемого session mode. Регистрация prompt-section является обратимым Cordis effect и удаляется вместе с plugin fiber.
@@ -24,7 +24,9 @@ Bundle является слоем композиции, а не отдельн�
 изоляции интерфейса и настроек от обычного `web`. Идентичность каталога от origin
 не зависит: карточки принадлежат Host и переживают смену порта или браузера.
 
-Browser half объявлен через `dsh.client` и `exports["./client"]`. `MayoriSidebar` регистрируется в публичном root-scoped слоте `sidebar.workspaces` с приоритетом `-100`, поэтому штатный `WorkspaceBrowser` остаётся в ledger как fallback и снова становится видимым после выгрузки Mayori. Оригинальный sidebar shell сохраняет fold-state machine и настоящий `sidebar.settings` consumer. Поскольку shell пока не объявляет отдельные seats для brand row и New Session, plugin-owned stylesheet узко скрывает эти две соседние chrome-строки только у shell, чей slot-outlet содержит `.mayori-sidebar-shell`; собственные brand и toggle живут внутри заменённого региона. Стили добавляются и удаляются через Cordis effect.
+Поддерживаемая версия DSH — `0.2.1-alpha.1`; пакет объявляет её peer dependency. Browser half объявлен через `dsh.client` и `exports["./client"]`. `MayoriSidebar` регистрируется в публичном root-scoped слоте `sidebar.workspaces` с приоритетом `-100`, поэтому штатный `WorkspaceBrowser` остаётся fallback. Брендинг занимает штатные `sidebar.brand.mark`, `sidebar.brand.name` и `conversation.hero.brand.mark`; shell владеет кнопками нового чата, сворачивания и настроек. DOM-подмен и скрытия stock chrome по CSS-селекторам нет. Стили и слоты удаляются вместе с Cordis fiber.
+
+Bundle объявляет preset `mayori` с пустым списком дочерних плагинов и выбирает его по умолчанию, поэтому новые RPG-сессии не получают инструменты стандартного coding-пресета. Глобальные personaPrefix и director guidance задают роль ведущего. Это первый RPG-срез без фиктивных rules/dice tools; дальнейшие игровые инструменты добавляются в preset явно.
 
 ### Character Library
 
@@ -34,7 +36,21 @@ Browser half объявлен через `dsh.client` и `exports["./client"]`. 
 - **Provider** — `FileSystemCharacterLibraryProvider`: полные JSON-записи и исходные PNG в валидируемом `charactersPath` (по умолчанию `$DSH_HOME/mayori/characters`);
 - **Consumers** — lifecycle-bound same-origin Host route `/mayori/characters`, browser `RemoteCharacterLibraryProvider` с observable snapshot и `CharacterGalleryAction` внутри `MayoriSidebar`.
 
-Codec принимает JSON v2/v3 и стандартные PNG `tEXt` payloads `chara` / `ccv3`; при наличии обоих выбирает v3. Host валидирует байты до записи, сериализует карточку под content-derived id и публикует браузеру только снимок каталога. Контейнер и неизвестные поля не превращаются в prompt. Эта библиотека — пользовательский каталог ресурсов, а не campaign journal: пока карточка не выбрана для игры через будущий доменный event, модель её не видит.
+Codec принимает JSON v2/v3 и стандартные PNG `tEXt` payloads `chara` / `ccv3`; при наличии обоих выбирает v3. Host валидирует байты до записи, сериализует карточку под content-derived id и публикует браузеру только снимок каталога. Контейнер и неизвестные поля не превращаются в prompt. Эта библиотека — пользовательский каталог ресурсов, а не campaign journal: пока карточка не выбрана для игры, модель её не видит.
+
+### Character Session
+
+Запуск игры образует отдельный capability seam:
+
+- **Service Definition** — Host `CharacterSessionService.prepareCampaign()` и `select(sessionId, characterId)`;
+- **Provider** — `PersistentCharacterSessionProvider`, который идемпотентно создаёт `$DSH_HOME/mayori/campaigns/default` (корень задаётся валидируемым `campaignsPath`), разрешает карточку через Character Library и хранит неизменяемую связь Session → snapshot в файловом `FileSystemCharacterSessionStore` под `campaignsPath/selections`;
+- **Consumer** — browser gallery, которая при отсутствии кампаний регистрирует подготовленный каталог через `workspaces.create`, создаёт новую Session через `sessions.create({ workspaceId })`, удерживает её через `sessions.using`, ожидает `reference.ready`, вызывает same-origin transport, задаёт имя и открывает чат через `uiWorkspace.openSession`. Временный reference освобождается как при успехе, так и при ошибке; навигация получает собственный mainView reference до освобождения временного.
+
+Хранилище выбора содержит только стандартные поля Character Card; неизвестные поля, `extensions` и изображение остаются ресурсами каталога. Запись версионирована, имя файла — SHA-256 идентификатора сессии. Snapshot готовится во временном файле с flush, затем публикуется без перезаписи существующей записи. Выбор выполняется через `agent.runMaintenance`, чтобы ввод не начал ход посреди записи. Повтор того же выбора идемпотентен; другой персонаж требует нового чата.
+
+Ожидаемый serial listener `agent/created` читает snapshot и восстанавливает scoped context до первого ввода, в том числе после перезапуска. При форке snapshot родителя копируется в собственную запись дочерней сессии. При загрузке плагина восстанавливаются также уже активные Agents. Ошибки чтения не подменяются новым выбором. Удаление или обновление карточки не меняет уже созданный чат. Model-visible context материализуется штатной системой prompt contexts в session log; отдельный snapshot является доменным источником, не process memory. `registerEventType`, `session.events` и `agent/session-start` не используются. Старые неизвестные обязательные события автоматически не переписываются.
+
+Импортированные `{{…}}` не относятся к пространству переменных DSH. Provider регистрирует в `agent.ctx.systemPrompt` переменную `mayori_active_character_text` с готовым текстом карточки и контекст `mayori:active-character`, содержащий только ссылку на эту переменную. Публичный renderer DSH подставляет значение за один проход без повторного разбора содержимого; поэтому даже неизвестные или некорректные ST-макросы остаются данными и не вызывают ошибок. Переменная и контекст удаляются вместе при rebind, `agent/disposed` и unload Mayori. Детерминированная подстановка `{{char}}` (без учёта регистра) выполняется только в модельной проекции стандартных текстовых полей, без изменения snapshot. `{{user}}` остаётся маркером игрока без придуманного имени; остальные макросы не исполняются. Контекст с результатом подстановки, а не служебной ссылкой, попадает в штатный session log.
 
 ## Инварианты
 

@@ -87,7 +87,7 @@ function ImportControl({ busy, inputRef, onFiles, compact = false }) {
   )
 }
 
-function CharacterCard({ card, onPlay, onEdit }) {
+function CharacterCard({ card, onPlay, onEdit, playBusy, playDisabled }) {
   const tags = cardTags(card).slice(0, 3)
   return (
     <li className="mayori-card">
@@ -104,8 +104,8 @@ function CharacterCard({ card, onPlay, onEdit }) {
             </ul>
           )}
           <div className="mayori-card-actions">
-            <button type="button" className="mayori-card-play" onClick={() => { onPlay(card) }}>
-              {icon('play')}<span>Играть</span>
+            <button type="button" className="mayori-card-play" disabled={playDisabled} aria-busy={playBusy || undefined} onClick={() => { void onPlay(card) }}>
+              {icon('play')}<span>{playBusy ? 'Открываем…' : 'Играть'}</span>
             </button>
             <button type="button" className="mayori-card-edit" onClick={(event) => { onEdit(card, event.currentTarget) }}>
               {icon('edit')}<span>Изменить</span>
@@ -220,7 +220,7 @@ function Filters({ cards, query, setQuery, sort, setSort, creator, setCreator, p
   )
 }
 
-function CharacterGalleryDialog({ library, open, onClose, openerRef }) {
+function CharacterGalleryDialog({ library, open, onClose, openerRef, startCharacter }) {
   const dialogRef = useRef(null)
   const inputRef = useRef(null)
   const detailTriggerRef = useRef(null)
@@ -233,6 +233,7 @@ function CharacterGalleryDialog({ library, open, onClose, openerRef }) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [selectedCard, setSelectedCard] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [playingId, setPlayingId] = useState(null)
   const [notice, setNotice] = useState(null)
 
   useEffect(() => {
@@ -294,6 +295,18 @@ function CharacterGalleryDialog({ library, open, onClose, openerRef }) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) })
     }
   }
+  const play = async (card) => {
+    setPlayingId(card.id)
+    setNotice(null)
+    try {
+      await startCharacter(card)
+      dialogRef.current?.close()
+    } catch (error) {
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setPlayingId(null)
+    }
+  }
   const resetFilters = () => {
     setQuery(''); setSort('newest'); setCreator('all'); setPortrait('all'); setSelectedTags([])
   }
@@ -341,7 +354,7 @@ function CharacterGalleryDialog({ library, open, onClose, openerRef }) {
                   <p>{snapshot.cards.length === 0 ? 'Импортируйте PNG или JSON, чтобы добавить первого персонажа.' : 'Измените запрос или сбросьте фильтры.'}</p>
                 </div>
               )}
-              {cards.length > 0 && <ul className="mayori-card-grid">{cards.map(card => <CharacterCard key={card.id} card={card} onPlay={(item) => { setNotice({ kind: 'success', text: `Игра с «${item.name}» появится позже.` }) }} onEdit={(item, trigger) => { detailTriggerRef.current = trigger; setSelectedCard(item) }} />)}</ul>}
+              {cards.length > 0 && <ul className="mayori-card-grid">{cards.map(card => <CharacterCard key={card.id} card={card} onPlay={play} playBusy={playingId === card.id} playDisabled={playingId !== null} onEdit={(item, trigger) => { detailTriggerRef.current = trigger; setSelectedCard(item) }} />)}</ul>}
             </main>
           </div>
         </div>
@@ -352,7 +365,7 @@ function CharacterGalleryDialog({ library, open, onClose, openerRef }) {
 }
 
 /** Sidebar slot entry and full-screen gallery consumer. */
-export function CharacterGalleryAction({ wide, library }) {
+export function CharacterGalleryAction({ wide, library, startCharacter }) {
   const [open, setOpen] = useState(false)
   const openerRef = useRef(null)
   return (
@@ -361,7 +374,7 @@ export function CharacterGalleryAction({ wide, library }) {
         {icon('gallery')}{wide && <span>Персонажи</span>}
       </button>
       {createPortal(
-        <CharacterGalleryDialog library={library} open={open} onClose={() => { setOpen(false) }} openerRef={openerRef} />,
+        <CharacterGalleryDialog library={library} open={open} onClose={() => { setOpen(false) }} openerRef={openerRef} startCharacter={startCharacter} />,
         document.body,
       )}
     </>

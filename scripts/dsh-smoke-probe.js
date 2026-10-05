@@ -1,0 +1,54 @@
+/** Test-only probe: mount solely in an isolated DSH home, never in a player profile. */
+import { randomUUID } from 'node:crypto'
+
+export const inject = ['webServer', 'llm', 'sessionController', 'agents', 'sessions', 'mayoriCharacters', 'mayoriCharacterSessions']
+
+export function apply(ctx) {
+  const requests = []
+  const adapter = {
+    providerInfo: id => ({ id, name: 'Mayori smoke' }),
+    providerRetryPolicy: () => undefined,
+    imageRequestPricing: () => undefined,
+    listModels: async provider => [{ provider, id: 'smoke', name: 'Smoke' }],
+    resolveModel: async (provider, id) => ({ provider, id, name: id }),
+    async prepareCall(provider, id) {
+      return { model: await this.resolveModel(provider, id), stream: options => this.stream(options) }
+    },
+    async *stream(options) {
+      requests.push({ messages: options.messages, tools: options.tools })
+      yield { type: 'block-start', index: 0, blockType: 'text' }
+      yield { type: 'text-delta', index: 0, text: 'Welcome to the archive.' }
+      yield { type: 'block-end', index: 0, block: { type: 'text', text: 'Welcome to the archive.' } }
+      yield { type: 'finish', reason: { kind: 'stop' } }
+    },
+  }
+  ctx.llm.registerAdapter(['mayori-smoke'], adapter)
+  ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/_mayori-smoke',
+    handler: async (req, res) => {
+      try {
+        const chunks = []
+        for await (const chunk of req) chunks.push(chunk)
+        const input = JSON.parse(Buffer.concat(chunks).toString())
+        let value
+        if (input.action === 'create') {
+          const campaign = await ctx.mayoriCharacterSessions.prepareCampaign()
+          value = await ctx.sessionController.create({ cwd: campaign.path })
+        } else if (input.action === 'turn') {
+          await ctx.sessionController.selectModel({ sessionId: input.sessionId, provider: 'mayori-smoke', model: 'smoke' })
+          await ctx.sessionController.prompt({ sessionId: input.sessionId, requestId: randomUUID(), mode: 'queue',
+            content: [{ type: 'text', text: 'Hello, Aster.' }] }, new AbortController().signal)
+          const agent = ctx.agents.get(input.sessionId)
+          await agent.whenIdle()
+          await ctx.sessions.flush(agent.session)
+          value = { messages: agent.session.deriveMessages(), requests,
+            header: agent.session.header }
+        } else throw new Error('Unknown smoke operation')
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, value }))
+      } catch (error) {
+        res.writeHead(500, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ ok: false, error: error.stack ?? String(error) }))
+      }
+    },
+  }), 'mayori: test probe route')
+}
