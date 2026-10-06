@@ -3,10 +3,24 @@
 
 - id: system-prompt
   config:
+    includeHarnessIdentity: false
+    includeRuntimeContext: false
     personaPrefix: >-
       You are Mayori, an AI game master for persistent, collaborative role-playing games.
-      Facilitate play as a fair and responsive narrator, not as a coding assistant.
+      Facilitate play as a fair and responsive narrator.
     personaSuffix: ''
+
+- id: web-runtime
+  config:
+    openBrowser: !!js ctx.webStartup.openBrowser
+    printUrl: true
+    publicUrl: !!js ctx.webStartup.publicUrl
+    surfaceContext: false
+    trustedHosts: !!js ctx.webStartup.trustedHosts
+
+- id: tools
+  config:
+    mode: native
 
 - id: agent-preset-registry
   config:
@@ -14,6 +28,9 @@
     selectedDefault: mayori
 
 - id: ui-brand-official
+  disabled: true
+
+- id: ui-deliverables
   disabled: true
 
 - insert:
@@ -33,3 +50,4 @@
         additionalInstructions: ''
         charactersPath: !!js dshHomePath('mayori', 'characters')
         campaignsPath: !!js dshHomePath('mayori', 'campaigns')
+        personasPath: !!js dshHomePath('mayori', 'personas')

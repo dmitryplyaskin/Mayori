@@ -1,53 +1,96 @@
 /** Mayori browser plugin: custom RPG sidebar plus the Character Library UI. */
 
 import { RemoteCharacterLibraryProvider } from './character-library.js'
+import { SessionChatHistoryProvider } from './chat-history.js'
+import { ChatHistoryPanel, ChatHistoryIcon } from './history.jsx'
+import { CharacterGalleryPanel, CharacterGalleryIcon } from './gallery.jsx'
 import { startCharacterSession } from './play-character.js'
 import { MayoriSidebar, MayoriMark, MayoriBrandName } from './sidebar.jsx'
+import { RemotePersonaProvider, RemoteCharacterChatProvider } from './personas.js'
+import { PersonaPanel, PersonaIcon } from './personas.jsx'
+import { GreetingTurnTail } from './greeting.jsx'
+import { CharacterMessage } from './avatars.jsx'
+import { mirroredChildren, mirrorSlot } from './slot-mirror.js'
+import { RemoteTrajectoryContextProvider } from './trajectory-context.js'
+import { ContextTrajectory, TrajectorySessionHeader } from './trajectory.jsx'
 
 export const inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace']
 
 /** Plugin-owned style; removed with the client fiber. */
 export const BRAND_STYLE = String.raw`
-.mayori-sidebar-shell {
-  display: flex; flex: 1; min-block-size: 0; flex-direction: column;
-  color: var(--dsw-alias-label-primary); font-size: 14px; overflow: hidden;
+.mayori-message { display: flex; align-items: flex-start; gap: 12px; min-inline-size: 0; }
+.mayori-message-content { flex: 1; min-inline-size: 0; }
+.mayori-message .mayori-message-avatar { display: grid; place-items: center; flex: none; box-sizing: border-box; inline-size: 44px; block-size: 44px; padding: 0; overflow: hidden; border: 1px solid var(--dsw-alias-border-l2); border-radius: 50%; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 20px; cursor: pointer; }
+.mayori-message-avatar img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.mayori-message-avatar:hover { border-color: var(--dsw-alias-label-secondary); }
+.mayori-message-avatar:focus-visible, .mayori-avatar-dialog button:focus-visible { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 3px; }
+.mayori-avatar-dialog { box-sizing: border-box; inline-size: min(720px, calc(100vw - 32px)); block-size: min(900px, calc(100dvh - 32px)); max-inline-size: calc(100vw - 32px); max-block-size: calc(100dvh - 32px); margin: auto; padding: 0; overflow: hidden; border: 1px solid var(--dsw-alias-border-l2); border-radius: 16px; background: var(--dsw-alias-bg-layer-1, Canvas); color: var(--dsw-alias-label-primary, CanvasText); }
+.mayori-avatar-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.mayori-avatar-dialog::backdrop { background: oklch(0 0 0 / 0.56); }
+.mayori-avatar-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border-block-end: 1px solid var(--dsw-alias-border-l2); }
+.mayori-avatar-dialog h2 { margin: 0; min-inline-size: 0; overflow-wrap: anywhere; font-size: 20px; }
+.mayori-avatar-dialog button { flex: none; inline-size: 44px; block-size: 44px; border: 0; border-radius: 8px; background: var(--dsw-alias-bg-layer-2); color: inherit; font: inherit; font-size: 26px; cursor: pointer; }
+.mayori-avatar-dialog button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.mayori-avatar-dialog-media { display: grid; place-items: center; min-inline-size: 0; min-block-size: 0; overflow: hidden; padding: 16px; }
+.mayori-avatar-dialog-media img { display: block; inline-size: 100%; block-size: 100%; min-inline-size: 0; min-block-size: 0; object-fit: contain; }
+@media (max-width: 400px) { .mayori-message { gap: 8px; } }
+.mayori-trajectory { display: flex; flex-direction: column; block-size: 100%; min-block-size: 0; color: var(--dsw-alias-label-primary); }
+.mayori-trajectory-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; border-block-end: 1px solid var(--dsw-alias-border-l2); }
+.mayori-trajectory-controls label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-inline-size: 0; }
+.mayori-trajectory-controls select, .mayori-trajectory-controls button { max-inline-size: 100%; min-block-size: 40px; padding: 6px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; color: inherit; background: var(--dsw-alias-bg-l1); font: inherit; }
+.mayori-trajectory-controls :is(select, button):focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.mayori-trajectory-context { display: flex; flex: 1; flex-direction: column; min-block-size: 0; }
+.mayori-trajectory-context > p { padding-inline: 16px; }
+.mayori-trajectory-table { flex: 1; min-block-size: 0; }
+.mayori-trajectory-journal { flex: 1; min-block-size: 0; }
+.mayori-personas-panel { box-sizing: border-box; block-size: 100%; overflow-y: auto; padding: 24px; color: var(--dsw-alias-label-primary); }
+.mayori-personas-layout { display: grid; grid-template-columns: minmax(200px, 280px) minmax(0, 640px); gap: 32px; }
+.mayori-persona-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.mayori-persona-row { display: flex; align-items: center; gap: 12px; inline-size: 100%; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; background: transparent; color: inherit; text-align: start; font: inherit; cursor: pointer; }
+.mayori-persona-row[aria-pressed=true] { border-color: currentColor; background: var(--dsw-alias-interactive-bg-hover); }
+.mayori-persona-row img, .mayori-persona-avatar { inline-size: 48px; block-size: 48px; border-radius: 50%; object-fit: cover; flex: none; }
+.mayori-persona-avatar { display: grid; place-items: center; background: var(--dsw-alias-bg-l2); }
+.mayori-persona-row span { min-inline-size: 0; overflow-wrap: anywhere; }
+.mayori-persona-row small { display: block; margin-block-start: 4px; }
+.mayori-persona-form { display: grid; gap: 12px; align-content: start; }
+.mayori-persona-form h3, .mayori-persona-form p { margin: 0; }
+.mayori-persona-form label { display: grid; gap: 6px; }
+.mayori-persona-form input, .mayori-persona-form textarea { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; padding: 10px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; font: inherit; font-size: 16px; background: var(--dsw-alias-bg-l1); color: inherit; }
+.mayori-persona-form textarea { resize: vertical; }
+.mayori-persona-hint, .mayori-persona-row small { color: var(--dsw-alias-label-secondary); font-size: 13px; line-height: 1.5; }
+.mayori-persona-image { inline-size: 96px; block-size: 96px; object-fit: cover; border-radius: 16px; }
+.mayori-persona-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block-start: 8px; }
+.mayori-personas-panel button { min-block-size: 44px; }
+.mayori-personas-panel :is(button, input, textarea):focus-visible, .mayori-greeting-swipes button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.mayori-greeting-swipes { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-block-start: 8px; font-variant-numeric: tabular-nums; }
+.mayori-greeting-swipes button { inline-size: 44px; block-size: 44px; border: 0; border-radius: 8px; font-size: 24px; color: inherit; background: transparent; cursor: pointer; }
+.mayori-greeting-swipes button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.mayori-greeting-swipes button:disabled { opacity: 0.5; cursor: wait; }
+@media (max-width: 700px) { .mayori-personas-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; } .mayori-personas-panel { padding: 16px; } }
+ .mayori-gallery-panel {
+  block-size: 100%; min-block-size: 0; overflow: hidden;
+  background: var(--dsw-alias-bg-l1, var(--dsw-specific-sidebar-fill));
+  color: var(--dsw-alias-label-primary);
 }
-.mayori-sidebar-navigation {
-  display: flex; flex: 1; min-block-size: 0; flex-direction: column; gap: 8px;
-  margin-inline: -2px; overflow-x: hidden; overflow-y: auto;
-}
-.mayori-sidebar-collapsed .mayori-sidebar-navigation {
-  align-items: center; inline-size: auto; margin-inline: 0;
-}
-.mayori-sidebar-shell button:focus-visible,
-.mayori-gallery-dialog button:focus-visible,
-.mayori-gallery-dialog input:focus-visible,
-.mayori-gallery-dialog select:focus-visible,
-.mayori-character-dialog button:focus-visible,
-.mayori-import-button:has(input:focus-visible) {
+.mayori-gallery-panel button:focus-visible, .mayori-history-panel button:focus-visible,
+.mayori-gallery-panel input:focus-visible, .mayori-history-panel input:focus-visible,
+.mayori-gallery-panel select:focus-visible, .mayori-character-dialog button:focus-visible {
   outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 2px;
 }
-.mayori-gallery-trigger {
-  display: flex; align-items: center; justify-content: flex-start; gap: 8px;
-  inline-size: 100%; block-size: 42px; box-sizing: border-box;
-  margin: 4px 0; padding: 0 10px 0 8px; border: 0; border-radius: 12px;
-  background: transparent; color: var(--dsw-alias-label-primary); font: inherit;
-  font-size: 14px; line-height: 22px; cursor: pointer; overflow: hidden;
-}
-.mayori-gallery-trigger:hover { background: var(--dsw-alias-interactive-bg-hover); }
-.mayori-gallery-trigger > svg { flex: none; inline-size: 16px; block-size: 16px; }
-.mayori-gallery-trigger:has(> svg:only-child) {
-  justify-content: center; inline-size: 36px; block-size: 36px; margin: 8px 0 10px;
-  padding: 0; border-radius: 50%; color: var(--dsw-alias-label-primary);
-}
-.mayori-gallery-trigger:has(> svg:only-child) > svg { inline-size: 18px; block-size: 18px; }
-.mayori-gallery-dialog {
-  inset: 0; inline-size: 100vw; max-inline-size: none; block-size: 100dvh; max-block-size: none;
-  margin: 0; padding: 0; border: 0; border-radius: 0;
-  background: var(--dsw-alias-bg-l1, var(--dsw-specific-sidebar-fill));
-  color: var(--dsw-alias-label-primary); overflow: hidden;
-}
-.mayori-gallery-dialog::backdrop { background: var(--dsw-alias-bg-l1, var(--dsw-specific-sidebar-fill)); }
+.mayori-history-panel { box-sizing: border-box; block-size: 100%; overflow-y: auto; padding: 24px; color: var(--dsw-alias-label-primary); }
+.mayori-history-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.mayori-history-panel .mayori-search input { padding-inline-start: 12px; }
+.mayori-history-list { padding: 0; margin: 20px 0; list-style: none; }
+.mayori-history-item { display: flex; align-items: center; gap: 8px; }
+.mayori-history-item > .mayori-history-row { flex: 1; min-inline-size: 0; }
+.mayori-history-item > .mayori-secondary-button { flex: none; }
+.mayori-history-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.mayori-history-controls label { display: flex; align-items: center; gap: 8px; }
+.mayori-history-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; inline-size: 100%; padding: 16px 12px; border: 0; border-block-end: 1px solid var(--dsw-alias-border-l2); background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.mayori-history-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.mayori-history-row > span { min-inline-size: 0; overflow-wrap: anywhere; }
+.mayori-history-row small { display: block; margin-block-start: 4px; }
+.mayori-history-row time, .mayori-history-row small { color: var(--dsw-alias-label-secondary); font-size: 12px; }
 .mayori-gallery-shell { display: grid; grid-template-rows: 72px minmax(0, 1fr); block-size: 100%; }
 .mayori-gallery-header {
   position: relative; z-index: 4; display: flex; align-items: center; justify-content: space-between; gap: 24px;
@@ -145,7 +188,7 @@ body[data-ds-dark-theme] .mayori-card-media img { outline-color: oklch(1 0 0 / 0
   display: grid; place-items: center; inline-size: 72px; block-size: 72px; border-radius: 50%;
   background: var(--dsw-alias-button-elevated-fill); font-size: 32px; font-weight: 600;
 }
-.mayori-card-body { display: grid; grid-template-rows: auto auto 1fr; gap: 12px; padding: 14px; }
+.mayori-card-body { display: flex; flex-direction: column; gap: 12px; padding: 14px; }
 .mayori-card-heading { min-inline-size: 0; }
 .mayori-card-heading h3 { overflow-wrap: anywhere; font-size: 17px; line-height: 1.3; }
 .mayori-card-heading p { margin-block-start: 4px; overflow: hidden; color: var(--dsw-alias-label-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
@@ -155,8 +198,11 @@ body[data-ds-dark-theme] .mayori-card-media img { outline-color: oklch(1 0 0 / 0
   background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary);
   font-size: 11px; text-overflow: ellipsis; white-space: nowrap;
 }
-.mayori-card-actions { display: grid; grid-template-columns: 1fr 1fr; align-self: end; gap: 8px; }
-.mayori-card-actions button, .mayori-secondary-button, .mayori-danger-button {
+.mayori-card-actions { display: grid; grid-template-columns: 1fr 1fr; margin-block-start: auto; gap: 8px; }
+.mayori-greeting-preview { min-inline-size: 0; font-size: 13px; }
+.mayori-greeting-preview summary { cursor: pointer; }
+.mayori-greeting-preview p { max-block-size: 180px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin-block-start: 8px; }
+.mayori-card-actions button, .mayori-persona-actions button, .mayori-secondary-button, .mayori-danger-button {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-block-size: 40px;
   padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px;
   background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
@@ -245,6 +291,19 @@ body[data-ds-dark-theme] .mayori-character-portrait img { outline-color: oklch(1
 export function apply(ctx) {
   const library = new RemoteCharacterLibraryProvider()
   ctx.provide('mayoriCharacters', library)
+  const personas = new RemotePersonaProvider()
+  ctx.provide('mayoriPersonas', personas)
+  const chats = new Map()
+  const chatFor = sessionId => {
+    if (!chats.has(sessionId)) chats.set(sessionId, new RemoteCharacterChatProvider(sessionId))
+    return chats.get(sessionId)
+  }
+  const contexts = new Map()
+  const contextFor = sessionId => {
+    if (!contexts.has(sessionId)) contexts.set(sessionId, new RemoteTrajectoryContextProvider(sessionId))
+    return contexts.get(sessionId)
+  }
+  ctx.provide('mayoriTrajectoryContext', { forSession: contextFor })
 
   ctx.effect(() => {
     const style = document.createElement('style')
@@ -265,16 +324,97 @@ export function apply(ctx) {
     name: 'conversation.hero.brand.mark', priority: -100,
   }, MayoriMark))
   ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({
-    name: 'sidebar.workspaces',
-    priority: -100,
+    name: 'sidebar.workspaces', priority: -100,
+  }, MayoriSidebar))
+  const history = new SessionChatHistoryProvider(ctx.sessions, ctx.uiWorkspace, ctx.workspaces)
+  ctx.provide('mayoriHistory', history)
+  ctx.slots.inject('main', () => ctx.slots.register({
+    name: 'main', key: 'mayori-characters',
     inject: () => ({
       library,
-      startCharacter: card => startCharacterSession({
-        sessions: ctx.sessions,
-        workspaces: ctx.workspaces,
-        uiWorkspace: ctx.uiWorkspace,
-        library,
-      }, card),
+      personas,
+      startCharacter: (card, greetingIndex) => startCharacterSession({
+        sessions: ctx.sessions, workspaces: ctx.workspaces, uiWorkspace: ctx.uiWorkspace, library,
+      }, card, greetingIndex),
     }),
-  }, MayoriSidebar))
+  }, CharacterGalleryPanel))
+  ctx.slots.inject('main', () => ctx.slots.register({
+    name: 'main', key: 'mayori-history', inject: () => ({ history }),
+  }, ChatHistoryPanel))
+  ctx.slots.inject('main', () => ctx.slots.register({
+    name: 'main', key: 'mayori-personas', inject: () => ({ personas, sessions: ctx.sessions, chatFor }),
+  }, PersonaPanel))
+  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+    name: 'sidebar.panellist', id: 'mayori-characters', order: -20, label: 'Персонажи',
+  }, CharacterGalleryIcon))
+  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+    name: 'sidebar.panellist', id: 'mayori-history', order: -10, label: 'История чатов',
+  }, ChatHistoryIcon))
+  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+    name: 'sidebar.panellist', id: 'mayori-personas', order: -15, label: 'Персоны',
+  }, PersonaIcon))
+  ctx.slots.inject('conversation.chat.node', () => ctx.effect(() => {
+    const installed = new Set()
+    const disposers = []
+    const register = () => {
+      for (const [key, component] of [['assistant-step', CharacterMessage], ['user', CharacterMessage], ['steering', CharacterMessage], ['turn-tail', GreetingTurnTail]]) {
+        if (installed.has(key)) continue
+        const stock = ctx.slots.entries('conversation.chat.node').find(entry => entry.options.key === key)
+        if (!stock) continue
+        installed.add(key)
+        const prefix = `mayori.greeting.${key}`
+        disposers.push(ctx.slots.register({
+          name: 'conversation.chat.node', key, priority: -100,
+          locale: stock.locale, children: mirroredChildren(stock.children, prefix),
+          inject: (...args) => ({ ...stock.inject?.(...args), stock: stock.component, stockChildren: stock.children, childPrefix: prefix, chatFor }),
+        }, component))
+        for (const name of Object.keys(stock.children ?? {})) {
+          disposers.push(mirrorSlot(ctx, name, `${prefix}.${name}`))
+        }
+      }
+    }
+    const unsubscribe = ctx.slots.subscribe('conversation.chat.node', register)
+    register()
+    return () => { unsubscribe(); for (const dispose of disposers) dispose() }
+  }, 'mayori: greeting renderer'))
+  ctx.slots.inject('conversation.view', () => ctx.effect(() => {
+    let installed = false
+    const disposers = []
+    const register = () => {
+      if (installed) return
+      const stock = ctx.slots.entries('conversation.view').find(entry => entry.options.id === 'trajectory')
+      if (!stock) return
+      installed = true
+      const prefix = 'mayori.trajectory'
+      disposers.push(ctx.slots.register({
+        ...stock.options, name: 'conversation.view', id: 'trajectory', priority: -100,
+        locale: stock.locale, children: mirroredChildren(stock.children, prefix),
+        inject: (...args) => ({ ...stock.inject?.(...args), stock: stock.component, stockChildren: stock.children, childPrefix: prefix, contextFor }),
+      }, ContextTrajectory))
+      for (const name of Object.keys(stock.children ?? {})) disposers.push(mirrorSlot(ctx, name, `${prefix}.${name}`))
+    }
+    const unsubscribe = ctx.slots.subscribe('conversation.view', register)
+    register()
+    return () => { unsubscribe(); for (const dispose of disposers) dispose() }
+  }, 'mayori: trajectory context'))
+  ctx.slots.inject('conversation.session.header', () => ctx.effect(() => {
+    let installed = false
+    const disposers = []
+    const register = () => {
+      if (installed) return
+      const stock = ctx.slots.entries('conversation.session.header')[0]
+      if (!stock) return
+      installed = true
+      const prefix = 'mayori.trajectory.header'
+      disposers.push(ctx.slots.register({
+        name: 'conversation.session.header', priority: -100,
+        store: stock.store, locale: stock.locale, children: mirroredChildren(stock.children, prefix),
+        inject: (...args) => ({ ...stock.inject?.(...args), stock: stock.component, stockChildren: stock.children, childPrefix: prefix }),
+      }, TrajectorySessionHeader))
+      for (const name of Object.keys(stock.children ?? {})) disposers.push(mirrorSlot(ctx, name, `${prefix}.${name}`))
+    }
+    const unsubscribe = ctx.slots.subscribe('conversation.session.header', register)
+    register()
+    return () => { unsubscribe(); for (const dispose of disposers) dispose() }
+  }, 'mayori: trajectory header'))
 }

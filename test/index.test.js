@@ -3,12 +3,13 @@ import test from 'node:test'
 
 import { apply, buildDirectorPrompt } from '../index.js'
 
-test('builds the default director prompt around player agency and durable canon', () => {
+test('builds the default director prompt around player agency and established fiction', () => {
   const prompt = buildDirectorPrompt()
 
   assert.match(prompt, /^Mayori facilitates/)
   assert.match(prompt, /Protect player agency/)
-  assert.match(prompt, /campaign files exist in the workspace, treat them as canonical/)
+  assert.match(prompt, /Keep established facts, character motivations, locations, chronology, and unresolved consequences consistent\./)
+  assert.doesNotMatch(prompt, /workspace|campaign files|update them/)
   assert.match(prompt, /Never claim that a random outcome occurred/)
 })
 
@@ -47,7 +48,7 @@ test('registers one ordered system-prompt section', async () => {
       provide(name, service) { provided.push({ name, service }) },
     },
     inject(services, callback) {
-      assert.deepEqual(services, ['webServer', 'agents'])
+      assert.deepEqual(services, ['webServer', 'agents', 'sessions', 'workspaceRegistry', 'agentPresets'])
       registrationReady = callback({
         reflect: {
           provide(name, service) { provided.push({ name, service }) },
@@ -83,9 +84,13 @@ test('registers one ordered system-prompt section', async () => {
   assert.equal(provided[0].name, 'mayoriCharacters')
   assert.equal(provided[0].service.constructor.name, 'FileSystemCharacterLibraryProvider')
   assert.match(provided[0].service.root, /test-characters$/)
-  assert.equal(provided[1].name, 'mayoriCharacterSessions')
-  assert.equal(provided[1].service.constructor.name, 'PersistentCharacterSessionProvider')
-  assert.match(provided[1].service.defaultCampaignPath, /test-campaigns[\\/]default$/)
+  assert.equal(provided[1].name, 'mayoriPersonas')
+  assert.equal(provided[1].service.constructor.name, 'FileSystemPersonaProvider')
+  assert.equal(provided[2].name, 'mayoriCharacterSessions')
+  assert.equal(provided[2].service.constructor.name, 'PersistentCharacterSessionProvider')
+  assert.match(provided[2].service.defaultCampaignPath, /test-campaigns[\\/]default$/)
+  assert.equal(provided[3].name, 'mayoriTrajectoryContext')
+  assert.equal(provided[3].service.constructor.name, 'SessionTrajectoryContextProvider')
   assert.equal(rpcRegistration.kind, 'prefix')
   assert.equal(rpcRegistration.path, '/mayori/characters')
 })

@@ -1,7 +1,7 @@
 /** Full-screen Gallery Consumer for the Host-owned Character Library. */
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { createPortal } from 'react-dom'
+import { DEFAULT_PERSONA, renderTemplate } from './templates.js'
 
 const EMPTY_ARRAY = Object.freeze([])
 
@@ -87,8 +87,11 @@ function ImportControl({ busy, inputRef, onFiles, compact = false }) {
   )
 }
 
-function CharacterCard({ card, onPlay, onEdit, playBusy, playDisabled }) {
+function CharacterCard({ card, persona, onPlay, onEdit, playBusy, playDisabled }) {
   const tags = cardTags(card).slice(0, 3)
+  const [greetingIndex, setGreetingIndex] = useState(0)
+  const greetings = [card.data.first_mes ?? '', ...(card.data.alternate_greetings ?? [])]
+  const selectedGreeting = greetings[greetingIndex] ?? greetings[0]
   return (
     <li className="mayori-card">
       <article>
@@ -103,8 +106,14 @@ function CharacterCard({ card, onPlay, onEdit, playBusy, playDisabled }) {
               {tags.map((tag, index) => <li key={`${tag}-${index}`}>{tag}</li>)}
             </ul>
           )}
+          {greetings.length > 1 && <label className="mayori-filter-control">Начало истории
+            <select value={greetingIndex} disabled={playDisabled} onChange={event => { setGreetingIndex(Number(event.target.value)) }}>
+              {greetings.map((greeting, index) => <option key={index} value={index}>{index === 0 ? (greeting.trim() ? 'Основное приветствие' : 'Без приветствия') : `Альтернатива ${index}`}</option>)}
+            </select>
+          </label>}
+          {selectedGreeting.trim() && <details className="mayori-greeting-preview"><summary>Приветствие</summary><p>{renderTemplate(selectedGreeting, card, persona, Date.now())}</p></details>}
           <div className="mayori-card-actions">
-            <button type="button" className="mayori-card-play" disabled={playDisabled} aria-busy={playBusy || undefined} onClick={() => { void onPlay(card) }}>
+            <button type="button" className="mayori-card-play" disabled={playDisabled} aria-busy={playBusy || undefined} onClick={() => { void onPlay(card, greetingIndex) }}>
               {icon('play')}<span>{playBusy ? 'Открываем…' : 'Играть'}</span>
             </button>
             <button type="button" className="mayori-card-edit" onClick={(event) => { onEdit(card, event.currentTarget) }}>
@@ -220,8 +229,9 @@ function Filters({ cards, query, setQuery, sort, setSort, creator, setCreator, p
   )
 }
 
-function CharacterGalleryDialog({ library, open, onClose, openerRef, startCharacter }) {
-  const dialogRef = useRef(null)
+export function CharacterGalleryPanel({ library, personas, startCharacter }) {
+  const personaSnapshot = useSyncExternalStore(personas.subscribe, personas.getSnapshot, personas.getSnapshot)
+  const persona = personaSnapshot.personas.find(item => item.id === personaSnapshot.defaultId) ?? DEFAULT_PERSONA
   const inputRef = useRef(null)
   const detailTriggerRef = useRef(null)
   const snapshot = useSyncExternalStore(library.subscribe, library.getSnapshot, library.getSnapshot)
@@ -235,13 +245,6 @@ function CharacterGalleryDialog({ library, open, onClose, openerRef, startCharac
   const [busy, setBusy] = useState(false)
   const [playingId, setPlayingId] = useState(null)
   const [notice, setNotice] = useState(null)
-
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (dialog === null) return
-    if (open && !dialog.open) dialog.showModal()
-    if (!open && dialog.open) dialog.close()
-  }, [open])
 
   const normalizedQuery = query.trim().toLocaleLowerCase('ru')
   const cards = useMemo(() => {
@@ -264,12 +267,6 @@ function CharacterGalleryDialog({ library, open, onClose, openerRef, startCharac
     })
   }, [creator, normalizedQuery, portrait, selectedTags, snapshot.cards, sort])
 
-  const finishClose = () => {
-    setSelectedCard(null)
-    setFiltersOpen(false)
-    onClose()
-    requestAnimationFrame(() => { openerRef.current?.focus() })
-  }
   const importFiles = async (fileList) => {
     if (fileList.length === 0) return
     setBusy(true)
@@ -295,12 +292,11 @@ function CharacterGalleryDialog({ library, open, onClose, openerRef, startCharac
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) })
     }
   }
-  const play = async (card) => {
+  const play = async (card, greetingIndex) => {
     setPlayingId(card.id)
     setNotice(null)
     try {
-      await startCharacter(card)
-      dialogRef.current?.close()
+      await startCharacter(card, greetingIndex)
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) })
     } finally {
@@ -312,12 +308,9 @@ function CharacterGalleryDialog({ library, open, onClose, openerRef, startCharac
   }
   return (
     <>
-      <dialog
-        ref={dialogRef}
-        className="mayori-gallery-dialog"
+      <section
+        className="mayori-gallery-panel"
         aria-labelledby="mayori-gallery-title"
-        onClose={finishClose}
-        onCancel={(event) => { event.preventDefault(); dialogRef.current?.close() }}
       >
         <div className="mayori-gallery-shell">
           <header className="mayori-gallery-header">
@@ -328,7 +321,6 @@ function CharacterGalleryDialog({ library, open, onClose, openerRef, startCharac
             <div className="mayori-gallery-header-actions">
               <button type="button" className="mayori-filter-toggle" aria-controls="mayori-filter-panel" aria-expanded={filtersOpen} onClick={() => { setFiltersOpen(value => !value) }}>{icon('filter')}<span>Фильтры</span></button>
               <ImportControl busy={busy} inputRef={inputRef} onFiles={importFiles} compact />
-              <button type="button" className="mayori-icon-action" aria-label="Закрыть галерею" onClick={() => { dialogRef.current?.close() }}>{icon('close')}</button>
             </div>
           </header>
           <div className="mayori-gallery-workspace">
@@ -354,29 +346,17 @@ function CharacterGalleryDialog({ library, open, onClose, openerRef, startCharac
                   <p>{snapshot.cards.length === 0 ? 'Импортируйте PNG или JSON, чтобы добавить первого персонажа.' : 'Измените запрос или сбросьте фильтры.'}</p>
                 </div>
               )}
-              {cards.length > 0 && <ul className="mayori-card-grid">{cards.map(card => <CharacterCard key={card.id} card={card} onPlay={play} playBusy={playingId === card.id} playDisabled={playingId !== null} onEdit={(item, trigger) => { detailTriggerRef.current = trigger; setSelectedCard(item) }} />)}</ul>}
+              {cards.length > 0 && <ul className="mayori-card-grid">{cards.map(card => <CharacterCard key={card.id} card={card} persona={persona} onPlay={play} playBusy={playingId === card.id} playDisabled={playingId !== null} onEdit={(item, trigger) => { detailTriggerRef.current = trigger; setSelectedCard(item) }} />)}</ul>}
             </main>
           </div>
         </div>
-      </dialog>
+      </section>
       <CharacterInfoDialog card={selectedCard} onClose={() => { setSelectedCard(null) }} onRemove={remove} triggerRef={detailTriggerRef} />
     </>
   )
 }
 
-/** Sidebar slot entry and full-screen gallery consumer. */
-export function CharacterGalleryAction({ wide, library, startCharacter }) {
-  const [open, setOpen] = useState(false)
-  const openerRef = useRef(null)
-  return (
-    <>
-      <button ref={openerRef} type="button" className="mayori-gallery-trigger" aria-label={wide ? undefined : 'Персонажи'} onClick={() => { setOpen(true) }}>
-        {icon('gallery')}{wide && <span>Персонажи</span>}
-      </button>
-      {createPortal(
-        <CharacterGalleryDialog library={library} open={open} onClose={() => { setOpen(false) }} openerRef={openerRef} startCharacter={startCharacter} />,
-        document.body,
-      )}
-    </>
-  )
+/** The sidebar shell owns the actual button, label, tooltip and selected state. */
+export function CharacterGalleryIcon({ size }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="m5 17 4.5-4.5 3 3 2-2L19 18"/></svg>
 }

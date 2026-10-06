@@ -13,7 +13,11 @@ async function call(path, payload) {
 }
 
 let sessionId = process.argv.slice(3).find(argument => !argument.startsWith('--'))
+const greetingIndex = process.argv.includes('--alternate') ? 1 : 0
+const expectedGreeting = greetingIndex === 0 ? 'Aster: You came back, Alex.' : 'Aster: Another greeting.'
 if (sessionId === undefined) {
+  const persona = await call('/mayori/characters/persona-save', { name: 'Alex', description: '{{user}} is a traveller.', title: 'smoke-private-title' })
+  await call('/mayori/characters/persona-default', { id: persona.id })
   const imported = await call('/mayori/characters/import', { files: [{ name: 'aster.json', type: 'application/json',
     base64: Buffer.from(JSON.stringify({ spec: 'chara_card_v2', spec_version: '2.0', data: {
       name: 'Aster', description: '{{char}}: A patient archivist under the moon.', personality: '{{CHAR}} is patient.',
@@ -27,25 +31,68 @@ if (sessionId === undefined) {
   const { cards } = await call('/mayori/characters/list', {})
   const card = cards.find(item => item.name === 'Aster')
   const created = await call('/_mayori-smoke', { action: 'create' })
-  assert.equal(created.agentPreset, 'mayori')
-  sessionId = created.sessionId
-  await call('/mayori/characters/play', { sessionId, characterId: card.id })
+  const prepared = await call('/mayori/characters/start', { characterId: card.id, workspaceId: created.workspaceId, greetingIndex })
+  sessionId = prepared.sessionId
+  const adopted = await call('/_mayori-smoke', { action: 'adopt', sessionId, workspaceId: created.workspaceId })
+  assert.equal(adopted.agentPreset, 'mayori')
+  const beforeTurn = await call('/_mayori-smoke', { action: 'inspect', sessionId })
+  assert.equal(beforeTurn.requestCount, created.requestCount, 'Greeting must not call an LLM')
+  assert.equal(beforeTurn.messages.length, 1)
+  assert.equal(beforeTurn.messages[0].role, 'assistant')
+  assert.equal(beforeTurn.messages[0].content[0].text, expectedGreeting)
+  const other = await call('/mayori/characters/swipe', { sessionId, index: 1 - greetingIndex })
+  assert.equal(other.greeting.index, 1 - greetingIndex)
+  const restored = await call('/mayori/characters/swipe', { sessionId, index: greetingIndex })
+  assert.equal(restored.greeting.text, expectedGreeting)
+  const bound = await call('/mayori/characters/session-persona', { sessionId, personaId: persona.id })
+  assert.equal(bound.persona.name, 'Alex')
+  assert.equal(bound.greeting.text, expectedGreeting)
+  const forked = await call('/_mayori-smoke', { action: 'fork', sessionId, atSeq: bound.greeting.eventSeq })
+  const forkState = await call('/mayori/characters/session-state', { sessionId: forked.sessionId })
+  assert.equal(forkState.greeting.index, greetingIndex)
+  assert.equal(forkState.greeting.text, expectedGreeting)
+  assert.equal(forkState.persona.name, 'Alex')
+  await call('/mayori/characters/persona-save', { ...persona, name: 'Changed outside chat' })
+  await call('/mayori/characters/persona-remove', { id: persona.id })
+  assert.equal((await call('/mayori/characters/session-state', { sessionId })).persona.name, 'Alex')
   if (!process.argv.includes('--keep-card')) await call('/mayori/characters/remove', { id: card.id })
 }
 const turn = await call('/_mayori-smoke', { action: 'turn', sessionId })
 assert.equal(turn.header.agentPreset, 'mayori')
 const modelInput = turn.requests.findLast(request => request.messages.some(message => message.source?.kind === 'user'))
+assert.equal(modelInput.messages[0].role, 'system')
+const systemText = modelInput.messages[0].content.map(block => block.text ?? '').join('')
+assert.match(systemText, /You are Mayori, an AI game master/)
+assert.doesNotMatch(systemText, /DeepSeek Harness|coding assistant|implementation checkout|working directory|Web GUI|DSH_WEB_URL|dev:web|Vite|window\.__DSH_BOOT__|replacement server|campaign files|tools SDK|run_code|Do not call present|existing file|Office documents/)
+assert.ok(!modelInput.messages.some(message => message.source?.kind === 'runtime-context'),
+  'RPG requests must not include technical runtime-context snapshots')
+assert.ok(systemText.indexOf('Protect player agency.') < systemText.indexOf('<mayori-character-card>'))
+assert.ok(systemText.includes('A patient archivist under the moon.'))
+assert.equal(modelInput.messages.filter(message => JSON.stringify(message).includes('<mayori-character-card>')).length, 1,
+  'The character context must occur once in the instruction prefix, ahead of the conversation')
+const trajectoryContext = await call('/mayori/characters/trajectory-context', { sessionId })
+assert.deepEqual(trajectoryContext.messages.map(item => item.message), modelInput.messages,
+  'Trajectory request input must match the exact DSH messages received by the adapter')
+const savedContext = await call('/mayori/characters/trajectory-context', { sessionId, selection: 'current' })
+assert.deepEqual(savedContext.messages.map(item => item.message), turn.messages)
 assert.ok(modelInput.messages.some(message => JSON.stringify(message).includes('A patient archivist under the moon.')))
 assert.ok(turn.messages.some(message => JSON.stringify(message).includes('A patient archivist under the moon.')))
 const modelText = JSON.stringify(modelInput.messages)
 const logText = JSON.stringify(turn.messages)
-for (const marker of ['Aster: A patient archivist', 'Aster is patient.', 'Aster waits for {{user}}.',
-  'Aster: You came back, {{user}}.', 'Portray Aster.', 'Keep Aster consistent.', 'Aster: Another greeting.',
+for (const marker of ['Aster: A patient archivist', 'Aster is patient.', 'Aster waits for Alex.', 'Alex is a traveller.',
+  expectedGreeting, 'Portray Aster.', 'Keep Aster consistent.',
   '{{unknown}}', '{{cwd}}', '{{model}}', '{{roll::1d20}}', '{{getvar::quest}}', '{{random::a::b}}', '{{}}', '{{bad name}}', '{{outer::{{nested}}}}', '{{unfinished']) {
   assert.ok(modelText.includes(marker), `Model context must contain literal/resolved marker: ${marker}`)
   assert.ok(logText.includes(marker), `Session log must preserve marker: ${marker}`)
 }
 assert.doesNotMatch(modelText, /mayori_active_character_text/)
+assert.ok(!modelText.includes(greetingIndex === 0 ? 'Aster: Another greeting.' : 'Aster: You came back, Alex.'))
+assert.doesNotMatch(modelText, /smoke-private-title|Changed outside chat|\{\{user\}\}/)
+const rejectedSwipe = await fetch(`${origin}/mayori/characters/swipe`, { method: 'POST',
+  headers: { 'content-type': 'application/json', origin, 'sec-fetch-site': 'same-origin' },
+  body: JSON.stringify({ sessionId, index: 1 - greetingIndex }) })
+assert.equal(rejectedSwipe.status, 400, 'Played greeting is locked')
+assert.equal(turn.messages.filter(message => message.source?.provider === 'mayori-character-card' || message.source?.kind === 'mayori-greeting').length, 1)
 assert.ok(turn.messages.some(message => message.role === 'assistant' && JSON.stringify(message).includes('Welcome to the archive.')))
 assert.doesNotMatch(JSON.stringify(modelInput.messages), /smoke-private-extension/)
 assert.equal(modelInput.tools?.length ?? 0, 0)

@@ -1,7 +1,7 @@
 /** Test-only probe: mount solely in an isolated DSH home, never in a player profile. */
 import { randomUUID } from 'node:crypto'
 
-export const inject = ['webServer', 'llm', 'sessionController', 'agents', 'sessions', 'mayoriCharacters', 'mayoriCharacterSessions']
+export const inject = ['webServer', 'llm', 'sessionController', 'agents', 'sessions', 'mayoriCharacters', 'mayoriCharacterSessions', 'workspaceRegistry']
 
 export function apply(ctx) {
   const requests = []
@@ -12,7 +12,8 @@ export function apply(ctx) {
     listModels: async provider => [{ provider, id: 'smoke', name: 'Smoke' }],
     resolveModel: async (provider, id) => ({ provider, id, name: id }),
     async prepareCall(provider, id) {
-      return { model: await this.resolveModel(provider, id), stream: options => this.stream(options) }
+      return { model: await this.resolveModel(provider, id), systemPromptUpdate: 'in-history',
+        stream: options => this.stream(options) }
     },
     async *stream(options) {
       requests.push({ messages: options.messages, tools: options.tools })
@@ -32,7 +33,16 @@ export function apply(ctx) {
         let value
         if (input.action === 'create') {
           const campaign = await ctx.mayoriCharacterSessions.prepareCampaign()
-          value = await ctx.sessionController.create({ cwd: campaign.path })
+          const workspace = await ctx.workspaceRegistry.create(campaign.path)
+          value = { workspaceId: workspace.id, requestCount: requests.length }
+        } else if (input.action === 'adopt') {
+          value = await ctx.sessionController.create({ sessionId: input.sessionId, workspaceId: input.workspaceId })
+        } else if (input.action === 'inspect') {
+          const agent = ctx.agents.get(input.sessionId)
+          if (!agent) throw new Error('Expected live session')
+          value = { messages: agent.session.deriveMessages(), requestCount: requests.length }
+        } else if (input.action === 'fork') {
+          value = await ctx.sessionController.fork({ sessionId: input.sessionId, atSeq: input.atSeq })
         } else if (input.action === 'turn') {
           await ctx.sessionController.selectModel({ sessionId: input.sessionId, provider: 'mayori-smoke', model: 'smoke' })
           await ctx.sessionController.prompt({ sessionId: input.sessionId, requestId: randomUUID(), mode: 'queue',

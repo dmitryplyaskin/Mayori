@@ -10,7 +10,7 @@ function targetWorkspace(sessions, workspaces) {
 }
 
 /** Create a fresh workspace session, bind the card, name it, and navigate. */
-export async function startCharacterSession({ sessions, workspaces, uiWorkspace, library }, card) {
+export async function startCharacterSession({ sessions, workspaces, uiWorkspace, library }, card, greetingIndex = 0) {
   let workspaceId = targetWorkspace(sessions, workspaces)
   if (workspaceId === undefined) {
     const campaign = await library.prepareCampaign()
@@ -18,10 +18,10 @@ export async function startCharacterSession({ sessions, workspaces, uiWorkspace,
     workspaceId = workspace.workspaceId
   }
 
-  const sessionId = await sessions.create({ workspaceId })
+  const prepared = await library.start(card.id, workspaceId, greetingIndex)
+  const sessionId = await sessions.create({ workspaceId, sessionId: prepared.sessionId })
   await sessions.using(sessionId, { source: 'mayoriGallery' }, async (reference) => {
     const binding = await reference.ready
-    await library.play(card.id, sessionId)
     const renamed = await binding.session.rename(card.name)
     if (!renamed.ok) throw new Error(renamed.error.message)
     uiWorkspace.openSession(sessionId)

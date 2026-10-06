@@ -10,6 +10,7 @@ export class CharacterLibraryService {
   remove() { throw new Error('CharacterLibraryService.remove() is not implemented') }
   prepareCampaign() { throw new Error('CharacterLibraryService.prepareCampaign() is not implemented') }
   play() { throw new Error('CharacterLibraryService.play() is not implemented') }
+  start() { throw new Error('CharacterLibraryService.start() is not implemented') }
 }
 
 function toBase64(bytes) {
@@ -26,7 +27,7 @@ function unwrap(result) {
   throw new Error(typeof result.error === 'string' ? result.error : 'Не удалось выполнить операцию с библиотекой.')
 }
 
-async function call(endpoint, payload) {
+export async function call(endpoint, payload) {
   const response = await fetch(`/mayori/characters/${endpoint}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -71,6 +72,10 @@ export class RemoteCharacterLibraryProvider extends CharacterLibraryService {
   async remove(id) {
     await call('remove', { id })
     await this.#reload()
+  }
+
+  async start(characterId, workspaceId, greetingIndex = 0) {
+    return call('start', { characterId, workspaceId, greetingIndex })
   }
 
   async play(characterId, sessionId) {

@@ -21,6 +21,7 @@ const configuredDshHome = typeof process.env.DSH_HOME === 'string' && process.en
   : join(homedir(), '.dsh')
 const DEFAULT_CHARACTERS_PATH = join(resolve(configuredDshHome), 'mayori', 'characters')
 const DEFAULT_CAMPAIGNS_PATH = join(resolve(configuredDshHome), 'mayori', 'campaigns')
+const DEFAULT_PERSONAS_PATH = join(resolve(configuredDshHome), 'mayori', 'personas')
 
 /** Configuration accepted by the Mayori director plugin. */
 export const Config = z.object({
@@ -30,6 +31,7 @@ export const Config = z.object({
   additionalInstructions: z.string().default(''),
   charactersPath: z.string().default(DEFAULT_CHARACTERS_PATH),
   campaignsPath: z.string().default(DEFAULT_CAMPAIGNS_PATH),
+  personasPath: z.string().default(DEFAULT_PERSONAS_PATH),
 })
 
 const DEFAULTS = Object.freeze({
@@ -39,6 +41,7 @@ const DEFAULTS = Object.freeze({
   additionalInstructions: '',
   charactersPath: DEFAULT_CHARACTERS_PATH,
   campaignsPath: DEFAULT_CAMPAIGNS_PATH,
+  personasPath: DEFAULT_PERSONAS_PATH,
 })
 
 /** Resolve Loader-normalized config and fail loudly for direct invalid calls. */
@@ -63,6 +66,8 @@ function resolveConfig(config = {}) {
     throw new TypeError('campaignsPath must be a non-empty string')
   }
   resolved.campaignsPath = resolve(resolved.campaignsPath.trim())
+  if (typeof resolved.personasPath !== 'string' || !resolved.personasPath.trim()) throw new TypeError('personasPath must be a non-empty string')
+  resolved.personasPath = resolve(resolved.personasPath.trim())
   return resolved
 }
 
@@ -78,7 +83,7 @@ export function buildDirectorPrompt(config = {}) {
     `${resolved.narratorName} facilitates ${resolved.campaignStyle}`,
     resolved.languagePolicy,
     'Protect player agency. Describe the world, portray non-player characters, and resolve consequences, but never choose the player character\'s thoughts, words, or voluntary actions.',
-    'Keep established facts, character motivations, locations, chronology, and unresolved consequences consistent. If campaign files exist in the workspace, treat them as canonical; update them only after events become established in play.',
+    'Keep established facts, character motivations, locations, chronology, and unresolved consequences consistent.',
     'Treat clearly marked out-of-character messages as table conversation. Pause the fiction when the player asks to clarify rules, revise boundaries, retcon an event, or stop the scene.',
     'Present concrete sensory detail and meaningful choices without forcing a menu when free-form action is possible. Ask a focused question only when the answer materially changes the fiction and cannot be inferred safely.',
     'Never claim that a random outcome occurred unless a configured rule or tool actually produced it. State uncertainty and unresolved mechanics plainly.',
@@ -102,5 +107,5 @@ export function apply(ctx, config = {}) {
     interpolate: false,
     text: buildDirectorPrompt(resolved),
   })
-  registerCharacterLibrary(ctx, resolved.charactersPath, resolved.campaignsPath)
+  registerCharacterLibrary(ctx, resolved.charactersPath, resolved.campaignsPath, resolved.personasPath)
 }

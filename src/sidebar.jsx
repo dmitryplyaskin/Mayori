@@ -1,7 +1,5 @@
 /** Mayori-owned replacement for the stock workspace/coding sidebar region. */
 
-import { CharacterGalleryAction } from './gallery.jsx'
-
 export function MayoriMark({ className }) {
   return (
     <svg
@@ -29,12 +27,6 @@ export function MayoriBrandName() {
 }
 
 /** Workspace-region occupant. Stock shell geometry and Settings remain mounted. */
-export function MayoriSidebar({ wide, library, startCharacter }) {
-  return (
-    <div className={`mayori-sidebar-shell${wide ? '' : ' mayori-sidebar-collapsed'}`}>
-      <nav className="mayori-sidebar-navigation" aria-label="Основная навигация">
-        <CharacterGalleryAction wide={wide} library={library} startCharacter={startCharacter} />
-      </nav>
-    </div>
-  )
+export function MayoriSidebar() {
+  return null
 }
