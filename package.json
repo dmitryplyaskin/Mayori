@@ -18,6 +18,7 @@
     "src/templates.js",
     "src/persona-host.js",
     "src/trajectory-context-host.js",
+    "src/history-details-host.js",
     "lib/client.js",
     "lib/client.js.map",
     "cordis.patch.yml",

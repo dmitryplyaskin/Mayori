@@ -5,7 +5,7 @@ import { SessionChatHistoryProvider } from './chat-history.js'
 import { ChatHistoryPanel, ChatHistoryIcon } from './history.jsx'
 import { CharacterGalleryPanel, CharacterGalleryIcon } from './gallery.jsx'
 import { startCharacterSession } from './play-character.js'
-import { MayoriSidebar, MayoriMark, MayoriBrandName } from './sidebar.jsx'
+import { MayoriSidebar, MayoriMark, MayoriBrandName, MayoriNavigationSidebar, MayoriLeadingControls } from './sidebar.jsx'
 import { RemotePersonaProvider, RemoteCharacterChatProvider } from './personas.js'
 import { PersonaPanel, PersonaIcon } from './personas.jsx'
 import { GreetingTurnTail } from './greeting.jsx'
@@ -13,11 +13,36 @@ import { CharacterMessage } from './avatars.jsx'
 import { mirroredChildren, mirrorSlot } from './slot-mirror.js'
 import { RemoteTrajectoryContextProvider } from './trajectory-context.js'
 import { ContextTrajectory, TrajectorySessionHeader } from './trajectory.jsx'
+import { HomePanel, HomeConversation, HomeIcon } from './home.jsx'
 
-export const inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace']
+export const inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout']
 
 /** Plugin-owned style; removed with the client fiber. */
 export const BRAND_STYLE = String.raw`
+.mayori-navigation { --dsh-sidebar-inline-padding: 12px; display: flex; flex-direction: column; box-sizing: border-box; block-size: 100%; min-block-size: 0; padding: 6px 12px; background: var(--dsw-specific-sidebar-fill); color: var(--dsw-alias-label-primary); font-size: 14px; }
+.mayori-navigation-header { display: flex; align-items: center; gap: 8px; flex: none; block-size: 48px; padding-inline: 4px; }
+:is(.mayori-navigation-brand, .mayori-navigation-toggle, .mayori-navigation-row) { display: flex; align-items: center; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+:is(.mayori-navigation-brand, .mayori-navigation-toggle, .mayori-navigation-row):focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, currentColor); outline-offset: -2px; }
+.mayori-navigation-brand { flex: 1; min-inline-size: 0; gap: 8px; padding: 0; block-size: 36px; text-align: start; }
+.mayori-navigation-brand > span:first-child { display: flex; flex: none; }
+.mayori-navigation-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 18px; font-weight: 600; line-height: 24px; }
+.mayori-navigation-toggle { position: relative; justify-content: center; flex: none; inline-size: 28px; block-size: 28px; padding: 0; border-radius: 8px; }
+.mayori-navigation-toggle:hover, .mayori-navigation-row:hover, .mayori-navigation-row[aria-current=page] { background: var(--dsw-alias-interactive-bg-hover); }
+.mayori-navigation-panels { display: grid; gap: 4px; flex: none; }
+.mayori-navigation-row { gap: 10px; min-inline-size: 0; inline-size: 100%; min-block-size: 36px; padding: 8px 12px; border-radius: 12px; text-align: start; }
+.mayori-navigation-glyph { display: flex; align-items: center; justify-content: center; flex: none; inline-size: 18px; }
+.mayori-navigation-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mayori-navigation-region { flex: 1; min-block-size: 0; overflow: auto; }
+.mayori-navigation-footer { display: flex; flex-direction: column; flex: none; gap: 4px; }
+.mayori-navigation[data-collapsed=true] { --dsh-sidebar-inline-padding: 10px; padding: 18px 10px 6px; }
+.mayori-navigation[data-collapsed=true] .mayori-navigation-header { block-size: 36px; padding: 0; margin-block-end: 12px; }
+.mayori-navigation[data-collapsed=true] .mayori-navigation-toggle { inline-size: 36px; block-size: 36px; border-radius: 12px; }
+.mayori-navigation[data-collapsed=true] .mayori-navigation-row { justify-content: center; inline-size: 36px; padding: 8px; }
+html[data-windows-titlebar] .mayori-navigation-toggle { position: fixed; inset-block-start: calc((var(--dsh-windows-titlebar-height) - 28px) / 2); inset-inline-start: 12px; z-index: 30; -webkit-app-region: no-drag; inline-size: 28px; block-size: 28px; }
+html[data-windows-titlebar] .mayori-navigation-header { block-size: 40px; }
+html[data-windows-titlebar] .mayori-navigation[data-collapsed=true] { padding: 0; }
+html[data-windows-titlebar] .mayori-navigation[data-collapsed=true] :is(.mayori-navigation-panels, .mayori-navigation-region, .mayori-navigation-footer) { display: none; }
+html[data-platform=darwin] .mayori-navigation { background: transparent; padding-block-start: 52px; }
 .mayori-message { display: flex; align-items: flex-start; gap: 12px; min-inline-size: 0; }
 .mayori-message-content { flex: 1; min-inline-size: 0; }
 .mayori-message .mayori-message-avatar { display: grid; place-items: center; flex: none; box-sizing: border-box; inline-size: 44px; block-size: 44px; padding: 0; overflow: hidden; border: 1px solid var(--dsw-alias-border-l2); border-radius: 50%; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 20px; cursor: pointer; }
@@ -114,10 +139,10 @@ export const BRAND_STYLE = String.raw`
   padding: 0 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px;
   background: transparent; color: var(--dsw-alias-label-primary); font: inherit; cursor: pointer;
 }
-.mayori-gallery-workspace { position: relative; display: grid; grid-template-columns: 280px minmax(0, 1fr); min-block-size: 0; }
+.mayori-gallery-workspace { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 260px; min-block-size: 0; }
 .mayori-filter-panel {
   display: flex; min-block-size: 0; flex-direction: column; gap: 24px; padding: 24px 20px;
-  border-inline-end: 1px solid var(--dsw-alias-border-l2); overflow-y: auto; overscroll-behavior: contain;
+  grid-column: 2; grid-row: 1; border-inline-start: 1px solid var(--dsw-alias-border-l2); overflow-y: auto; overscroll-behavior: contain;
   background: var(--dsw-alias-bg-l2, var(--dsw-specific-sidebar-fill));
 }
 .mayori-filter-panel-header { display: none; align-items: center; justify-content: space-between; gap: 16px; }
@@ -159,7 +184,7 @@ export const BRAND_STYLE = String.raw`
   background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; cursor: pointer;
 }
 .mayori-reset-button:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
-.mayori-gallery-main { min-inline-size: 0; min-block-size: 0; padding: 20px 24px 32px; overflow-y: auto; overscroll-behavior: contain; }
+.mayori-gallery-main { grid-column: 1; grid-row: 1; min-inline-size: 0; min-block-size: 0; padding: 20px 24px 32px; overflow-y: auto; overscroll-behavior: contain; container-type: inline-size; }
 .mayori-gallery-results { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-block-size: 30px; }
 .mayori-gallery-results p { margin: 0; color: var(--dsw-alias-label-secondary); font-size: 13px; }
 .mayori-gallery-notice { min-block-size: 28px; padding-block: 2px 10px; font-size: 13px; }
@@ -167,11 +192,11 @@ export const BRAND_STYLE = String.raw`
 .mayori-error, .mayori-card-warning { color: var(--dsw-alias-label-error, #b42318); }
 .mayori-success { color: var(--dsw-alias-label-success, #16794b); }
 .mayori-card-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  display: grid; grid-template-columns: repeat(var(--mayori-columns, 5), minmax(0, 1fr));
   align-items: stretch; gap: 18px; margin: 0; padding: 0; list-style: none;
 }
 .mayori-card article {
-  display: grid; grid-template-rows: auto minmax(0, 1fr); block-size: 100%; overflow: hidden;
+  display: grid; grid-template-rows: auto minmax(0, 1fr); block-size: 100%; overflow: hidden; container-type: inline-size;
   border: 1px solid var(--dsw-alias-border-l2); border-radius: 16px;
   background: var(--dsw-alias-bg-l2, var(--dsw-specific-sidebar-fill));
 }
@@ -256,9 +281,9 @@ body[data-ds-dark-theme] .mayori-character-portrait img { outline-color: oklch(1
   .mayori-filter-toggle { display: inline-flex; }
   .mayori-import-compact { display: inline-flex; }
   .mayori-filter-panel {
-    position: absolute; z-index: 6; inset-block: 0; inset-inline-start: 0; inline-size: min(320px, calc(100vw - 48px));
-    box-sizing: border-box; border-inline-end: 1px solid var(--dsw-alias-border-l2);
-    box-shadow: 16px 0 40px oklch(0 0 0 / 0.2); transform: translateX(-105%); visibility: hidden;
+    position: absolute; z-index: 6; inset-block: 0; inset-inline-end: 0; inline-size: min(320px, calc(100vw - 48px));
+    box-sizing: border-box; border-inline-start: 1px solid var(--dsw-alias-border-l2);
+    box-shadow: -16px 0 40px oklch(0 0 0 / 0.2); transform: translateX(105%); visibility: hidden;
   }
   .mayori-filter-panel.is-open { transform: translateX(0); visibility: visible; }
   .mayori-filter-panel-header { display: flex; }
@@ -273,7 +298,7 @@ body[data-ds-dark-theme] .mayori-character-portrait img { outline-color: oklch(1
   .mayori-filter-toggle span, .mayori-import-compact span { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
   .mayori-filter-toggle, .mayori-import-compact { inline-size: 40px; padding: 0; }
   .mayori-gallery-main { padding: 16px 16px 28px; }
-  .mayori-card-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: 12px; }
+  .mayori-card-grid { gap: 12px; }
   .mayori-character-dialog { inset: 0; inline-size: 100vw; block-size: 100dvh; margin: 0; border: 0; border-radius: 0; }
   .mayori-character-content { display: block; overflow-y: auto; }
   .mayori-character-portrait { aspect-ratio: 16 / 10; }
@@ -284,6 +309,52 @@ body[data-ds-dark-theme] .mayori-character-portrait img { outline-color: oklch(1
   .mayori-icon-action:active, .mayori-import-button:active, .mayori-card-actions button:active,
   .mayori-secondary-button:active, .mayori-danger-button:active { transform: scale(0.96); }
   .mayori-filter-panel { transition-property: transform, visibility; transition-duration: 160ms; transition-timing-function: ease-out; }
+}
+.mayori-home-panel { box-sizing: border-box; block-size: 100%; min-block-size: 0; overflow-y: auto; padding: 40px 32px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-1, Canvas); }
+.mayori-home-content { max-inline-size: 1480px; margin-inline: auto; container-type: inline-size; }
+.mayori-home-welcome { margin-block-end: 40px; }
+.mayori-home-mark { display: grid; place-items: center; inline-size: 48px; block-size: 48px; margin-block-end: 16px; border-radius: 16px; background: var(--dsw-alias-interactive-bg-hover); }
+.mayori-home-welcome h1 { margin: 0; font-size: clamp(26px, 3vw, 36px); line-height: 1.2; text-wrap: balance; }
+.mayori-home-welcome p, .mayori-home-empty { color: var(--dsw-alias-label-secondary); line-height: 1.6; }
+.mayori-home-section + .mayori-home-section { margin-block-start: 40px; }
+.mayori-home-section h2 { margin: 0 0 16px; font-size: 20px; }
+.mayori-home-section > .mayori-secondary-button { margin-block-start: 16px; }
+.mayori-home-section .mayori-history-list { margin-block: 0; }
+.mayori-home-panel :is(button, input, select):focus-visible, .mayori-history-panel :is(select, input):focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.mayori-history-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; }
+.mayori-history-row .mayori-history-avatar { display: grid; place-items: center; inline-size: 52px; block-size: 52px; overflow: hidden; border-radius: 14px; background: var(--dsw-alias-interactive-bg-hover); font-size: 22px; }
+.mayori-history-avatar img { inline-size: 100%; block-size: 100%; object-fit: cover; }
+.mayori-history-text { display: grid; gap: 4px; }
+.mayori-history-text strong { font-weight: 600; }
+.mayori-history-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-secondary); font-size: 13px; }
+.mayori-history-row time { white-space: nowrap; }
+.mayori-history-row:disabled, .mayori-secondary-button:disabled { opacity: 0.55; cursor: default; }
+.mayori-column-control { display: flex; align-items: center; gap: 8px; }
+.mayori-column-control select { inline-size: 68px; }
+.mayori-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-block-start: 24px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.mayori-pagination label { display: flex; align-items: center; gap: 8px; }
+.mayori-pagination select { inline-size: auto; }
+.mayori-page-actions { display: flex; align-items: center; gap: 8px; }
+.mayori-page-actions input { box-sizing: border-box; inline-size: 64px; min-block-size: 42px; padding: 8px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; font: inherit; font-size: 16px; background: var(--dsw-alias-bg-layer-1, Canvas); color: inherit; }
+.mayori-page-actions button { min-inline-size: 40px; font-size: 20px; }
+.mayori-character-opening { display: grid; gap: 12px; margin-block-end: 24px; }
+.mayori-character-footer, .mayori-character-footer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mayori-character-footer-actions { margin-inline-start: auto; }
+@container (max-width: 1000px) { .mayori-card-grid { grid-template-columns: repeat(min(var(--mayori-columns, 5), 5), minmax(0, 1fr)); } }
+@container (max-width: 650px) { .mayori-card-grid { grid-template-columns: repeat(min(var(--mayori-columns, 5), 3), minmax(0, 1fr)); } }
+@container (max-width: 540px) { .mayori-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mayori-card-actions { grid-template-columns: 1fr; } }
+@container (max-width: 340px) { .mayori-card-grid { grid-template-columns: minmax(0, 1fr); } }
+@container (max-width: 240px) { .mayori-card-actions { grid-template-columns: 1fr; } }
+@media (max-width: 700px) {
+  .mayori-home-panel { padding: 24px 16px; }
+  .mayori-history-panel { padding: 16px; }
+  .mayori-history-item { flex-wrap: wrap; gap: 4px; margin-block-end: 12px; }
+  .mayori-history-item > .mayori-history-row { flex-basis: 100%; }
+  .mayori-history-item > .mayori-secondary-button { margin-inline-start: 64px; }
+  .mayori-history-row { grid-template-columns: 44px minmax(0, 1fr); gap: 12px; padding-inline: 0; }
+  .mayori-history-row .mayori-history-avatar { inline-size: 44px; block-size: 44px; }
+  .mayori-history-row time { grid-column: 2; white-space: normal; }
+  .mayori-column-control { flex-wrap: wrap; }
 }
 `
 
@@ -326,8 +397,61 @@ export function apply(ctx) {
   ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({
     name: 'sidebar.workspaces', priority: -100,
   }, MayoriSidebar))
+  for (const [slotName, Component] of [['sidebar', MayoriNavigationSidebar], ['shell.leading', MayoriLeadingControls]]) {
+    ctx.slots.inject(slotName, () => ctx.effect(() => {
+      let installed = false
+      const disposers = []
+      const register = () => {
+        if (installed) return
+        const stock = ctx.slots.entries(slotName)[0]
+        if (!stock) return
+        installed = true
+        const prefix = `mayori.navigation.${slotName}`
+        disposers.push(ctx.slots.register({
+          name: slotName, priority: -100, store: stock.store, locale: stock.locale,
+          children: mirroredChildren(stock.children, prefix),
+          inject: (...args) => ({ ...stock.inject?.(...args), stockChildren: stock.children,
+            childPrefix: prefix, openHome: () => ctx.layout.selectPanel('mayori-home') }),
+        }, Component))
+        for (const name of Object.keys(stock.children ?? {})) disposers.push(mirrorSlot(ctx, name, `${prefix}.${name}`))
+      }
+      const unsubscribe = ctx.slots.subscribe(slotName, register)
+      register()
+      return () => { unsubscribe(); for (const dispose of disposers) dispose() }
+    }, 'mayori: home navigation'))
+  }
   const history = new SessionChatHistoryProvider(ctx.sessions, ctx.uiWorkspace, ctx.workspaces)
   ctx.provide('mayoriHistory', history)
+  const homeProps = () => ({ history, library, personas, selectPanel: id => ctx.layout.selectPanel(id),
+    startCharacter: (card, greetingIndex) => startCharacterSession({ sessions: ctx.sessions,
+      workspaces: ctx.workspaces, uiWorkspace: ctx.uiWorkspace, library }, card, greetingIndex) })
+  ctx.slots.inject('main', () => ctx.slots.register({
+    name: 'main', key: 'mayori-home', inject: homeProps,
+  }, HomePanel))
+  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+    name: 'sidebar.panellist', id: 'mayori-home', order: -30, label: 'Главная',
+  }, HomeIcon))
+  ctx.slots.inject('main.conversation', () => ctx.effect(() => {
+    let installed = false
+    const disposers = []
+    const register = () => {
+      if (installed) return
+      const stock = ctx.slots.entries('main.conversation')[0]
+      if (!stock) return
+      installed = true
+      const prefix = 'mayori.home.conversation'
+      disposers.push(ctx.slots.register({
+        name: 'main.conversation', priority: -100, store: stock.store, locale: stock.locale,
+        children: mirroredChildren(stock.children, prefix),
+        inject: (...args) => ({ ...stock.inject?.(...args), ...homeProps(), stock: stock.component,
+          stockChildren: stock.children, childPrefix: prefix }),
+      }, HomeConversation))
+      for (const name of Object.keys(stock.children ?? {})) disposers.push(mirrorSlot(ctx, name, `${prefix}.${name}`))
+    }
+    const unsubscribe = ctx.slots.subscribe('main.conversation', register)
+    register()
+    return () => { unsubscribe(); for (const dispose of disposers) dispose() }
+  }, 'mayori: home conversation'))
   ctx.slots.inject('main', () => ctx.slots.register({
     name: 'main', key: 'mayori-characters',
     inject: () => ({

@@ -11,6 +11,7 @@ import { importCharacterCardBytes } from './character-card.js'
 import { PersistentCharacterSessionProvider } from './character-play-host.js'
 import { FileSystemPersonaProvider } from './persona-host.js'
 import { SessionTrajectoryContextProvider } from './trajectory-context-host.js'
+import { SessionHistoryDetailsProvider } from './history-details-host.js'
 
 const RECORD_FORMAT = 1
 const CARD_ID = /^[a-f0-9]{64}$/
@@ -248,9 +249,10 @@ export class FileSystemCharacterLibraryProvider extends CharacterLibraryService 
 export function registerCharacterLibrary(ctx, root, campaignsRoot, personasRoot) {
   const library = new FileSystemCharacterLibraryProvider(ctx, { root })
   const personas = new FileSystemPersonaProvider(ctx, personasRoot)
-  ctx.inject(['webServer', 'agents', 'sessions', 'workspaceRegistry', 'agentPresets'], async (consumerCtx) => {
+  ctx.inject(['webServer', 'agents', 'sessions', 'workspaceRegistry', 'agentPresets', 'sessionQuery'], async (consumerCtx) => {
     const characterSessions = new PersistentCharacterSessionProvider(consumerCtx, library, { campaignsRoot, personas })
     const trajectoryContext = new SessionTrajectoryContextProvider(consumerCtx)
+    const historyDetails = new SessionHistoryDetailsProvider(consumerCtx, campaignsRoot)
     await characterSessions.restoreActiveAgents()
     const route = {
       kind: 'prefix',
@@ -272,6 +274,7 @@ export function registerCharacterLibrary(ctx, root, campaignsRoot, personasRoot)
         }
         try {
           if (endpoint === 'list') sendJson(res, 200, { ok: true, value: { cards: await library.list() } })
+          else if (endpoint === 'history-details') sendJson(res, 200, { ok: true, value: await historyDetails.read(payload?.ids) })
           else if (endpoint === 'persona-list') sendJson(res, 200, { ok: true, value: await personas.list() })
           else if (endpoint === 'persona-save') sendJson(res, 200, { ok: true, value: await personas.save(payload) })
           else if (['persona-remove', 'persona-default', 'session-state', 'swipe', 'session-persona', 'trajectory-context'].includes(endpoint)) {

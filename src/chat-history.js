@@ -1,4 +1,5 @@
 /** History capability backed by the durable DSH session catalog and archive. */
+import { call } from './character-library.js'
 export class ChatHistoryService {
   getSnapshot() { throw new Error('ChatHistoryService.getSnapshot() is not implemented') }
   subscribe() { throw new Error('ChatHistoryService.subscribe() is not implemented') }
@@ -8,6 +9,7 @@ export class ChatHistoryService {
   subscribeArchive() { throw new Error('ChatHistoryService.subscribeArchive() is not implemented') }
   archive() { throw new Error('ChatHistoryService.archive() is not implemented') }
   restore() { throw new Error('ChatHistoryService.restore() is not implemented') }
+  details() { throw new Error('ChatHistoryService.details() is not implemented') }
 }
 
 /** No second persistence store: DSH owns catalog refresh and chat restoration. */
@@ -27,6 +29,7 @@ export class SessionChatHistoryProvider extends ChatHistoryService {
   subscribeArchive = listener => this.workspaces.list.subscribe(listener)
   archive = id => this.uiWorkspace.archiveSession(id)
   restore = id => this.uiWorkspace.unarchiveSession(id)
+  details = ids => call('history-details', { ids })
 }
 
 /** Flatten all campaigns, retain ordinary forks, omit agent children and blanks. */

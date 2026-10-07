@@ -81,7 +81,7 @@ test('registers reversible Mayori client contributions', async () => {
       },
       effect(factory, label) {
         if (label === 'mayori: client styles') dispose = factory()
-        else { assert.ok(['mayori: greeting renderer', 'mayori: trajectory context', 'mayori: trajectory header'].includes(label)); return factory() }
+        else { assert.ok(['mayori: greeting renderer', 'mayori: trajectory context', 'mayori: trajectory header', 'mayori: home conversation', 'mayori: home navigation'].includes(label)); return factory() }
       },
       slots: {
         subscribe() { return () => {} },
@@ -98,8 +98,8 @@ test('registers reversible Mayori client contributions', async () => {
 
     assert.equal(typeof provided.mayoriCharacters.importFiles, 'function')
     assert.deepEqual(slotInjections.map(item => item.name), [
-      'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark', 'sidebar.workspaces',
-      'main', 'main', 'main', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'conversation.chat.node', 'conversation.view', 'conversation.session.header',
+      'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark', 'sidebar.workspaces', 'sidebar', 'shell.leading',
+      'main', 'sidebar.panellist', 'main.conversation', 'main', 'main', 'main', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'conversation.chat.node', 'conversation.view', 'conversation.session.header',
     ])
     for (const slot of slotInjections) slot.callback()
     const slotRegistration = registrations.find(item => item.options.name === 'sidebar.workspaces')
@@ -108,7 +108,9 @@ test('registers reversible Mayori client contributions', async () => {
     assert.equal(typeof slotRegistration.component, 'function')
     const sidebar = registrations.find(item => item.options.key === 'mayori-characters').options.inject()
     assert.equal(registrations.find(item => item.options.key === 'mayori-history').options.inject().history, provided.mayoriHistory)
-    assert.deepEqual(registrations.filter(item => item.options.name === 'sidebar.panellist').map(item => [item.options.id, item.options.label]), [['mayori-characters', 'Персонажи'], ['mayori-history', 'История чатов'], ['mayori-personas', 'Персоны']])
+    assert.deepEqual(registrations.filter(item => item.options.name === 'sidebar.panellist').map(item => [item.options.id, item.options.label]), [['mayori-home', 'Главная'], ['mayori-characters', 'Персонажи'], ['mayori-history', 'История чатов'], ['mayori-personas', 'Персоны']])
+    assert.equal(registrations.find(item => item.options.key === 'mayori-home').options.inject().history, provided.mayoriHistory)
+    assert.equal(registrations.find(item => item.options.name === 'main.conversation').options.priority, -100)
     assert.equal(registrations.find(item => item.options.key === 'mayori-personas').options.inject().personas, provided.mayoriPersonas)
     const greeting = registrations.find(item => item.options.name === 'conversation.chat.node')
     assert.equal(greeting.options.priority, -100)
@@ -202,6 +204,123 @@ test('built client artifact registers a lazy DSH module factory', async () => {
   const { handoff, exports, required } = await loadBuiltClient()
   assert.equal(handoff.id, 'dsh-mayori')
   assert.equal(typeof exports.apply, 'function')
-  assert.deepEqual(exports.inject, ['slots', 'sessions', 'workspaces', 'uiWorkspace'])
+  assert.deepEqual(exports.inject, ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout'])
   assert.deepEqual(required.sort(), ['react', 'react-dom', 'react/jsx-runtime'])
+})
+
+test('sidebar omits New Session while preserving home, panels, toggle, settings and teardown', async () => {
+  const { exports: client } = await loadBuiltClient({ react: React, jsx: jsxRuntime })
+  const selected = []
+  let created = 0
+  let available = false
+  let renderer
+  const disposeNavigation = []
+  let leading
+  let disposals = 0
+  const listeners = new Map()
+  const startSession = () => { created++ }
+  let toggled = 0
+  const toggleSidebar = () => { toggled++ }
+  const stock = { options: {}, locale: 'sidebar', store: { sidebar: true },
+    children: Object.fromEntries(['sidebar.brand.name', 'sidebar.brand.mark', 'sidebar.toggle.badge',
+      'sidebar.panellist', 'sidebar.workspaces', 'sidebar.settings', 'sidebar.footer.action'].map(name => [name, { kind: 'single', scope: 'root' }])),
+    component() {}, inject: () => ({ startSession, toggleSidebar, selectPanel: id => selected.push(id), hooks: { panels: 'stock panels' } }) }
+  const previousDocument = globalThis.document
+  globalThis.document = { createElement: () => ({ dataset: {}, remove() {} }), head: { appendChild() {} } }
+  try {
+    client.apply({ sessions: {}, workspaces: {}, uiWorkspace: {}, layout: { selectPanel: id => selected.push(id) }, provide() {},
+      effect(factory, label) { const dispose = factory(); if (label === 'mayori: home navigation') disposeNavigation.push(dispose) },
+      slots: {
+        inject(name, factory) { if (['sidebar', 'shell.leading'].includes(name)) factory() },
+        entries: name => available ? name === 'sidebar' ? [stock] : name === 'shell.leading' ? [{ ...stock, children: {} }] : [] : [],
+        subscribe(name, listener) { listeners.set(name, listener); return () => { listeners.delete(name) } },
+        register(options, component) { if (options.name === 'sidebar') renderer = { options, component }; if (options.name === 'shell.leading') leading = { options, component }; return () => { disposals++ } },
+      },
+    })
+    assert.equal(renderer, undefined, 'Wait for the native shell rather than installing an incomplete replacement')
+    available = true
+    listeners.get('sidebar')()
+    listeners.get('shell.leading')()
+    assert.equal(renderer.options.store, stock.store)
+    assert.equal(renderer.options.locale, stock.locale)
+    assert.ok(renderer.options.children['mayori.navigation.sidebar.sidebar.brand.name'])
+    const props = renderer.options.inject()
+    const rendered = []
+    const componentProps = { ...props, collapsed: false, width: 280,
+      usePanels: selector => selector([{ id: 'mayori-home', label: 'Главная' }]),
+      usePanelInfo: selector => selector({ activePanelId: 'mayori-home' }),
+      useShortcuts: selector => selector([{ id: 'sidebar.left.toggle', aria: 'Control+b' }]),
+      t: key => key,
+      renderSlot: (name, owner, options) => { rendered.push({ name, owner, options }); return React.createElement('span', null, name) },
+    }
+    const element = renderer.component(componentProps)
+    assert.equal(element.props.style.width, 280)
+    assert.equal(props.hooks.panels, 'stock panels')
+    const headerButtons = element.props.children[0].props.children
+    headerButtons[0].props.onClick()
+    assert.deepEqual(selected, ['mayori-home'])
+    assert.equal(created, 0, 'Brand/Home navigation must not create or reuse a Session')
+    headerButtons[1].props.onClick()
+    assert.equal(toggled, 1)
+    assert.equal(headerButtons[1].props['aria-keyshortcuts'], 'Control+b')
+    const panel = element.props.children[1].props.children[0]
+    panel.type(panel.props).props.onClick()
+    assert.deepEqual(selected, ['mayori-home', 'mayori-home'])
+    assert.ok(rendered.some(row => row.name === 'mayori.navigation.sidebar.sidebar.brand.name'))
+    assert.ok(rendered.some(row => row.name === 'mayori.navigation.sidebar.sidebar.settings' && row.owner.wide))
+    assert.ok(rendered.some(row => row.name === 'mayori.navigation.sidebar.sidebar.panellist' && row.options.only === 'mayori-home'))
+    for (const collapsed of [false, true]) {
+      const html = renderToStaticMarkup(React.createElement(renderer.component, { ...componentProps, collapsed }))
+      assert.doesNotMatch(html, /New Session|session\.new|newSession/)
+      assert.match(html, /aria-current="page"/)
+      assert.match(html, /mayori\.navigation\.sidebar\.sidebar\.settings/)
+      assert.match(html, /mayori\.navigation\.sidebar\.sidebar\.footer\.action/)
+    }
+    const leadingElement = leading.component({ ...componentProps, ...leading.options.inject() })
+    assert.doesNotMatch(renderToStaticMarkup(leadingElement), /New Session|session\.new/)
+    assert.equal(leadingElement.props['aria-label'], 'toggle.open')
+    leadingElement.props.onClick()
+    assert.equal(toggled, 2)
+    assert.equal(stock.inject().startSession, startSession, 'Original injections remain untouched')
+    for (const dispose of disposeNavigation) dispose()
+    assert.equal(listeners.size, 0)
+    assert.equal(disposals, 2)
+  } finally { globalThis.document = previousDocument }
+})
+
+test('empty conversation shows home while named empty chats and existing sessions retain native content', async () => {
+  const { exports: client } = await loadBuiltClient({ react: React, jsx: jsxRuntime })
+  let renderer
+  const previousDocument = globalThis.document
+  globalThis.document = { createElement: () => ({ dataset: {}, remove() {} }), head: { appendChild() {} } }
+  try {
+    client.apply({ sessions: {}, workspaces: {}, uiWorkspace: {}, provide() {}, effect: factory => factory(),
+      slots: { inject(name, factory) { if (name === 'main.conversation') factory() }, subscribe: () => () => {},
+        entries: name => name === 'main.conversation' ? [{ options: {}, children: { 'conversation.header': { kind: 'single', scope: 'session-maybe' } },
+          component: props => React.createElement('div', null, 'Native conversation', props.renderSlot('conversation.header'), React.createElement('textarea')) }] : [],
+        register(options, component) { if (options.name === 'main.conversation') renderer = { options, component }; return () => {} },
+      },
+    })
+    const props = { ...renderer.options.inject(),
+      history: { getSnapshot: () => ({ phase: 'ready', ids: [], byId: {} }), subscribe: () => () => {},
+        getArchiveSnapshot: () => ({ phase: 'ready', archivedSessionIds: [] }), subscribeArchive: () => () => {} },
+      library: { getSnapshot: () => ({ status: 'ready', cards: [] }), subscribe: () => () => {} },
+      personas: { getSnapshot: () => ({ personas: [] }), subscribe: () => () => {} },
+      useSessions: selector => selector({ byId: { blank: { blank: true }, named: { blank: true, title: 'NPC without greeting' }, played: { blank: false } } }),
+      renderSlot: name => React.createElement('span', null, name),
+    }
+    for (const sessionId of [undefined, 'blank']) {
+      const html = renderToStaticMarkup(React.createElement(renderer.component, { ...props, sessionId }))
+      assert.match(html, /Добро пожаловать в Mayori/)
+      assert.match(html, /Перейти в историю чатов/)
+      assert.doesNotMatch(html, /textarea|Native conversation/)
+    }
+    for (const sessionId of ['named', 'played']) {
+      const html = renderToStaticMarkup(React.createElement(renderer.component, { ...props, sessionId }))
+      assert.match(html, /Native conversation/)
+      assert.match(html, /textarea/)
+      assert.match(html, /mayori.home.conversation.conversation.header/)
+      assert.doesNotMatch(html, /Добро пожаловать/)
+    }
+  } finally { globalThis.document = previousDocument }
 })

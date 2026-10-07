@@ -1,6 +1,8 @@
 /** Full-screen Gallery Consumer for the Host-owned Character Library. */
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { COLUMN_OPTIONS, paginate, readCatalogPreferences, saveCatalogPreferences } from './catalog-view.js'
+import { Pagination } from './pagination.jsx'
 import { DEFAULT_PERSONA, renderTemplate } from './templates.js'
 
 const EMPTY_ARRAY = Object.freeze([])
@@ -87,11 +89,8 @@ function ImportControl({ busy, inputRef, onFiles, compact = false }) {
   )
 }
 
-function CharacterCard({ card, persona, onPlay, onEdit, playBusy, playDisabled }) {
+export function CharacterCard({ card, onPlay, onEdit, playBusy, playDisabled }) {
   const tags = cardTags(card).slice(0, 3)
-  const [greetingIndex, setGreetingIndex] = useState(0)
-  const greetings = [card.data.first_mes ?? '', ...(card.data.alternate_greetings ?? [])]
-  const selectedGreeting = greetings[greetingIndex] ?? greetings[0]
   return (
     <li className="mayori-card">
       <article>
@@ -106,14 +105,8 @@ function CharacterCard({ card, persona, onPlay, onEdit, playBusy, playDisabled }
               {tags.map((tag, index) => <li key={`${tag}-${index}`}>{tag}</li>)}
             </ul>
           )}
-          {greetings.length > 1 && <label className="mayori-filter-control">Начало истории
-            <select value={greetingIndex} disabled={playDisabled} onChange={event => { setGreetingIndex(Number(event.target.value)) }}>
-              {greetings.map((greeting, index) => <option key={index} value={index}>{index === 0 ? (greeting.trim() ? 'Основное приветствие' : 'Без приветствия') : `Альтернатива ${index}`}</option>)}
-            </select>
-          </label>}
-          {selectedGreeting.trim() && <details className="mayori-greeting-preview"><summary>Приветствие</summary><p>{renderTemplate(selectedGreeting, card, persona, Date.now())}</p></details>}
           <div className="mayori-card-actions">
-            <button type="button" className="mayori-card-play" disabled={playDisabled} aria-busy={playBusy || undefined} onClick={() => { void onPlay(card, greetingIndex) }}>
+            <button type="button" className="mayori-card-play" disabled={playDisabled} aria-busy={playBusy || undefined} onClick={() => { void onPlay(card, 0) }}>
               {icon('play')}<span>{playBusy ? 'Открываем…' : 'Играть'}</span>
             </button>
             <button type="button" className="mayori-card-edit" onClick={(event) => { onEdit(card, event.currentTarget) }}>
@@ -126,8 +119,10 @@ function CharacterCard({ card, persona, onPlay, onEdit, playBusy, playDisabled }
   )
 }
 
-function CharacterInfoDialog({ card, onClose, onRemove, triggerRef }) {
+export function CharacterInfoDialog({ card, onClose, onRemove, triggerRef, onPlay, playDisabled, persona = DEFAULT_PERSONA }) {
   const dialogRef = useRef(null)
+  const [greetingIndex, setGreetingIndex] = useState(0)
+  useEffect(() => { setGreetingIndex(0) }, [card?.id])
   useEffect(() => {
     const dialog = dialogRef.current
     if (dialog === null) return
@@ -150,6 +145,7 @@ function CharacterInfoDialog({ card, onClose, onRemove, triggerRef }) {
     ['Заметки автора', text(card.data.creator_notes)],
   ].filter(([, value]) => value !== null)
   const tags = cardTags(card)
+  const greetings = [card.data.first_mes ?? '', ...(card.data.alternate_greetings ?? [])]
   return (
     <dialog
       ref={dialogRef}
@@ -173,6 +169,12 @@ function CharacterInfoDialog({ card, onClose, onRemove, triggerRef }) {
           <div className="mayori-character-details">
             {tags.length > 0 && <ul className="mayori-tags" aria-label="Теги">{tags.map((tag, index) => <li key={`${tag}-${index}`}>{tag}</li>)}</ul>}
             {card.warnings.length > 0 && <p className="mayori-card-warning">{card.warnings.join(' ')}</p>}
+            {onPlay && greetings.length > 1 && <div className="mayori-character-opening">
+              <label className="mayori-filter-control"><span>Начало истории</span><select aria-label="Начало истории" value={greetingIndex} disabled={playDisabled} onChange={event => { setGreetingIndex(Number(event.target.value)) }}>
+                {greetings.map((greeting, index) => <option key={index} value={index}>{index === 0 ? (greeting.trim() ? 'Основное приветствие' : 'Без приветствия') : `Альтернатива ${index}`}</option>)}
+              </select></label>
+              <details className="mayori-greeting-preview"><summary>Приветствие</summary><p>{renderTemplate(greetings[greetingIndex] ?? '', card, persona, Date.now()) || 'История начнётся с вашего сообщения.'}</p></details>
+            </div>}
             {sections.length > 0 ? (
               <dl>
                 {sections.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
@@ -188,7 +190,10 @@ function CharacterInfoDialog({ card, onClose, onRemove, triggerRef }) {
           <button type="button" className="mayori-danger-button" onClick={() => { void onRemove(card, dialogRef.current) }}>
             {icon('trash')}<span>Удалить персонажа</span>
           </button>
-          <button type="button" className="mayori-secondary-button" onClick={() => { dialogRef.current?.close() }}>Закрыть</button>
+          <div className="mayori-character-footer-actions">
+            <button type="button" className="mayori-secondary-button" onClick={() => { dialogRef.current?.close() }}>Закрыть</button>
+            {onPlay && <button type="button" className="mayori-secondary-button mayori-card-play" disabled={playDisabled} onClick={() => { dialogRef.current?.close(); void onPlay(card, greetingIndex) }}>Играть</button>}
+          </div>
         </footer>
       </div>
     </dialog>
@@ -212,8 +217,8 @@ function Filters({ cards, query, setQuery, sort, setSort, creator, setCreator, p
         <span>Поиск</span>
         <span className="mayori-search-control">{icon('search')}<input type="search" value={query} placeholder="Имя, автор, описание" onChange={event => { setQuery(event.currentTarget.value) }} /></span>
       </label>
-      <label className="mayori-filter-control"><span>Сортировка</span><select value={sort} onChange={event => { setSort(event.currentTarget.value) }}><option value="newest">Сначала новые</option><option value="name">По имени</option><option value="creator">По автору</option></select></label>
-      <label className="mayori-filter-control"><span>Автор</span><select value={creator} onChange={event => { setCreator(event.currentTarget.value) }}><option value="all">Все авторы</option>{creators.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+      <label className="mayori-filter-control"><span>Сортировка</span><select aria-label="Сортировка" value={sort} onChange={event => { setSort(event.currentTarget.value) }}><option value="newest">Сначала новые</option><option value="name">По имени</option><option value="creator">По автору</option></select></label>
+      <label className="mayori-filter-control"><span>Автор</span><select aria-label="Автор" value={creator} onChange={event => { setCreator(event.currentTarget.value) }}><option value="all">Все авторы</option>{creators.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
       <fieldset className="mayori-filter-group">
         <legend>Портрет</legend>
         {[['all', 'Все'], ['with', 'С портретом'], ['without', 'Без портрета']].map(([value, label]) => <label key={value}><input type="radio" name="mayori-portrait" value={value} checked={portrait === value} onChange={() => { setPortrait(value) }} /><span>{label}</span></label>)}
@@ -245,6 +250,11 @@ export function CharacterGalleryPanel({ library, personas, startCharacter }) {
   const [busy, setBusy] = useState(false)
   const [playingId, setPlayingId] = useState(null)
   const [notice, setNotice] = useState(null)
+  const [preferences, setPreferences] = useState(readCatalogPreferences)
+  const [page, setPage] = useState(1)
+  const mainRef = useRef(null)
+  useEffect(() => { saveCatalogPreferences(preferences) }, [preferences])
+  useEffect(() => { setPage(1) }, [query, sort, creator, portrait, selectedTags, preferences.pageSize])
 
   const normalizedQuery = query.trim().toLocaleLowerCase('ru')
   const cards = useMemo(() => {
@@ -266,6 +276,8 @@ export function CharacterGalleryPanel({ library, personas, startCharacter }) {
       return right.importedAt - left.importedAt || left.name.localeCompare(right.name, 'ru')
     })
   }, [creator, normalizedQuery, portrait, selectedTags, snapshot.cards, sort])
+  const pagination = paginate(cards, page, preferences.pageSize)
+  useEffect(() => { mainRef.current?.scrollTo({ top: 0 }) }, [pagination.page])
 
   const importFiles = async (fileList) => {
     if (fileList.length === 0) return
@@ -330,9 +342,10 @@ export function CharacterGalleryPanel({ library, personas, startCharacter }) {
               <ImportControl busy={busy} inputRef={inputRef} onFiles={importFiles} />
               <Filters cards={snapshot.cards} query={query} setQuery={setQuery} sort={sort} setSort={setSort} creator={creator} setCreator={setCreator} portrait={portrait} setPortrait={setPortrait} selectedTags={selectedTags} setSelectedTags={setSelectedTags} onReset={resetFilters} />
             </aside>
-            <main className="mayori-gallery-main" id="mayori-gallery-content">
+            <main ref={mainRef} className="mayori-gallery-main" id="mayori-gallery-content">
               <div className="mayori-gallery-results">
-                <p role="status" aria-live="polite">{snapshot.status === 'ready' ? `Показано ${cards.length} из ${snapshot.cards.length}` : ''}</p>
+                <p role="status" aria-live="polite">{snapshot.status === 'ready' ? `Найдено ${cards.length} из ${snapshot.cards.length}` : ''}</p>
+                <label className="mayori-column-control mayori-filter-control"><span>Карточек в ряд</span><select aria-label="Карточек в ряд" value={preferences.columns} onChange={event => { setPreferences(value => ({ ...value, columns: Number(event.target.value) })) }}>{COLUMN_OPTIONS.map(columns => <option key={columns} value={columns}>{columns}</option>)}</select></label>
               </div>
               <div className="mayori-gallery-notice" role="status" aria-live="polite">
                 {notice !== null && <p className={notice.kind === 'error' ? 'mayori-error' : 'mayori-success'}>{notice.text}</p>}
@@ -346,12 +359,15 @@ export function CharacterGalleryPanel({ library, personas, startCharacter }) {
                   <p>{snapshot.cards.length === 0 ? 'Импортируйте PNG или JSON, чтобы добавить первого персонажа.' : 'Измените запрос или сбросьте фильтры.'}</p>
                 </div>
               )}
-              {cards.length > 0 && <ul className="mayori-card-grid">{cards.map(card => <CharacterCard key={card.id} card={card} persona={persona} onPlay={play} playBusy={playingId === card.id} playDisabled={playingId !== null} onEdit={(item, trigger) => { detailTriggerRef.current = trigger; setSelectedCard(item) }} />)}</ul>}
+              {cards.length > 0 && <>
+                <ul className="mayori-card-grid" style={{ '--mayori-columns': preferences.columns }}>{pagination.items.map(card => <CharacterCard key={card.id} card={card} onPlay={play} playBusy={playingId === card.id} playDisabled={playingId !== null} onEdit={(item, trigger) => { detailTriggerRef.current = trigger; setSelectedCard(item) }} />)}</ul>
+                <Pagination pagination={pagination} total={cards.length} pageSize={preferences.pageSize} onPage={setPage} onPageSize={pageSize => { setPreferences(value => ({ ...value, pageSize })) }} />
+              </>}
             </main>
           </div>
         </div>
       </section>
-      <CharacterInfoDialog card={selectedCard} onClose={() => { setSelectedCard(null) }} onRemove={remove} triggerRef={detailTriggerRef} />
+      <CharacterInfoDialog card={selectedCard} onClose={() => { setSelectedCard(null) }} onRemove={remove} triggerRef={detailTriggerRef} persona={persona} onPlay={play} playDisabled={playingId !== null} />
     </>
   )
 }

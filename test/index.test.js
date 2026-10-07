@@ -48,7 +48,7 @@ test('registers one ordered system-prompt section', async () => {
       provide(name, service) { provided.push({ name, service }) },
     },
     inject(services, callback) {
-      assert.deepEqual(services, ['webServer', 'agents', 'sessions', 'workspaceRegistry', 'agentPresets'])
+      assert.deepEqual(services, ['webServer', 'agents', 'sessions', 'workspaceRegistry', 'agentPresets', 'sessionQuery'])
       registrationReady = callback({
         reflect: {
           provide(name, service) { provided.push({ name, service }) },
@@ -91,6 +91,7 @@ test('registers one ordered system-prompt section', async () => {
   assert.match(provided[2].service.defaultCampaignPath, /test-campaigns[\\/]default$/)
   assert.equal(provided[3].name, 'mayoriTrajectoryContext')
   assert.equal(provided[3].service.constructor.name, 'SessionTrajectoryContextProvider')
+  assert.equal(provided[4].name, 'mayoriHistoryDetails')
   assert.equal(rpcRegistration.kind, 'prefix')
   assert.equal(rpcRegistration.path, '/mayori/characters')
 })
