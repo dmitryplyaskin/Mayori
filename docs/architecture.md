@@ -8,7 +8,10 @@ Mayori следует архитектуре DeepSeek Harness: каждая фу
 dsh-mayori bundle
 ├── cordis.patch.yml
 │   ├── заменяет deployment:persona через строку system-prompt
-│   └── монтирует mayori-director
+│   ├── монтирует mayori-director
+│   └── объявляет preset mayori с изолированным dsh-mayori/dice
+├── src/dice-tool.js
+│   └── регистрирует Dice provider и native rollDice
 ├── index.js
 │   ├── регистрирует mayori:director через ctx.systemPrompt.section()
 │   └── публикует Host Character Library через ctx.webServer
@@ -26,7 +29,7 @@ Bundle является слоем композиции, а не отдельн�
 
 Поддерживаемая версия DSH — `0.2.1-alpha.1`; пакет объявляет её peer dependency. Browser half объявлен через `dsh.client` и `exports["./client"]`. `MayoriSidebar` регистрируется в публичном root-scoped слоте `sidebar.workspaces` с приоритетом `-100`, поэтому штатный `WorkspaceBrowser` остаётся fallback. Брендинг занимает штатные `sidebar.brand.mark`, `sidebar.brand.name` и `conversation.hero.brand.mark`. `MayoriNavigationSidebar` занимает публичный `sidebar`, использует native store, locale, hooks и callbacks и зеркалит child slots с отдельным владельцем. Его renderer исключает кнопку New Session; бренд направляется в `ctx.layout.selectPanel('mayori-home')` без создания пустой сессии. Panel navigation, toggle, Settings и footer actions продолжают использовать публичные контракты DSH. В `shell.leading` для полностью скрытой desktop-панели остаётся только кнопка раскрытия. Обе регистрации ожидают stock entry и снимаются вместе с подписками при unload. DOM-подмен и скрытия stock chrome по CSS-селекторам нет. Стили и слоты удаляются вместе с Cordis fiber.
 
-Bundle объявляет preset `mayori` с пустым списком дочерних плагинов и выбирает его по умолчанию, поэтому новые RPG-сессии не получают инструменты стандартного coding-пресета. Глобальные personaPrefix и director guidance задают роль ведущего. Это первый RPG-срез без фиктивных rules/dice tools; дальнейшие игровые инструменты добавляются в preset явно.
+Bundle объявляет preset `mayori` с дочерним плагином `dsh-mayori/dice` и выбирает его по умолчанию, поэтому новые RPG-сессии получают `rollDice` без инструментов стандартного coding-пресета. Глобальные personaPrefix и director guidance задают роль ведущего. Дальнейшие игровые инструменты добавляются в preset явно.
 
 Модельная композиция отключает `system-prompt.includeHarnessIdentity` и `includeRuntimeContext`, а также `web-runtime.surfaceContext`. Поэтому в запросах нет идентичности DSH, пути к его исходникам, Web URL и порта, указаний по HMR, сборке и запуску серверов или технических runtime snapshots. Web runtime сохраняет штатные параметры запуска и продолжает обслуживать интерфейс. Отключённый `ui-deliverables` исключает file-reference guidance, инструкции `present` и карточки результатов coding-задач. `tools.mode: native` исключает инструкции JS-исполнителя даже при заданном `DSH_TOOLS_MODE`. Системная инструкция содержит роль Mayori, правила ведущего и активную карточку с персоной игрока; правила последовательности опираются на установленные события без указаний читать или изменять campaign files. При добавлении игровых dynamic contexts их включение необходимо явно задать в композиции.
 
@@ -104,6 +107,16 @@ Character Session Provider регистрирует scoped waterfall `agent/pre-
 
 Персона содержит имя, необязательные описание, подпись и PNG/JPEG/WebP avatar. Подпись и avatar не входят в модельный контекст. Default применяется только при создании чата; без него используется имя `Игрок` и пустое описание. Snapshot персоны сохраняется рядом с выбранной карточкой и наследуется при форке. Изменение или удаление записи каталога не меняет созданные чаты. Явное «Играть в этом чате» атомарно обновляет persona snapshot под maintenance, перевязывает logged prompt context и, только до первого хода, заменяет приветствие. Исторические действия игрока не переписываются. Доменное описание не даёт модели права выбирать за игрока.
 
+### Dice
+
+- **Service Definition** — preset-scoped `DiceService.roll(rolls, { signal })`, зарегистрированный как `mayoriDice` в отдельном Cordis realm (`isolate.mayoriDice: true`);
+- **Provider** — `CryptoDiceProvider`: ограниченный парсер выражений и независимые равномерные целочисленные броски через `node:crypto.randomInt`, без каталога видов костей;
+- **Consumer** — native `rollDice`, зарегистрированный через `ctx.tools.register` в дочернем плагине пресета Mayori. `registerDiceTool` можно подключить к другому provider того же сервиса.
+
+Вход — дерево объектов/массивов со строковыми выражениями в листьях: `dN`, `NdN`, арифметика, скобки, унарные знаки и `floor`/`ceil`/`round`. Листья независимы, ссылки между ними не поддерживаются. `values` сохраняет форму дерева; `details` содержит исходные выражения, пути массивами, каждую группу кубиков, все грани и итог. Грамматика и лимиты всего запроса проверяются до генерации случайности; константные арифметические ошибки также выявляются заранее. Динамическая арифметическая ошибка останавливает выполнение и возвращает `values: null`, `error` и уже выпавшие грани в `details`. Автоматических перебросов нет.
+
+Полный ответ сериализуется в model-visible content штатного `tool/result`: одного execution-local canonical value недостаточно для восстановления из журнала. Resume и fork читают сохранённые события без повторных бросков; отдельное хранилище или скрытый seed не вводятся. Новый явный вызов является новым броском. Service, consumer и подписка на доступность provider удаляются Cordis при выгрузке. Лимиты задаются валидируемым `Config`; игровой ruleset, символьные кости, keep/drop, перебросы и собственный browser renderer остаются отдельными расширениями. Предел числового результата — конечное число с абсолютным значением не выше `Number.MAX_SAFE_INTEGER`.
+
 ## Инварианты
 
 1. Модель не принимает добровольные решения за персонажа игрока.
@@ -122,13 +135,13 @@ Character Session Provider регистрирует scoped waterfall `agent/pre-
 
 Session log остаётся источником того, что увидела модель в конкретном ходе. Campaign journal является долгоживущим доменным источником между сессиями; его снимок должен попадать в session log как model-visible context.
 
-### Rules and dice
+### Rules
 
 - Rules Service Definition описывает запрос разрешения действия без привязки к игровой системе.
 - Provider реализует конкретную систему или systemless resolution.
 - Tool Consumer валидирует модельный JSON, вызывает provider и возвращает доказуемый результат.
 
-Генератор случайности принадлежит provider, а не prompt. Это позволяет воспроизводить броски и менять систему без изменения ведущего.
+Генератор случайности принадлежит реализованному Dice provider, а не prompt. Rules provider сможет потреблять этот сервис; исторические броски восстанавливаются из записанных результатов.
 
 ### Scene direction
 
@@ -140,4 +153,4 @@ RPG-клиент должен строиться из session events и доме
 
 ## Границы первого релиза
 
-`dsh-mayori` пока содержит persona, director guidance и Host-owned Character Library с галереей и историей чатов. Он намеренно не имитирует состояние кампании, правила или броски текстовыми соглашениями: эти возможности будут добавляться полными seams с тестами и долговечными событиями.
+`dsh-mayori` содержит persona, director guidance, Host-owned Character Library с галереей и историей чатов и numeric Dice capability. Состояние кампании и конкретные игровые rulesets будут добавляться полными seams с тестами и долговечными событиями.

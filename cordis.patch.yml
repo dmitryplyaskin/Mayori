@@ -40,7 +40,19 @@
         id: mayori
         name: Mayori
         description: Character-driven role-playing without coding tools.
-        plugins: []
+        plugins:
+          - id: mayori-dice
+            name: dsh-mayori/dice
+            isolate:
+              mayoriDice: true
+            config:
+              maxSides: 1000000
+              maxDice: 1000
+              maxExpressions: 100
+              maxDepth: 16
+              maxNodes: 1000
+              maxExpressionLength: 1024
+              maxExpressionDepth: 64
     - id: mayori-director
       name: dsh-mayori
       config:

@@ -1,7 +1,7 @@
 /** Test-only probe: mount solely in an isolated DSH home, never in a player profile. */
 import { randomUUID } from 'node:crypto'
 
-export const inject = ['webServer', 'llm', 'sessionController', 'agents', 'sessions', 'mayoriCharacters', 'mayoriCharacterSessions', 'workspaceRegistry']
+export const inject = ['webServer', 'llm', 'tools', 'sessionController', 'agents', 'sessions', 'mayoriCharacters', 'mayoriCharacterSessions', 'workspaceRegistry']
 
 export function apply(ctx) {
   const requests = []
@@ -17,6 +17,16 @@ export function apply(ctx) {
     },
     async *stream(options) {
       requests.push({ messages: options.messages, tools: options.tools })
+      const last = options.messages.findLast(message => message.role !== 'system' && message.role !== 'developer')
+      if (last?.role !== 'tool') {
+        const id = randomUUID()
+        const args = JSON.stringify({ rolls: { attack: 'd20 + 4', damage: { weapon: '3d6 + 4' }, checks: ['d37', 'floor(2d8 / 2)'] } })
+        yield { type: 'block-start', index: 0, blockType: 'tool-call' }
+        yield { type: 'tool-call-delta', index: 0, id, name: 'rollDice', argumentsDelta: args }
+        yield { type: 'block-end', index: 0, block: { type: 'tool-call', id, name: 'rollDice', arguments: args } }
+        yield { type: 'finish', reason: { kind: 'tool-calls' } }
+        return
+      }
       yield { type: 'block-start', index: 0, blockType: 'text' }
       yield { type: 'text-delta', index: 0, text: 'Welcome to the archive.' }
       yield { type: 'block-end', index: 0, block: { type: 'text', text: 'Welcome to the archive.' } }
@@ -50,7 +60,8 @@ export function apply(ctx) {
           const agent = ctx.agents.get(input.sessionId)
           await agent.whenIdle()
           await ctx.sessions.flush(agent.session)
-          value = { messages: agent.session.deriveMessages(), requests,
+          value = { messages: agent.session.deriveMessages(), requests, events: agent.session.snapshotEvents(),
+            hostHasDiceTool: ctx.tools.get('rollDice') !== undefined,
             header: agent.session.header }
         } else throw new Error('Unknown smoke operation')
         res.writeHead(200, { 'content-type': 'application/json' })

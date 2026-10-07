@@ -25,7 +25,8 @@ Roadmap разбит на вертикальные срезы: каждый эт
 ## 2. Rules and dice
 
 - нейтральный Rules Service Definition;
-- systemless provider и детерминированно тестируемый dice provider;
+- numeric DiceService, CryptoDiceProvider и native `rollDice` — готово: дерево выражений, арифметика, лимиты и журнал всех граней;
+- systemless rules provider;
 - инструменты проверки и разрешения действия;
 - отображение бросков без разбора свободного текста.
 
