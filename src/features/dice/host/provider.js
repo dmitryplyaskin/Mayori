@@ -1,7 +1,8 @@
 /** Preset-scoped numeric dice capability with durable, isolated expression outcomes. */
 import { randomInt } from 'node:crypto'
 import { DICE_RESULT_VERSION } from '../shared/result.js'
-import { DiceError, fail, checked, boolean, compare, calculate, mathFunction, parseExpression } from '../domain/expression.js'
+import { DiceError, fail, checked, boolean, compare, calculate, mathFunction, parseExpression, matchesPool } from '../domain/expression.js'
+import { projectDiceGroup, diceObservations } from '../shared/pool.js'
 
 import { DiceService } from './service.js'
 import { resolveDiceConfig } from './config.js'
@@ -73,6 +74,11 @@ export class CryptoDiceProvider extends DiceService {
     // Cordis service receivers are proxies; do not use private fields here.
     this.draw = draw
   }
+  validate(rolls, { purpose } = {}) {
+    if (purpose !== undefined && (typeof purpose !== 'string' || !purpose.trim() || purpose.length > this.config.maxPurposeLength)) throw new TypeError(`purpose must contain 1 to ${this.config.maxPurposeLength} characters`)
+    const { fields } = compileTree(rolls, this.config)
+    return { errors: fields.filter(field => field.error).map(field => ({ path: field.path, code: field.error.code, message: field.error.message })) }
+  }
   roll(rolls, { signal, purpose } = {}) {
     signal?.throwIfAborted()
     if (purpose !== undefined && (typeof purpose !== 'string' || !purpose.trim() || purpose.length > this.config.maxPurposeLength)) throw new TypeError(`purpose must contain 1 to ${this.config.maxPurposeLength} characters`)
@@ -121,7 +127,15 @@ export class CryptoDiceProvider extends DiceService {
       let kept = chains.map((_, index) => index)
       if (node.keep) kept = kept.sort((a, b) => (node.keep.mode === 'highest' ? chains[b].value - chains[a].value : chains[a].value - chains[b].value) || a - b).slice(0, node.keep.count).sort((a, b) => a - b)
       if (modified || node.keep) group.keptIndices = kept.flatMap(index => chains[index].indices).sort((a, b) => a - b)
-      return kept.map(index => chains[index].value)
+      return { sides: node.sides, totals: kept.map(index => chains[index].value), faces: kept.flatMap(index => chains[index].indices.map(face => group.results[face])) }
+    }
+    const readPool = (node, trace) => {
+      if (node.kind === 'dice') return pool(node, trace)
+      const outcome = resolve(byPath.get(pathKey(node.path)))
+      if (outcome.error) fail('dependency_failed', 'Referenced expression failed: ' + pathKey(node.path))
+      trace.references.push({ path: node.path, value: outcome.value })
+      if (!outcome.pool) fail('pool_expected', 'Reference must name a dice group or an alias of one, without arithmetic')
+      return outcome.pool
     }
     const evaluate = (root, trace) => {
       // AST frames are explicit: bounded dependency recursion cannot multiply AST call-stack depth.
@@ -133,8 +147,15 @@ export class CryptoDiceProvider extends DiceService {
         signal?.throwIfAborted()
         const frame = stack.at(-1), node = frame.node
         if (node.kind === 'literal') { finish(node.value); continue }
-        if (node.kind === 'dice') { finish(checked(pool(node, trace).reduce((a, b) => a + b, 0))); continue }
-        if (node.kind === 'count') { finish(pool(node.pool, trace).filter(value => compare(node.test.operator, value, node.test.threshold)).length); continue }
+        if (node.kind === 'dice') { finish(checked(pool(node, trace).totals.reduce((a, b) => a + b, 0))); continue }
+        if (['count', 'countfaces', 'face'].includes(node.kind)) {
+          const saved = readPool(node.pool, trace)
+          if (node.kind === 'face') {
+            if (saved.faces.length !== 1) fail('ambiguous_face', 'face expects exactly one kept, accepted face')
+            finish(saved.faces[0])
+          } else finish((node.kind === 'count' ? saved.totals : saved.faces).filter(value => matchesPool(node.test, value)).length)
+          continue
+        }
         if (node.kind === 'ref') {
           const outcome = resolve(byPath.get(pathKey(node.path)))
           if (outcome.error) fail('dependency_failed', 'Referenced expression failed: ' + pathKey(node.path))
@@ -180,7 +201,9 @@ export class CryptoDiceProvider extends DiceService {
         if (field.error) throw field.error
         const value = evaluate(field.ast, trace)
         trace.value = value
-        const outcome = { value }; outcomes.set(field, outcome); return outcome
+        const savedPool = field.ast.kind === 'dice' ? projectDiceGroup(trace.dice[0])
+          : field.ast.kind === 'ref' ? outcomes.get(byPath.get(pathKey(field.ast.path)))?.pool : undefined
+        const outcome = { value, ...(savedPool ? { pool: savedPool } : {}) }; outcomes.set(field, outcome); return outcome
       } catch (error) {
         if (!(error instanceof DiceError)) throw error
         trace.value = null; trace.error = error.message; trace.code = error.code
@@ -191,6 +214,6 @@ export class CryptoDiceProvider extends DiceService {
       ? Object.fromEntries(node.children.map(([key, child]) => [key, visit(child)])) : resolve(node).value ?? null
     const values = visit(tree), details = fields.map(field => traces.get(field))
     const errors = details.filter(detail => detail.error).map(detail => ({ path: detail.path, code: detail.code, message: detail.error }))
-    return { schemaVersion: DICE_RESULT_VERSION, ...(purpose === undefined ? {} : { purpose: purpose.trim() }), values, errors, details }
+    return { schemaVersion: DICE_RESULT_VERSION, ...(purpose === undefined ? {} : { purpose: purpose.trim() }), values, errors, observations: diceObservations(details), details }
   }
 }

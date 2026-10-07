@@ -47,7 +47,7 @@ export function parseExpression(source, config) {
     const matches = [
       ['number', /^(?:\d+(?:\.\d+)?|\.\d+)/], ['string', /^"(?:[^"\\\r\n]|\\.)*"/],
       ['reference', /^\$[A-Za-z_][A-Za-z0-9_]*/],
-      ['name', /^(?:floor|ceil|round|max|min|count|ref|if|true|false|and|or|not)\b/],
+      ['name', /^(?:floor|ceil|round|max|min|count[Ff]aces|count|face|ref|if|true|false|and|or|not)\b/],
       ['modifier', /^(?:kh|kl|ro|r)/i], ['operator', /^(?:>=|<=|==|!=)/], ['operator', /^[dD+\-*/()!,\[\]<>]/],
     ]
     for (const [kind, pattern] of matches) {
@@ -75,6 +75,17 @@ export function parseExpression(source, config) {
     let sign = 1
     if (token.kind === '-' || token.kind === '+') { sign = token.kind === '-' ? -1 : 1; next() }
     return { operator, threshold: checked(sign * Number(expect('number').raw)) }
+  }
+  function poolPredicate(minimum = 0) {
+    let left
+    if (token.kind === 'not') { next(); left = { kind: 'not', child: nested(() => poolPredicate(2)) } }
+    else if (token.kind === '(') { next(); left = nested(() => poolPredicate()); expect(')') }
+    else left = { kind: 'comparison', ...predicate() }
+    while (({ or: 1, and: 2 }[token.kind] ?? 0) > minimum) {
+      const kind = token.kind; next()
+      left = { kind, left, right: nested(() => poolPredicate(kind === 'and' ? 2 : 1)) }
+    }
+    return left
   }
   function dice(count) {
     expect('d')
@@ -129,14 +140,16 @@ export function parseExpression(source, config) {
       } while (true)
       expect(']'); expect(')'); return reference(path)
     }
-    if (['floor', 'ceil', 'round', 'max', 'min', 'if', 'count'].includes(token.kind)) {
+    if (['floor', 'ceil', 'round', 'max', 'min', 'if', 'count', 'countfaces', 'face'].includes(token.kind)) {
       const name = token.kind; next(); expect('(')
       return nested(() => {
         const args = [expression(0)]
-        if (name === 'count') {
-          expect(','); const test = predicate(); expect(')')
-          if (args[0].kind !== 'dice') fail('invalid_expression', 'count expects one dice group, not an arithmetic total or reference')
-          return { kind: 'count', pool: args[0], test }
+        if (['count', 'countfaces', 'face'].includes(name)) {
+          let test
+          if (name !== 'face') { expect(','); test = poolPredicate() }
+          expect(')')
+          if (!['dice', 'ref'].includes(args[0].kind)) fail('invalid_expression', `${name} expects one dice group or a reference to a pool`)
+          return { kind: name, pool: args[0], ...(test ? { test } : {}) }
         }
         while (token.kind === ',') { next(); args.push(expression(0)) }
         expect(')')
@@ -167,7 +180,7 @@ export function parseExpression(source, config) {
   while (pending.length) {
     const [node, depth] = pending.pop()
     if (depth > config.maxExpressionDepth) fail('invalid_expression', `Expression exceeds syntax tree depth ${config.maxExpressionDepth}`)
-    const children = node.args ?? (node.child ? [node.child] : node.left ? [node.left, node.right] : node.pool ? [node.pool] : [])
+    const children = node.args ?? (node.child ? [node.child] : node.left ? [node.left, node.right] : node.pool ? [node.pool, ...(node.test ? [node.test] : [])] : [])
     for (const child of children) pending.push([child, depth + 1])
   }
   preflight(ast)
@@ -177,7 +190,7 @@ const UNKNOWN = Symbol('dynamic')
 /** Constant arithmetic errors are caught before drawing, except inside an undecided lazy branch. */
 function preflight(node) {
   if (node.kind === 'literal') return node.value
-  if (['dice', 'ref', 'count'].includes(node.kind)) return UNKNOWN
+  if (['dice', 'ref', 'count', 'countfaces', 'face'].includes(node.kind)) return UNKNOWN
   if (node.kind === 'if') {
     const test = preflight(node.args[0])
     return test === UNKNOWN ? UNKNOWN : preflight(node.args[boolean(test) ? 1 : 2])
@@ -206,4 +219,11 @@ function preflight(node) {
 export function mathFunction(name, args) {
   args.forEach(checked)
   return checked(name === 'max' ? args.reduce((a, b) => Math.max(a, b)) : name === 'min' ? args.reduce((a, b) => Math.min(a, b)) : Math[name](args[0]))
+}
+
+export function matchesPool(test, value) {
+  if (test.kind === 'comparison') return compare(test.operator, value, test.threshold)
+  if (test.kind === 'not') return !matchesPool(test.child, value)
+  return test.kind === 'and' ? matchesPool(test.left, value) && matchesPool(test.right, value)
+    : matchesPool(test.left, value) || matchesPool(test.right, value)
 }

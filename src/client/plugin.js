@@ -16,9 +16,11 @@ import { RemoteTrajectoryContextProvider } from '../features/trajectory/client/c
 import { ContextTrajectory, TrajectorySessionHeader } from '../features/trajectory/client/view.jsx'
 import { HomePanel, HomeConversation, HomeIcon } from './shell/home.jsx'
 import { DiceToolCard } from '../features/dice/client/card.jsx'
+import { CheckToolCard } from '../features/rules/client/card.jsx'
 import { BRAND_STYLE } from './styles.js'
 
 export { DiceToolCard } from '../features/dice/client/card.jsx'
+export { CheckToolCard } from '../features/rules/client/card.jsx'
 export { BRAND_STYLE } from './styles.js'
 
 export const inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout']
@@ -52,6 +54,9 @@ export function apply(ctx) {
   ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
     name: 'tool.call.toolview', key: 'rollDice',
   }, DiceToolCard))
+  ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
+    name: 'tool.call.toolview', key: 'resolveCheck',
+  }, CheckToolCard))
 
   ctx.slots.inject('sidebar.brand.mark', () => ctx.slots.register({
     name: 'sidebar.brand.mark', priority: -100,

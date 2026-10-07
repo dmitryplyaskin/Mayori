@@ -1,6 +1,7 @@
 /** Keyless integration assertions against an isolated DSH with dsh-smoke-probe.js. */
 import assert from 'node:assert/strict'
 import { readDiceResult } from '../src/features/dice/shared/result.js'
+import { readCheckResult } from '../src/features/rules/shared/result.js'
 
 const origin = process.argv[2] ?? 'http://127.0.0.1:3090'
 async function call(path, payload) {
@@ -97,7 +98,7 @@ assert.equal(rejectedSwipe.status, 400, 'Played greeting is locked')
 assert.equal(turn.messages.filter(message => message.source?.provider === 'mayori-character-card' || message.source?.kind === 'mayori-greeting').length, 1)
 assert.ok(turn.messages.some(message => message.role === 'assistant' && JSON.stringify(message).includes('Welcome to the archive.')))
 assert.doesNotMatch(JSON.stringify(modelInput.messages), /smoke-private-extension/)
-assert.deepEqual((modelInput.tools ?? []).map(tool => tool.name), ['rollDice'])
+assert.deepEqual((modelInput.tools ?? []).map(tool => tool.name).sort(), ['resolveCheck', 'rollDice'])
 const diceCalls = turn.events.filter(event => event.type === 'tool/call' && event.data.name === 'rollDice').slice(-2)
 assert.equal(diceCalls.length, 2, 'Exercise both default compact and explicit full responses')
 for (const [index, diceCall] of diceCalls.entries()) {
@@ -112,7 +113,7 @@ for (const [index, diceCall] of diceCalls.entries()) {
   assert.deepEqual(body, index === 1 ? rolled : summary)
   assert.deepEqual(readDiceResult(diceEvent.data.message.content, diceEvent.data.meta), rolled)
   assert.deepEqual(rolled.errors.map(error => error.code), ['invalid_expression', 'dependency_failed'])
-  assert.equal(rolled.schemaVersion, 2)
+  assert.equal(rolled.schemaVersion, 3)
   assert.equal(rolled.purpose, 'Проверка механики бросков')
   assert.equal(rolled.details.length, 16)
   assert.ok(modelInput.messages.some(message => message.role === 'tool' && message.content[0]?.text === diceEvent.data.message.content[0].text),
@@ -143,6 +144,16 @@ for (const [index, diceCall] of diceCalls.entries()) {
   }
 }
 const completed = turn.events.findLast(event => event.type === 'assistant/message')
+const checkCall = turn.events.findLast(event => event.type === 'tool/call' && event.data.name === 'resolveCheck')
+const checkEvent = turn.events.findLast(event => event.type === 'tool/result' && event.data.message.toolCallId === checkCall?.data.callId)
+assert.ok(checkEvent && !checkEvent.data.message.isError, 'A native check is recorded')
+const checked = readCheckResult(checkEvent.data.message.content, checkEvent.data.meta)
+assert.ok(checked)
+assert.equal(checked.check.total, checked.check.natural + 6)
+assert.equal(checked.check.outcome, checked.check.natural === 20 ? 'critical_success' : checked.check.natural === 1 ? 'critical_failure' : checked.check.total >= 12 ? 'success' : 'failure')
+assert.equal(Object.hasOwn(JSON.parse(checkEvent.data.message.content[0].text), 'dice'), false)
+assert.ok(modelInput.messages.some(message => message.role === 'tool' && message.content[0]?.text === checkEvent.data.message.content[0].text))
+assert.equal(turn.hostHasRulesTool, false, 'Rules remain isolated to the RPG preset')
 const diceFork = await call('/_mayori-smoke', { action: 'fork', sessionId, atSeq: completed.seq })
 const forkedDice = await call('/_mayori-smoke', { action: 'inspect', sessionId: diceFork.sessionId })
 assert.deepEqual(forkedDice.messages.filter(message => message.role === 'tool'), turn.messages.filter(message => message.role === 'tool'),

@@ -7,6 +7,7 @@
   "exports": {
     ".": "./index.js",
     "./dice": "./src/features/dice/host/plugin.js",
+    "./mechanics": "./src/host/mechanics-plugin.js",
     "./client": "./lib/client.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
@@ -21,6 +22,9 @@
     "src/features/history/host",
     "src/features/trajectory/host",
     "src/features/dice/host",
+    "src/features/rules/host",
+    "src/features/rules/domain",
+    "src/features/rules/shared",
     "src/features/character-session/domain",
     "src/features/characters/shared",
     "src/features/dice/shared",

@@ -35,6 +35,12 @@ export function apply(ctx) {
           yield { type: 'tool-call-delta', index: index + 1, id, name: 'rollDice', argumentsDelta: args }
           yield { type: 'block-end', index: index + 1, block: { type: 'tool-call', id, name: 'rollDice', arguments: args } }
         }
+        const checkId = randomUUID()
+        const checkArgs = JSON.stringify({ profile: 'd20-critical', purpose: 'Проверка критов', modifier: 6, target: 12,
+          damage: { normal: 'd6 + 3', critical: '2d6 + 3' } })
+        yield { type: 'block-start', index: 3, blockType: 'tool-call' }
+        yield { type: 'tool-call-delta', index: 3, id: checkId, name: 'resolveCheck', argumentsDelta: checkArgs }
+        yield { type: 'block-end', index: 3, block: { type: 'tool-call', id: checkId, name: 'resolveCheck', arguments: checkArgs } }
         yield { type: 'finish', reason: { kind: 'tool-calls' } }
         return
       }
@@ -73,6 +79,7 @@ export function apply(ctx) {
           await ctx.sessions.flush(agent.session)
           value = { messages: agent.session.deriveMessages(), requests, events: agent.session.snapshotEvents(),
             hostHasDiceTool: ctx.tools.get('rollDice') !== undefined,
+            hostHasRulesTool: ctx.tools.get('resolveCheck') !== undefined,
             header: agent.session.header }
         } else throw new Error('Unknown smoke operation')
         res.writeHead(200, { 'content-type': 'application/json' })

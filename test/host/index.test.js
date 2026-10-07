@@ -11,6 +11,8 @@ test('builds the default director prompt around player agency and established fi
   assert.match(prompt, /Keep established facts, character motivations, locations, chronology, and unresolved consequences consistent\./)
   assert.doesNotMatch(prompt, /workspace|campaign files|update them/)
   assert.match(prompt, /Never claim that a random outcome occurred/)
+  assert.match(prompt, /possible consequences before rolling/)
+  assert.match(prompt, /do not invent additional penalties after seeing a roll/)
 })
 
 test('applies deployment configuration and appends additional instructions', () => {

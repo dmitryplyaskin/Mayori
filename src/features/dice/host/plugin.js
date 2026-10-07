@@ -19,12 +19,14 @@ export function registerDiceTool(ctx) {
       + 'Supports dN, NdN, + - * /, parentheses, unary signs, floor/ceil/round, max/min; khK/klK keep K highest/lowest original dice chains. '
       + '! explodes on the maximum face; ro<3 rerolls each face at most once, r<3 repeatedly; rerolls happen before explosions, keep last. '
       + 'Comparisons > >= < <= == != return booleans and compare totals. count(5d10, >=8) counts qualifying kept dice chains. '
+      + 'Save a pool as a pure dice leaf, e.g. pool: 6d10!. count($pool, >=8 and !=10) reuses its chain totals; countFaces($pool, >=8) counts individual accepted faces, including explosions. '
+      + 'face($pool) returns exactly one kept accepted face, useful for natural d20 criticals; it errors on ambiguous pools. References to pools cannot include arithmetic. '
       + 'Boolean true/false, not/and/or and if(condition, then, else) are supported; if and and/or evaluate only the selected branch. '
       + '$attack references the top-level attack result; ref(["checks",0]) references an exact nested path. References reuse results, never reroll; key order does not affect dependency resolution. '
       + 'Example: {"attack":"1d20 + 5","hit":"$attack >= 15","damage":"if($hit, 2d6! + 3, 0)"}. '
       + 'Every explicit dice occurrence rolls independently; dice inside an unselected branch are not drawn. All requested leaves are evaluated, so put conditional dice inside if. '
       + 'Division may be fractional; round explicitly according to the rules. Optionally state purpose before rolling. '
-      + 'Returns schemaVersion 2, values with number/boolean leaves, and errors. Failed leaves are null; independent leaves still resolve. '
+      + 'Returns schemaVersion 3, values with number/boolean leaves, errors, and observations with kept faces and chain totals even without details. Failed leaves are null; independent leaves still resolve. '
       + 'Set details: true for full traces; every face, branch and reference remains recorded in the session regardless. '
       + 'Explosion/reroll limits return an error, never a silently truncated total. Do not automatically reroll errors or seek a preferred outcome. '
       + 'Do not choose voluntary actions for the player. These are numeric mechanics; game rules determine success and consequences.',
@@ -39,6 +41,7 @@ export function registerDiceTool(ctx) {
         errors: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: {
           path: { ...path, required: true }, code: { type: 'string', required: true }, message: { type: 'string', required: true },
         } } },
+        observations: { type: 'json', required: true },
         details: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: {
           path: { ...path, required: true }, expression: { type: 'string', required: true }, value: { ...scalar, required: true }, error: { type: 'string' }, code: { type: 'string' },
           references: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: { path: { ...path, required: true }, value: { ...scalar, required: true } } } },

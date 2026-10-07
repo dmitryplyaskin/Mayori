@@ -24,9 +24,9 @@ Roadmap разбит на вертикальные срезы: каждый эт
 
 ## 2. Rules and dice
 
-- нейтральный Rules Service Definition;
-- numeric DiceService, CryptoDiceProvider и native `rollDice` — готово: дерево выражений, арифметика, сравнения/count, `kh`/`kl`, взрывы/перебросы, ленивые условия и ссылки, ошибки по полям, version 2, лимиты и журнал всех граней;
-- systemless rules provider;
+- RulesService и NumericRulesProvider — готово: versioned profiles, natural criticals, выбранная грань, условный урон, фиксированные последствия и реальные броски таблиц; native resolveCheck и записанный исход в карточке;
+- numeric DiceService, CryptoDiceProvider и native `rollDice` — готово: дерево выражений, арифметика, сравнения/count, `kh`/`kl`, взрывы/перебросы, ленивые условия и ссылки, ошибки по полям, version 3, сохранённые пулы/countFaces/face, лимиты и журнал всех граней;
+- расширение правил за пределы числовых проверок;
 - инструменты проверки и разрешения действия;
 - отображение бросков через публичный `tool.call.toolview` из структурированного записанного результата — готово.
 

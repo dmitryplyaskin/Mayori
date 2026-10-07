@@ -1,6 +1,7 @@
 /** A keyed atomic tool view. DSH owns call pairing, lifecycle and transcript topology. */
 import { useId } from 'react'
 import { dicePurpose, readDiceResult } from '../shared/result.js'
+import { projectDiceGroup } from '../shared/pool.js'
 
 const pathLabel = path => path.map(key => typeof key === 'number' ? `[${key}]` : key).join(' › ')
 const errorCopy = message => message === 'Division by zero'
@@ -65,6 +66,12 @@ export function DiceToolCard({ phase, block, useDisclosure, inspect }) {
           {detail.error ? <span className="mayori-dice-result-error">Ошибка</span>
             : <strong className="mayori-dice-total"><span className="mayori-dice-sr">Итог: </span>{typeof detail.value === 'boolean' ? detail.value ? 'Да' : 'Нет' : detail.value}</strong>}
         </div>
+        {!detail.error && !!detail.dice.length && <p className="mayori-dice-observation">
+          {detail.dice.map((dice, index) => {
+            const { faces } = projectDiceGroup(dice)
+            return <span key={index}>На d{dice.sides}: <bdi>{faces.slice(0, 12).join(', ')}{faces.length > 12 ? `… (${faces.length})` : ''}</bdi></span>
+          })}
+        </p>}
         {expanded && <div className="mayori-dice-breakdown">{detail.dice.map((dice, index) => <DiceFaces key={index} dice={dice} />)}
           {detail.error && <p className="mayori-dice-error">{errorCopy(detail.error)}</p>}
           {detail.references?.map((ref, index) => <p className="mayori-dice-path" key={`ref-${index}`}>Использовано: <bdi>{pathLabel(ref.path)}</bdi> = {String(ref.value)}</p>)}

@@ -100,12 +100,13 @@ test('registers reversible Mayori client contributions', async () => {
 
     assert.equal(typeof provided.mayoriCharacters.importFiles, 'function')
     assert.deepEqual(slotInjections.map(item => item.name), [
-      'tool.call.toolview',
+      'tool.call.toolview', 'tool.call.toolview',
       'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark', 'sidebar.workspaces', 'sidebar', 'shell.leading',
       'main', 'sidebar.panellist', 'main.conversation', 'main', 'main', 'main', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'conversation.chat.node', 'conversation.view', 'conversation.session.header',
     ])
     for (const slot of slotInjections) slot.callback()
     assert.equal(registrations.find(item => item.options.name === 'tool.call.toolview').options.key, 'rollDice')
+    assert.deepEqual(registrations.filter(item => item.options.name === 'tool.call.toolview').map(item => item.options.key), ['rollDice', 'resolveCheck'])
     const slotRegistration = registrations.find(item => item.options.name === 'sidebar.workspaces')
     assert.equal(slotRegistration.options.name, 'sidebar.workspaces')
     assert.equal(slotRegistration.options.priority, -100)
@@ -267,6 +268,7 @@ test('dice card renders recorded totals, purpose, selection and discarded faces 
   const compact = renderToStaticMarkup(React.createElement(client.DiceToolCard, { ...props, useDisclosure: () => ({ expanded: false, toggle() {} }) }))
   assert.match(compact, /Итог: <\/span>21/)
   assert.doesNotMatch(compact, /mayori-dice-face /)
+  assert.match(compact, /На d20: <bdi>17<\/bdi>/)
   const { details, ...summary } = value
   const compactResult = { ...block, content: [{ type: 'text', text: JSON.stringify(summary) }], meta: { kind: 'mayori-dice', result: value } }
   const fromMetadata = renderToStaticMarkup(React.createElement(client.DiceToolCard, { ...props, block: compactResult }))

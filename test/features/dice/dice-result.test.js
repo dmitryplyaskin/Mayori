@@ -9,7 +9,7 @@ const fixture = () => ({ schemaVersion: 1, purpose: 'Скрытность', valu
   path: ['attack'], expression: '2d20kh1 + 4', dice: [{ sides: 20, results: [8, 17], keep: { mode: 'highest', count: 1 }, keptIndices: [1] }], value: 21,
 }] })
 
-test('version 2 replays mixed errors, booleans, references and modified chains in both response modes', t => {
+test('version 3 replays mixed errors, booleans, references and modified chains in both response modes', t => {
   const ctx = new Context(); t.after(() => ctx.fiber.dispose())
   const faces = [6, 2, 1, 4, 17, 1]
   new CryptoDiceProvider(ctx, {}, () => faces.shift())
@@ -20,7 +20,7 @@ test('version 2 replays mixed errors, booleans, references and modified chains i
   assert.deepEqual(readDiceResult(content(compact), meta), full)
   assert.equal(readDiceResult(content(compact)), null)
   for (const mutate of [
-    value => { value.schemaVersion = 3 },
+    value => { value.schemaVersion = 4 },
     value => { value.errors = [] },
     value => { value.errors[0].code = 'wrong' },
     value => { value.values.hit = null },
@@ -32,12 +32,24 @@ test('version 2 replays mixed errors, booleans, references and modified chains i
     value => { value.details[1].dice[0].keptIndices = [0, 1] },
     value => { value.details[3].references[0].value = 20 },
     value => { value.details[4].decisions[0].branch = 'else' },
+    value => { value.observations[0].groups[0].faces[0] = 1 },
+    value => { delete value.observations },
   ]) {
     const damaged = structuredClone(full); mutate(damaged)
     assert.equal(readDiceResult(content(damaged)), null)
   }
   assert.equal(readDiceResult(content({ ...compact, errors: [] }), meta), null)
   assert.equal(faces.length, 0)
+})
+
+test('historical version 2 results retain their compact/full contract without observations', t => {
+  const ctx = new Context(); t.after(() => ctx.fiber.dispose())
+  new CryptoDiceProvider(ctx, {}, () => 3)
+  const { observations, ...full } = ctx.mayoriDice.roll({ attack: 'd20+6' })
+  full.schemaVersion = 2
+  const { details, ...compact } = full
+  assert.deepEqual(readDiceResult(content(full)), full)
+  assert.deepEqual(readDiceResult(content(compact), { kind: 'mayori-dice', result: full }), full)
 })
 
 test('decodes current and unversioned historical results without recomputing any rolls', () => {
@@ -69,7 +81,7 @@ test('compact results read a matching durable trace and reject missing, mismatch
 
 test('future versions, inconsistent totals, malformed paths and invalid keep indices use raw fallback', () => {
   for (const mutate of [
-    value => { value.schemaVersion = 3 },
+    value => { value.schemaVersion = 4 },
     value => { value.values.attack = 20 },
     value => { value.details[0].path = ['missing'] },
     value => { value.details[0].dice[0].results[0] = 21 },

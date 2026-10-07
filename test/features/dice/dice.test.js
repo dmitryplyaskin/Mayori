@@ -161,7 +161,7 @@ test('dependency limits and purpose validation are bounded and versioned', t => 
   for (const purpose of ['', ' ', 5, null, 'x'.repeat(13)]) assert.throws(() => service.roll(['d6'], { purpose }), /purpose/)
   assert.equal(calls.length, 0)
   const result = service.roll({ a: '$b', b: '$c', c: 'd6', independent: 'd6' }, { purpose: ' Скрытность ' })
-  assert.equal(result.schemaVersion, 2); assert.equal(result.purpose, 'Скрытность'); assert.deepEqual(result.values, { a: null, b: 4, c: 4, independent: 5 })
+  assert.equal(result.schemaVersion, 3); assert.equal(result.purpose, 'Скрытность'); assert.deepEqual(result.values, { a: null, b: 4, c: 4, independent: 5 })
   assert.equal(result.errors[0].code, 'dependency_depth'); assert.deepEqual(replay(result), result)
   const reordered = harness(t, { maxDependencyDepth: 2 }, [4, 5]).service.roll({ c: 'd6', b: '$c', a: '$b', independent: 'd6' })
   assert.deepEqual(reordered.errors, result.errors)
@@ -177,4 +177,48 @@ test('maximum expression and dependency depths cannot multiply into a native sta
   assert.equal(result.values.v127, 1)
   assert.equal(calls.length, 0)
   assert.deepEqual(replay(result), result)
+})
+
+test('saved pools and nested aliases support repeated counts without repeated draws', t => {
+  const { service, calls } = harness(t, {}, [10, 10, 8])
+  const result = service.roll({ successes: 'countFaces($alias, >=8)', chains: 'count($alias, >=8)',
+    tens: 'countFaces($alias, ==10)', filtered: 'countFaces($alias, >=8 and !=10)',
+    excluded: 'countFaces($alias, not (==10 or <8))', alias: 'ref(["nested",0])', nested: ['d10!'] })
+  assert.equal(result.values.successes, 3); assert.equal(result.values.chains, 1)
+  assert.equal(result.values.tens, 2); assert.equal(result.values.filtered, 1); assert.equal(result.values.excluded, 1)
+  assert.equal(result.values.alias, 28); assert.deepEqual(result.errors, [])
+  assert.deepEqual(calls, [10, 10, 10])
+  assert.equal(result.details.filter(detail => detail.dice.length).length, 1)
+  assert.deepEqual(replay(result), result)
+})
+
+test('face and face-counts respect kept chains and discard replaced reroll faces', t => {
+  const { service, calls } = harness(t, {}, [1, 17, 10, 1, 8, 9, 4])
+  const result = service.roll({ attack: '2d20kh1', natural: 'face($attack)', pool: '3d10!ro<3kh2',
+    faces: 'countFaces($pool, >=8)', totals: 'count($pool, >=8)', ones: 'countFaces($pool, ==1)' })
+  assert.deepEqual(result.values, { attack: 17, natural: 17, pool: 27, faces: 3, totals: 2, ones: 0 })
+  assert.deepEqual(result.observations[1].groups[0], { sides: 10, faces: [10, 8, 9], totals: [18, 9] })
+  assert.deepEqual(calls, [20, 20, 10, 10, 10, 10, 10])
+})
+
+test('ambiguous face selection and references to arithmetic totals error without extra randomness', t => {
+  const { service, calls } = harness(t, {}, [3, 4, 5])
+  const result = service.roll({ pool: '2d6', ambiguous: 'face($pool)', total: 'd6+2',
+    bad: 'count($total, >=3)', constant: '3', badConstant: 'countFaces($constant, >=3)',
+    skipped: 'if(false,face($pool),0)' })
+  assert.equal(result.values.ambiguous, null); assert.equal(result.values.bad, null)
+  assert.deepEqual(result.errors.map(error => error.code), ['ambiguous_face', 'pool_expected', 'pool_expected'])
+  assert.equal(result.values.skipped, 0); assert.deepEqual(calls, [6, 6, 6])
+})
+
+test('validation is read-only and compound predicates are bounded before drawing', t => {
+  const { service, calls } = harness(t, {}, [])
+  assert.deepEqual(service.validate({ pool: '3d10', result: 'count($pool, >=8 and !=10)' }), { errors: [] })
+  assert.equal(service.validate({ pool: 'd6', result: 'count($pool, >=3 and)' }).errors.length, 1)
+  assert.equal(service.validate({ a: '$b', b: '$a' }).errors.length, 2)
+  assert.throws(() => service.validate({ a: '1000d6', b: 'd6' }), /potential initial dice/)
+  assert.deepEqual(calls, [])
+  const bounded = harness(t, { maxExpressionDepth: 8 }, [])
+  const result = bounded.service.roll({ tooDeep: 'countFaces(d6, ' + Array(20).fill('>=1').join(' and ') + ')' })
+  assert.equal(result.errors[0].code, 'invalid_expression'); assert.deepEqual(bounded.calls, [])
 })

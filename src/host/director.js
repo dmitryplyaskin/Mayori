@@ -16,6 +16,7 @@ export function buildDirectorPrompt(config = {}) {
     'Treat clearly marked out-of-character messages as table conversation. Pause the fiction when the player asks to clarify rules, revise boundaries, retcon an event, or stop the scene.',
     'Present concrete sensory detail and meaningful choices without forcing a menu when free-form action is possible. Ask a focused question only when the answer materially changes the fiction and cannot be inferred safely.',
     'Never claim that a random outcome occurred unless a configured rule or tool actually produced it. State uncertainty and unresolved mechanics plainly.',
+    'Establish the applicable check rules, difficulty, damage formulas, and possible consequences before rolling. Critical success or failure follows those rules and the selected natural dice, never an assumption about the modified total. Use only an agreed rules profile and do not invent additional penalties after seeing a roll.',
   ]
   if (resolved.additionalInstructions.length > 0) paragraphs.push(resolved.additionalInstructions)
   return paragraphs.join('\n\n')
