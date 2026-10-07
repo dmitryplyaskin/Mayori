@@ -16,6 +16,7 @@ async function call(path, payload) {
 
 let sessionId = process.argv.slice(3).find(argument => !argument.startsWith('--'))
 const resuming = sessionId !== undefined
+const expectedPreset = process.env.MAYORI_SMOKE_PRESET ?? 'mayori'
 const greetingIndex = process.argv.includes('--alternate') ? 1 : 0
 const expectedGreeting = greetingIndex === 0 ? 'Aster: You came back, Alex.' : 'Aster: Another greeting.'
 if (sessionId === undefined) {
@@ -37,7 +38,7 @@ if (sessionId === undefined) {
   const prepared = await call('/mayori/characters/start', { characterId: card.id, workspaceId: created.workspaceId, greetingIndex })
   sessionId = prepared.sessionId
   const adopted = await call('/_mayori-smoke', { action: 'adopt', sessionId, workspaceId: created.workspaceId })
-  assert.equal(adopted.agentPreset, 'mayori')
+  assert.equal(adopted.agentPreset, expectedPreset)
   const beforeTurn = await call('/_mayori-smoke', { action: 'inspect', sessionId })
   assert.equal(beforeTurn.requestCount, created.requestCount, 'Greeting must not call an LLM')
   assert.equal(beforeTurn.messages.length, 1)
@@ -61,7 +62,7 @@ if (sessionId === undefined) {
   if (!process.argv.includes('--keep-card')) await call('/mayori/characters/remove', { id: card.id })
 }
 const turn = await call('/_mayori-smoke', { action: 'turn', sessionId })
-assert.equal(turn.header.agentPreset, 'mayori')
+assert.equal(turn.header.agentPreset, expectedPreset)
 assert.equal(turn.hostHasDiceTool, false, 'The dice tool must remain in the Mayori preset scope')
 const modelInput = turn.requests.findLast(request => request.messages.some(message => message.source?.kind === 'user'))
 assert.equal(modelInput.messages[0].role, 'system')
@@ -99,9 +100,13 @@ assert.equal(rejectedSwipe.status, 400, 'Played greeting is locked')
 assert.equal(turn.messages.filter(message => message.source?.provider === 'mayori-character-card' || message.source?.kind === 'mayori-greeting').length, 1)
 assert.ok(turn.messages.some(message => message.role === 'assistant' && JSON.stringify(message).includes('Welcome to the archive.')))
 assert.doesNotMatch(JSON.stringify(modelInput.messages), /smoke-private-extension/)
-assert.deepEqual((modelInput.tools ?? []).map(tool => tool.name).sort(), ['getRollDetails', 'resolveCheck', 'rollDice'])
-const diceCalls = turn.events.filter(event => event.type === 'tool/call' && event.data.name === 'rollDice').slice(-2)
-assert.equal(diceCalls.length, 2, 'Exercise both default compact and explicit full responses')
+const tools = (modelInput.tools ?? []).map(tool => tool.name)
+assert.ok(tools.every(name => ['getRollDetails', 'resolveCheck', 'rollDice'].includes(name)), 'Only selected game tools reach the model')
+const hasDice = tools.includes('rollDice'), hasRules = tools.includes('resolveCheck'), hasHistory = tools.includes('getRollDetails')
+const startSeq = turn.events.findLast(event => event.type === 'turn/start').seq
+const recent = turn.events.filter(event => event.seq >= startSeq)
+const diceCalls = recent.filter(event => event.type === 'tool/call' && event.data.name === 'rollDice')
+assert.equal(diceCalls.length, hasDice ? 2 : 0, 'Only an enabled Dice tool exercises compact and full responses')
 for (const [index, diceCall] of diceCalls.entries()) {
   const diceEvent = turn.events.findLast(event => event.type === 'tool/result' && event.data.message.toolCallId === diceCall.data.callId)
   assert.ok(diceEvent, 'A real native dice invocation must be recorded by the loop')
@@ -145,41 +150,51 @@ for (const [index, diceCall] of diceCalls.entries()) {
   }
 }
 const completed = turn.events.findLast(event => event.type === 'assistant/message')
-const checkCall = turn.events.findLast(event => event.type === 'tool/call' && event.data.name === 'resolveCheck')
+const checkCall = recent.findLast(event => event.type === 'tool/call' && event.data.name === 'resolveCheck')
 const checkEvent = turn.events.findLast(event => event.type === 'tool/result' && event.data.message.toolCallId === checkCall?.data.callId)
-assert.ok(checkEvent && !checkEvent.data.message.isError, 'A native check is recorded')
-const checked = readCheckResult(checkEvent.data.message.content, checkEvent.data.meta)
-assert.ok(checked)
-assert.equal(checked.check.total, checked.check.natural + 6)
-assert.equal(checked.check.outcome, checked.check.natural === 20 ? 'critical_success' : checked.check.natural === 1 ? 'critical_failure' : checked.check.total >= 12 ? 'success' : 'failure')
-assert.equal(Object.hasOwn(JSON.parse(checkEvent.data.message.content[0].text), 'dice'), false)
-assert.ok(modelInput.messages.some(message => message.role === 'tool' && message.content[0]?.text === checkEvent.data.message.content[0].text))
+assert.equal(!!checkCall, hasRules)
+if (hasRules) {
+  assert.ok(checkEvent && !checkEvent.data.message.isError, 'A native check is recorded')
+  const checked = readCheckResult(checkEvent.data.message.content, checkEvent.data.meta)
+  assert.ok(checked)
+  assert.equal(checked.check.total, checked.check.natural + 6)
+  assert.equal(checked.check.outcome, checked.check.natural === 20 ? 'critical_success' : checked.check.natural === 1 ? 'critical_failure' : checked.check.total >= 12 ? 'success' : 'failure')
+  assert.equal(Object.hasOwn(JSON.parse(checkEvent.data.message.content[0].text), 'dice'), false)
+  assert.ok(modelInput.messages.some(message => message.role === 'tool' && message.content[0]?.text === checkEvent.data.message.content[0].text))
+}
 assert.equal(turn.hostHasRulesTool, false, 'Rules remain isolated to the RPG preset')
 assert.equal(turn.hostHasRollHistoryTool, false, 'Roll history remains isolated to the RPG preset')
-if (resuming) {
+if (resuming && hasHistory) {
   const previous = turn.events.find(event => event.type === 'tool/result' && ['mayori-dice', 'mayori-check'].includes(event.data.meta?.kind))
-  const restoredDetails = await call('/_mayori-smoke', { action: 'details', sessionId, rollIds: [previous.data.message.toolCallId] })
-  assert.deepEqual(restoredDetails.rolls[0].result, previous.data.meta.result, 'The original trace is readable after Host restart')
+  if (previous) {
+    const restoredDetails = await call('/_mayori-smoke', { action: 'details', sessionId, rollIds: [previous.data.message.toolCallId] })
+    assert.deepEqual(restoredDetails.rolls[0].result, previous.data.meta.result, 'The original trace is readable after Host restart')
+  }
 }
-const detailCall = turn.events.findLast(event => event.type === 'tool/call' && event.data.name === 'getRollDetails')
+let expanded
+const detailCall = recent.findLast(event => event.type === 'tool/call' && event.data.name === 'getRollDetails')
 const detailEvent = turn.events.findLast(event => event.type === 'tool/result' && event.data.message.toolCallId === detailCall?.data.callId)
-assert.ok(detailEvent && !detailEvent.data.message.isError, 'The model reads saved details in a separate native step')
-const expanded = JSON.parse(detailEvent.data.message.content[0].text)
-assert.equal(expanded.rolls.length, 4)
-assert.equal(expanded.rolls[3].error.code, 'not_found')
-assert.deepEqual(expanded.rolls[2].result, checked)
-for (const record of expanded.rolls.slice(0, 2)) {
-  const original = turn.events.find(event => event.type === 'tool/result' && event.data.message.toolCallId === record.rollId)
-  assert.deepEqual(record.result, original.data.meta.result)
-}
-assert.ok(modelInput.messages.some(message => message.role === 'tool' && message.content[0]?.text === detailEvent.data.message.content[0].text))
+if (hasHistory && (hasDice || hasRules)) {
+  assert.ok(detailEvent && !detailEvent.data.message.isError, 'The model reads saved details in a separate native step')
+  expanded = JSON.parse(detailEvent.data.message.content[0].text)
+  assert.equal(expanded.rolls.length, diceCalls.length + Number(hasRules) + 1)
+  assert.equal(expanded.rolls.at(-1).error.code, 'not_found')
+  for (const record of expanded.rolls.slice(0, -1)) {
+    const original = turn.events.find(event => event.type === 'tool/result' && event.data.message.toolCallId === record.rollId)
+    assert.deepEqual(record.result, original.data.meta.result)
+  }
+  assert.ok(modelInput.messages.some(message => message.role === 'tool' && message.content[0]?.text === detailEvent.data.message.content[0].text))
+} else assert.equal(detailCall, undefined)
 const diceFork = await call('/_mayori-smoke', { action: 'fork', sessionId, atSeq: completed.seq })
 const forkedDice = await call('/_mayori-smoke', { action: 'inspect', sessionId: diceFork.sessionId })
 assert.deepEqual(forkedDice.messages.filter(message => message.role === 'tool'), turn.messages.filter(message => message.role === 'tool'),
   'A fork retains the original dice results without rerolling')
 assert.deepEqual(forkedDice.events.filter(event => event.type === 'tool/result').map(event => event.data.meta),
   turn.events.filter(event => event.type === 'tool/result').map(event => event.data.meta), 'A fork retains complete dice presentation metadata')
-const forkDetails = await call('/_mayori-smoke', { action: 'details', sessionId: diceFork.sessionId,
-  rollIds: [checked.rollId, expanded.rolls[0].rollId] })
-assert.deepEqual(forkDetails.rolls.map(record => record.result), [checked, expanded.rolls[0].result], 'Inherited ids retrieve the original traces')
-console.log(JSON.stringify({ ok: true, sessionId, loggedMessages: turn.messages.length, codingTools: 0, diceExpressions: 16, diceResponseModes: 2 }))
+if (expanded) {
+  const saved = expanded.rolls.filter(record => !record.error)
+  const forkDetails = await call('/_mayori-smoke', { action: 'details', sessionId: diceFork.sessionId, rollIds: saved.map(record => record.rollId) })
+  assert.deepEqual(forkDetails.rolls.map(record => record.result), saved.map(record => record.result), 'Inherited ids retrieve the original traces')
+}
+console.log(JSON.stringify({ ok: true, sessionId, loggedMessages: turn.messages.length, codingTools: 0,
+  tools, diceExpressions: hasDice ? 16 : 0, diceResponseModes: hasDice ? 2 : 0 }))

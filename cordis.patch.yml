@@ -34,30 +34,25 @@
   disabled: true
 
 - insert:
+    - id: mayori-plugin-settings
+      name: dsh-mayori/plugin-settings
     - id: preset-mayori
       name: '@deepseek-ai/dsh-agent-preset'
       config:
         id: mayori
         name: Mayori
-        description: Character-driven role-playing without coding tools.
+        description: Collaborative, character-driven role-playing.
         plugins:
-          - id: mayori-mechanics
-            name: dsh-mayori/mechanics
+          - id: mayori-plugins
+            name: '@deepseek-ai/cordis-plugin-group'
+            group: true
             isolate:
               mayoriDice: true
               mayoriRules: true
               mayoriRollHistory: true
             config:
-              maxSides: 1000000
-              maxDice: 1000
-              maxExpressions: 100
-              maxDepth: 16
-              maxNodes: 1000
-              maxExpressionLength: 1024
-              maxExpressionDepth: 64
-              maxPurposeLength: 300
-              maxExtraRollsPerDie: 100
-              maxDependencyDepth: 64
+              - id: mayori-optional-plugins
+                name: dsh-mayori/optional-plugins
     - id: mayori-director
       name: dsh-mayori
       config:

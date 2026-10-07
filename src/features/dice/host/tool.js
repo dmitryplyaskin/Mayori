@@ -1,16 +1,6 @@
 /** Preset-scoped native dice tool; content and presentation metadata are durable. */
-import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { CryptoDiceProvider } from './provider.js'
-import { DEFAULT_DICE_CONFIG, resolveDiceConfig } from './config.js'
 import { DICE_RESULT_VERSION, compactDiceResult } from '../shared/result.js'
-import { SessionRollHistoryProvider } from '../../roll-history/host/provider.js'
-import { registerRollHistoryTool } from '../../roll-history/host/tool.js'
-export { DiceService } from './service.js'
-export { CryptoDiceProvider } from './provider.js'
-export const name = 'mayori-dice'
-export const inject = ['tools']
-export const Config = z.object(Object.fromEntries(Object.entries(DEFAULT_DICE_CONFIG).map(([key, value]) => [key, z.number().default(value)])))
 const path = { type: 'array', items: { oneOf: [{ type: 'string' }, { type: 'integer' }] } }
 const scalar = { oneOf: [{ type: 'number' }, { type: 'boolean' }, { type: 'null' }] }
 const numbers = { type: 'array', items: { type: 'integer' } }
@@ -29,7 +19,7 @@ export function registerDiceTool(ctx) {
       + 'Every explicit dice occurrence rolls independently; dice inside an unselected branch are not drawn. All requested leaves are evaluated, so put conditional dice inside if. '
       + 'Division may be fractional; round explicitly according to the rules. Optionally state purpose before rolling. '
       + 'Returns rollId and values; errors appear only when present. Failed leaves are null; independent leaves still resolve. '
-      + 'Use resolveCheck for explicit game outcomes or compute required natural faces/success counts in rolls. Read full saved traces with getRollDetails({rollIds:[rollId]}) only when needed. '
+      + 'Compute required natural faces/success counts in rolls, or use resolveCheck when available for explicit game outcomes. If getRollDetails is enabled, read saved traces with getRollDetails({rollIds:[rollId]}) only when needed. '
       + 'Explosion/reroll limits return an error, never a silently truncated total. Do not automatically reroll errors or seek a preferred outcome. '
       + 'Do not choose voluntary actions for the player. These are numeric mechanics; game rules determine success and consequences.',
     parameters: {
@@ -70,10 +60,4 @@ export function registerDiceTool(ctx) {
     },
     async execute(args, exec) { return { ...await ctx.mayoriDice.roll(args.rolls, { signal: exec.signal, purpose: args.purpose }), rollId: exec.callId } },
   }))
-}
-export function apply(ctx, config = {}) {
-  new CryptoDiceProvider(ctx, resolveDiceConfig(config))
-  new SessionRollHistoryProvider(ctx)
-  registerRollHistoryTool(ctx)
-  ctx.inject(['mayoriDice'], registerDiceTool)
 }

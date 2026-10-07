@@ -6,8 +6,12 @@
   "main": "index.js",
   "exports": {
     ".": "./index.js",
-    "./dice": "./src/features/dice/host/plugin.js",
+    "./dice": "./src/host/dice-plugin.js",
+    "./rules": "./src/host/rules-plugin.js",
+    "./roll-history": "./src/host/roll-history-plugin.js",
     "./mechanics": "./src/host/mechanics-plugin.js",
+    "./plugin-settings": "./src/host/plugin-settings.js",
+    "./optional-plugins": "./src/host/optional-plugins.js",
     "./client": "./lib/client.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
@@ -26,6 +30,8 @@
     "src/features/rules/domain",
     "src/features/rules/shared",
     "src/features/roll-history/host",
+    "src/features/plugins/host",
+    "src/features/plugins/shared",
     "src/features/character-session/domain",
     "src/features/characters/shared",
     "src/features/dice/shared",

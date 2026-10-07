@@ -14,7 +14,7 @@ test('mechanics compose reversible Dice and Rules services and both native tools
   const ctx = new Context(); t.after(() => ctx.fiber.dispose())
   await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime)
   const fiber = ctx.plugin(Mechanics); await fiber
-  assert.deepEqual(ctx.tools.schemas().map(tool => tool.name), ['getRollDetails', 'rollDice', 'resolveCheck'])
+  assert.deepEqual(ctx.tools.schemas().map(tool => tool.name).sort(), ['getRollDetails', 'resolveCheck', 'rollDice'])
   assert.match(ctx.tools.get('resolveCheck').description, /d20-attack/)
   await fiber.dispose()
   for (const key of ['mayoriDice', 'mayoriRules', 'mayoriRollHistory']) assert.equal(ctx[key], undefined)

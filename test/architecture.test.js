@@ -98,5 +98,7 @@ test('package manifest ships the complete Host import graph while browser source
   }
   assert.equal(manifest.exports['.'], './index.js')
   assert.equal(manifest.exports['./client'], './lib/client.js')
-  assert.equal(manifest.exports['./dice'], './src/features/dice/host/plugin.js')
+  assert.equal(manifest.exports['./dice'], './src/host/dice-plugin.js')
+  assert.equal(manifest.exports['./rules'], './src/host/rules-plugin.js')
+  assert.equal(manifest.exports['./roll-history'], './src/host/roll-history-plugin.js')
 })

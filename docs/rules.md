@@ -27,7 +27,7 @@
 
 ## Config и последствия
 
-Профили находятся в валидируемом `Config.profiles` плагина `mayori-mechanics` (`dsh-mayori/mechanics`) в `config.plugins` пресета `mayori`. При переопределении списка плагинов сохраняйте весь список и изоляцию `mayoriDice`, `mayoriRules` и `mayoriRollHistory`. `dsh-mayori/dice` остаётся отдельным публичным плагином с `rollDice` и чтением сохранённых подробностей.
+Профили находятся в валидируемом `Config.rules.profiles` entry `dsh-mayori/optional-plugins` или `Config.profiles` самостоятельного `dsh-mayori/rules`. В **Настройки → Mayori → Плагины** переключатель «Проверки» включает `resolveCheck` и его Dice provider автоматически. Свободные броски и чтение подробностей управляются отдельно. [Руководство по плагинам](plugins.md).
 
 Каждый профиль содержит:
 

@@ -16,4 +16,4 @@
 
 Подробный ответ входит в журнал обычного tool result и контекст последующего шага модели. Поэтому модель запрашивает его только при необходимости. Полная запись и краткий результат проходят проверку согласованности; изменённые текущие профили не переинтерпретируют историю.
 
-Capability состоит из `RollHistoryService.read(session, rollIds)`, `SessionRollHistoryProvider` и native Consumer `getRollDetails`. Сервис `mayoriRollHistory` регистрируется через Cordis и изолируется в пресете вместе с Dice/Rules. Его также включает публичный standalone `dsh-mayori/dice`. Выгрузка плагина удаляет сервис и инструмент.
+Capability состоит из `RollHistoryService.read(session, rollIds)`, `SessionRollHistoryProvider` и native Consumer `getRollDetails`. Переключатель «Подробности бросков» в штатных настройках Mayori управляет этой возможностью независимо от Dice и Rules. Сервис изолирован в общем group Mayori; выгрузка удаляет сервис и инструмент, сохраняя записанные результаты. Для собственного wiring доступен `dsh-mayori/roll-history`. [Руководство по плагинам](plugins.md).

@@ -5,7 +5,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { Session } from '@deepseek-ai/dsh-session'
 import { CryptoDiceProvider } from '../../../src/features/dice/host/provider.js'
-import * as DicePlugin from '../../../src/features/dice/host/plugin.js'
+import * as DicePlugin from '../../../src/host/dice-plugin.js'
 import { readDiceResult } from '../../../src/features/dice/shared/result.js'
 
 async function runtime(t) {

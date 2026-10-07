@@ -1,7 +1,7 @@
 /** Test-only probe: mount solely in an isolated DSH home, never in a player profile. */
 import { randomUUID } from 'node:crypto'
 
-export const inject = ['webServer', 'llm', 'tools', 'sessionController', 'agents', 'sessions', 'mayoriCharacters', 'mayoriCharacterSessions', 'workspaceRegistry']
+export const inject = ['webServer', 'llm', 'tools', 'settings', 'agentPresets', 'sessionController', 'agents', 'sessions', 'mayoriCharacters', 'mayoriCharacterSessions', 'workspaceRegistry']
 
 export function apply(ctx) {
   const requests = []
@@ -22,8 +22,10 @@ export function apply(ctx) {
       yield { type: 'block-start', index: 0, blockType: 'reasoning' }
       yield { type: 'reasoning-delta', index: 0, text: thought }
       yield { type: 'block-end', index: 0, block: { type: 'reasoning', text: thought } }
-      if (last?.role !== 'tool') {
-        for (const [index, details] of [undefined, true].entries()) {
+      const names = (options.tools ?? []).map(tool => tool.name)
+      const hasDice = names.includes('rollDice'), hasRules = names.includes('resolveCheck')
+      if (last?.role !== 'tool' && (hasDice || hasRules)) {
+        if (hasDice) for (const [index, details] of [undefined, true].entries()) {
           const id = randomUUID()
           const args = JSON.stringify({ ...(details === undefined ? {} : { details }), purpose: 'Проверка механики бросков', rolls: {
             attack: '2d20kh1 + 4', hit: '$attack >= 15', damage: { weapon: 'if($hit, 4d6!ro<3kh3 + 4, 0)' },
@@ -35,18 +37,21 @@ export function apply(ctx) {
           yield { type: 'tool-call-delta', index: index + 1, id, name: 'rollDice', argumentsDelta: args }
           yield { type: 'block-end', index: index + 1, block: { type: 'tool-call', id, name: 'rollDice', arguments: args } }
         }
-        const checkId = randomUUID()
-        const checkArgs = JSON.stringify({ profile: 'd20-critical', purpose: 'Проверка критов', modifier: 6, target: 12,
-          damage: { normal: 'd6 + 3', critical: '2d6 + 3' } })
-        yield { type: 'block-start', index: 3, blockType: 'tool-call' }
-        yield { type: 'tool-call-delta', index: 3, id: checkId, name: 'resolveCheck', argumentsDelta: checkArgs }
-        yield { type: 'block-end', index: 3, block: { type: 'tool-call', id: checkId, name: 'resolveCheck', arguments: checkArgs } }
+        if (hasRules) {
+          const checkId = randomUUID(), index = hasDice ? 3 : 1
+          const checkArgs = JSON.stringify({ profile: 'd20-critical', purpose: 'Проверка критов', modifier: 6, target: 12,
+            damage: { normal: 'd6 + 3', critical: '2d6 + 3' } })
+          yield { type: 'block-start', index, blockType: 'tool-call' }
+          yield { type: 'tool-call-delta', index, id: checkId, name: 'resolveCheck', argumentsDelta: checkArgs }
+          yield { type: 'block-end', index, block: { type: 'tool-call', id: checkId, name: 'resolveCheck', arguments: checkArgs } }
+        }
         yield { type: 'finish', reason: { kind: 'tool-calls' } }
         return
       }
-      const saved = JSON.parse(last.content[0].text)
-      if (saved.rollId) {
-        const rollIds = options.messages.filter(message => message.role === 'tool').flatMap(message => {
+      const saved = last?.role === 'tool' ? JSON.parse(last.content[0].text) : null
+      if (saved?.rollId && names.includes('getRollDetails')) {
+        const promptAt = options.messages.findLastIndex(message => message.source?.kind === 'user')
+        const rollIds = options.messages.slice(promptAt + 1).filter(message => message.role === 'tool').flatMap(message => {
           try { const value = JSON.parse(message.content[0].text); return value.rollId ? [value.rollId] : [] } catch { return [] }
         }).slice(-3)
         const id = randomUUID(), args = JSON.stringify({ rollIds: [...rollIds, 'smoke-missing-roll'] })
@@ -89,14 +94,28 @@ export function apply(ctx) {
           value = JSON.parse(result.content[0].text)
         } else if (input.action === 'fork') {
           value = await ctx.sessionController.fork({ sessionId: input.sessionId, atSeq: input.atSeq })
-        } else if (input.action === 'turn') {
+        } else if (input.action === 'presets') {
+          value = { defaultId: ctx.agentPresets.defaultId, presets: await ctx.agentPresets.list(), inventory: await ctx.agentPresets.compositionInventory() }
+        } else if (input.action === 'default-preset') {
+          const preset = await ctx.agentPresets.resolve(input.preset)
+          if (preset.broken) throw new Error(preset.broken)
+          await ctx.settings.update('agent-preset-registry', { selectedDefault: preset.id })
+          value = { defaultId: ctx.agentPresets.defaultId }
+        } else if (input.action === 'turn' || input.action === 'preset-turn') {
+          const startRequest = requests.length
+          if (input.action === 'preset-turn') {
+            const created = await ctx.sessionController.create({ workspaceId: input.workspaceId,
+              ...(input.preset ? { agentPreset: input.preset } : {}) })
+            input.sessionId = created.sessionId
+          }
           await ctx.sessionController.selectModel({ sessionId: input.sessionId, provider: 'mayori-smoke', model: 'smoke' })
           await ctx.sessionController.prompt({ sessionId: input.sessionId, requestId: randomUUID(), mode: 'queue',
             content: [{ type: 'text', text: 'Hello, Aster.' }] }, new AbortController().signal)
           const agent = ctx.agents.get(input.sessionId)
           await agent.whenIdle()
           await ctx.sessions.flush(agent.session)
-          value = { messages: agent.session.deriveMessages(), requests, events: agent.session.snapshotEvents(),
+          value = { sessionId: input.sessionId, messages: agent.session.deriveMessages(),
+            requests: requests.slice(startRequest), events: agent.session.snapshotEvents(),
             hostHasDiceTool: ctx.tools.get('rollDice') !== undefined,
             hostHasRulesTool: ctx.tools.get('resolveCheck') !== undefined,
             hostHasRollHistoryTool: ctx.tools.get('getRollDetails') !== undefined,

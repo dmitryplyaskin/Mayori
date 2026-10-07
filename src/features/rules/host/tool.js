@@ -6,7 +6,7 @@ export function registerRulesTool(ctx) {
     name: 'resolveCheck',
     description: 'Resolve an established numeric game check with a configured, versioned rules profile. '
       + 'Returns rollId, natural selected face, modifier, total, target, explicit outcome and reason, plus damage, configured consequence or errors when present. '
-      + 'Read full saved traces and rules with getRollDetails({rollIds:[rollId]}) only when needed. '
+      + 'If getRollDetails is enabled, read full saved traces and rules with getRollDetails({rollIds:[rollId]}) only when needed. '
       + 'Advantage/disadvantage selects one of two dice; discarded faces never cause criticals. Criticals depend on the profile, never on the modified total. '
       + 'Declare normal and critical damage formulas before rolling when damage applies; only the applicable branch rolls. '
       + 'Consequences come from the configured profile; random critical-failure tables use real dice. This records resolution without changing HP or campaign state. '

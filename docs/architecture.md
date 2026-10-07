@@ -42,7 +42,7 @@ Mayori/
 
 Внутри feature используются только необходимые ей каталоги:
 
-- `host/` — Cordis Service Definition, Provider, durable store и Host adapters. В библиотеке, персонах и игровых сессиях контракт (`service.js`), хранилище (`store.js`) и координация (`provider.js`) имеют отдельных владельцев. Dice дополнительно содержит конфигурацию и preset plugin.
+- `host/` — Cordis Service Definition, Provider, durable store и Host adapters. В библиотеке, персонах и игровых сессиях контракт (`service.js`), хранилище (`store.js`) и координация (`provider.js`) имеют отдельных владельцев. Dice дополнительно содержит конфигурацию и tool consumer; публичные plugin entries остаются в `src/host`.
 - `client/` — observable consumers, browser providers и React-компоненты этой возможности.
 - `domain/` — платформонезависимые правила и преобразования: parser выражений Dice, валидация и модельная проекция выбранной карточки.
 - `shared/` — форматы и codecs, которые нужны обеим сторонам: Character Card и записанный Dice result.
@@ -55,7 +55,7 @@ Host и browser могут потреблять свои feature-модули и
 
 Общее поведение переносится в `shared` или browser infrastructure только при реальном использовании несколькими возможностями. Новая игровая возможность получает собственный каталог в `features`, полный Service Definition / Provider / Consumer seam и регистрацию через composition roots и `ctx`. Для маленького seam сервис и provider могут оставаться в одном файле; пустые слои и универсальный `utils` не нужны.
 
-`test/architecture.test.js` проверяет направление импортов, отсутствие циклов, существование локальных зависимостей и полноту Host import graph в `package.json.files`. Публичные entry points остаются `dsh-mayori`, `dsh-mayori/dice` и `dsh-mayori/client`; добавлен `dsh-mayori/mechanics`; внутренние пути не являются API. Host source поставляется как ESM, browser source собирается в `lib/client.js`. Перенос каталогов не изменяет HTTP endpoints, Cordis service names, расположение пользовательских данных или формат session log.
+`test/architecture.test.js` проверяет направление импортов, отсутствие циклов, существование локальных зависимостей и полноту Host import graph в `package.json.files`. Публичные entry points: `dsh-mayori`, `dsh-mayori/dice`, `dsh-mayori/rules`, `dsh-mayori/roll-history`, `dsh-mayori/client` и совместимый legacy `dsh-mayori/mechanics`; внутренние пути не являются API. Host source поставляется как ESM, browser source собирается в `lib/client.js`. Перенос каталогов не изменяет HTTP endpoints, Cordis service names, расположение пользовательских данных или формат session log.
 
 ## Текущий вертикальный срез
 
@@ -64,9 +64,9 @@ dsh-mayori bundle
 ├── cordis.patch.yml
 │   ├── заменяет deployment:persona через строку system-prompt
 │   ├── монтирует mayori-director
-│   └── объявляет preset mayori с изолированным dsh-mayori/mechanics
-├── src/host/mechanics-plugin.js
-│   └── через application.js собирает Dice/Rules/RollHistory и три игровых инструмента
+│   └── объявляет единый mayori и persisted plugin preferences
+├── src/host/{dice,rules,roll-history}-plugin.js
+│   └── через application.js собирают независимые игровые возможности
 ├── index.js
 │   └── src/host/plugin.js
 │       ├── регистрирует mayori:director через ctx.systemPrompt.section()
@@ -86,7 +86,7 @@ Bundle является слоем композиции, а не отдельн�
 
 Поддерживаемая версия DSH — `0.2.1-alpha.1`; пакет объявляет её peer dependency. Browser half объявлен через `dsh.client` и `exports["./client"]`. `MayoriSidebar` регистрируется в публичном root-scoped слоте `sidebar.workspaces` с приоритетом `-100`, поэтому штатный `WorkspaceBrowser` остаётся fallback. Брендинг занимает штатные `sidebar.brand.mark`, `sidebar.brand.name` и `conversation.hero.brand.mark`. `MayoriNavigationSidebar` занимает публичный `sidebar`, использует native store, locale, hooks и callbacks и зеркалит child slots с отдельным владельцем. Его renderer исключает кнопку New Session; бренд направляется в `ctx.layout.selectPanel('mayori-home')` без создания пустой сессии. Panel navigation, toggle, Settings и footer actions продолжают использовать публичные контракты DSH. В `shell.leading` для полностью скрытой desktop-панели остаётся только кнопка раскрытия. Обе регистрации ожидают stock entry и снимаются вместе с подписками при unload. DOM-подмен и скрытия stock chrome по CSS-селекторам нет. Стили и слоты удаляются вместе с Cordis fiber.
 
-Bundle объявляет preset `mayori` с дочерним плагином `dsh-mayori/mechanics` и выбирает его по умолчанию, поэтому новые RPG-сессии получают `rollDice`, `resolveCheck` и `getRollDetails` без инструментов стандартного coding-пресета. Глобальные personaPrefix и director guidance задают роль ведущего. Дальнейшие игровые инструменты добавляются в preset явно.
+Bundle использует единый preset `mayori`. Страница **Настройки → Mayori → Плагины** в публичном `settings.section` управляет независимыми Dice, Rules и RollHistory. Service Definition — `PluginSettingsService`, Provider — `PersistentPluginSettingsProvider` с валидируемыми volatile Config полями и штатным Settings persistence, Consumers — browser panel и scope mount в `application.js`. Изолированный Cordis group сохраняет границу инструментов Mayori. Общие инструкции не зависят от переключателей. Изменения применяются к существующим чатам после завершения текущих ответов; фактические схемы запросов и исходные броски сохраняются журналом DSH. [Руководство](plugins.md).
 
 Модельная композиция отключает `system-prompt.includeHarnessIdentity` и `includeRuntimeContext`, а также `web-runtime.surfaceContext`. Поэтому в запросах нет идентичности DSH, пути к его исходникам, Web URL и порта, указаний по HMR, сборке и запуску серверов или технических runtime snapshots. Web runtime сохраняет штатные параметры запуска и продолжает обслуживать интерфейс. Отключённый `ui-deliverables` исключает file-reference guidance, инструкции `present` и карточки результатов coding-задач. `tools.mode: native` исключает инструкции JS-исполнителя даже при заданном `DSH_TOOLS_MODE`. Системная инструкция содержит роль Mayori, правила ведущего и активную карточку с персоной игрока; правила последовательности опираются на установленные события без указаний читать или изменять campaign files. При добавлении игровых dynamic contexts их включение необходимо явно задать в композиции.
 
@@ -180,7 +180,7 @@ Canonical result версии 3 содержит values с числовыми/bo
 - **Provider** — `SessionRollHistoryProvider`, читающий исходные `tool/result` текущего журнала, включая унаследованные записи и результаты вне модельного surface;
 - **Consumer** — native `getRollDetails`, принимающий 1–20 разных rollId и возвращающий полные результаты либо отдельные ошибки по каждому ID.
 
-Provider не создаёт отдельного хранилища, не вызывает Dice/Rules и не использует текущий Config. Доступ ограничен `exec.agent.session`, без произвольного sessionId. Перезапуск и форк сохраняют идентификаторы; content rewrites не считаются новыми бросками. Общие readers проверяют compact/full contract и metadata. Стандартный standalone dice plugin также включает этот seam. Подробности описаны в [руководстве](roll-history.md).
+Provider не создаёт отдельного хранилища, не вызывает Dice/Rules и не использует текущий Config. Доступ ограничен `exec.agent.session`, без произвольного sessionId. Перезапуск и форк сохраняют идентификаторы; content rewrites не считаются новыми бросками. Общие readers проверяют compact/full contract и metadata. Seam подключается отдельным необязательным `dsh-mayori/roll-history`, а не автоматически через Dice. Подробности описаны в [руководстве](roll-history.md).
 
 Browser consumer DiceToolCard зарегистрирован в публичном keyed tool.call.toolview по имени rollDice. DSH владеет Conversation Node, pairing, фазами и Inspect. Pure browser-safe readDiceResult читает версии 3, 2, 1 и unversioned записи, проверяет trace и совпадение компактного content с block.meta без вычисления формул. Карточка отображает успешные boolean и числа рядом с ошибочными полями и выбранные грани без раскрытия; подробности содержат цепочки и выбор ветки. Неизвестные версии/повреждённые записи доступны исходным текстом. Native buttons/details, штатный useDisclosure и theme tokens сохраняют существующий UI контракт; все registrations исчезают с Cordis fiber.
 
@@ -190,7 +190,7 @@ Browser consumer DiceToolCard зарегистрирован в публично
 - **Provider** — `NumericRulesProvider`: валидируемые versioned Config profiles, сравнение с target, natural criticals и configured failure effects. Случайность принадлежит потребляемому `DiceService`; все проверки, условный урон и таблица последствий выполняются одним batch.
 - **Consumers** — native `resolveCheck` и browser `CheckToolCard` в keyed `tool.call.toolview`.
 
-`src/host/mechanics-plugin.js` вызывает composition в `src/host/application.js`; preset изолирует оба сервиса. Старый `dsh-mayori/dice` остаётся отдельным Dice entry. Формулы урона задаются до броска; fixed effects и random tables находятся в Config profiles. Полный snapshot профиля, вход и результат версии 1 записываются в tool/result metadata; natural face, modifier, total, target, outcome, damage и consequence входят и в compact content. Reader восстанавливает карточку из записи, проверяя согласованность snapshot и recorded dice, без текущего provider/Config. Изменение правил не меняет исторический исход. Неполный урон или таблица сохраняет успешную проверку и error trace; повторного броска нет. Provider не изменяет HP или campaign state. Детали — [rules guide](rules.md).
+`src/host/rules-plugin.js` вызывает отдельную Rules composition в `src/host/application.js` и требует `mayoriDice`; отсутствие зависимости блокирует подключение, а её выгрузка снимает Rules consumer. Dice provider может работать с `exposeTool: false`. Формулы урона задаются до броска; fixed effects и random tables находятся в Config profiles. Полный snapshot профиля, вход и результат версии 1 записываются в tool/result metadata; natural face, modifier, total, target, outcome, damage и consequence входят и в compact content. Reader восстанавливает карточку из записи, проверяя согласованность snapshot и recorded dice, без текущего provider/Config. Изменение правил не меняет исторический исход. Неполный урон или таблица сохраняет успешную проверку и error trace; повторного броска нет. Provider не изменяет HP или campaign state. Детали — [rules guide](rules.md).
 
 ## Инварианты
 

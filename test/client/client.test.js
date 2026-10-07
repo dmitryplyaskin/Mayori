@@ -100,6 +100,7 @@ test('registers reversible Mayori client contributions', async () => {
 
     assert.equal(typeof provided.mayoriCharacters.importFiles, 'function')
     assert.deepEqual(slotInjections.map(item => item.name), [
+      'settings.section',
       'tool.call.toolview', 'tool.call.toolview',
       'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark', 'sidebar.workspaces', 'sidebar', 'shell.leading',
       'main', 'sidebar.panellist', 'main.conversation', 'main', 'main', 'main', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'conversation.chat.node', 'conversation.view', 'conversation.session.header',
@@ -135,7 +136,8 @@ test('registers reversible Mayori client contributions', async () => {
     assert.deepEqual(opened, ['character-session'])
     assert.equal(appended.dataset.plugin, 'dsh-mayori')
     assert.equal(appended.dataset.mayori, 'client')
-    assert.equal(appended.textContent, client.BRAND_STYLE)
+    assert.ok(appended.textContent.startsWith(client.BRAND_STYLE))
+    assert.ok(appended.textContent.includes('.mayori-plugin-row'))
     assert.match(appended.textContent, /\.mayori-history-panel/)
     assert.doesNotMatch(appended.textContent, /\.mayori-brand-engine/)
     assert.match(appended.textContent, /block-size: 42px/)
