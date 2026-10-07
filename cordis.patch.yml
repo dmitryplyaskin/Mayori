@@ -53,6 +53,7 @@
               maxNodes: 1000
               maxExpressionLength: 1024
               maxExpressionDepth: 64
+              maxPurposeLength: 300
     - id: mayori-director
       name: dsh-mayori
       config:

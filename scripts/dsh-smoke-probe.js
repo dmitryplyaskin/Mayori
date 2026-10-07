@@ -19,11 +19,15 @@ export function apply(ctx) {
       requests.push({ messages: options.messages, tools: options.tools })
       const last = options.messages.findLast(message => message.role !== 'system' && message.role !== 'developer')
       if (last?.role !== 'tool') {
-        const id = randomUUID()
-        const args = JSON.stringify({ rolls: { attack: 'd20 + 4', damage: { weapon: '3d6 + 4' }, checks: ['d37', 'floor(2d8 / 2)'] } })
-        yield { type: 'block-start', index: 0, blockType: 'tool-call' }
-        yield { type: 'tool-call-delta', index: 0, id, name: 'rollDice', argumentsDelta: args }
-        yield { type: 'block-end', index: 0, block: { type: 'tool-call', id, name: 'rollDice', arguments: args } }
+        for (const [index, details] of [undefined, true].entries()) {
+          const id = randomUUID()
+          const args = JSON.stringify({ ...(details === undefined ? {} : { details }), purpose: 'Проверка механики бросков', rolls: {
+            attack: '2d20kh1 + 4', damage: { weapon: '4d6kh3 + 4' }, checks: ['2d20kl1', 'floor(2d8 / 2)', 'd37'],
+          } })
+          yield { type: 'block-start', index, blockType: 'tool-call' }
+          yield { type: 'tool-call-delta', index, id, name: 'rollDice', argumentsDelta: args }
+          yield { type: 'block-end', index, block: { type: 'tool-call', id, name: 'rollDice', arguments: args } }
+        }
         yield { type: 'finish', reason: { kind: 'tool-calls' } }
         return
       }
@@ -50,7 +54,7 @@ export function apply(ctx) {
         } else if (input.action === 'inspect') {
           const agent = ctx.agents.get(input.sessionId)
           if (!agent) throw new Error('Expected live session')
-          value = { messages: agent.session.deriveMessages(), requestCount: requests.length }
+          value = { messages: agent.session.deriveMessages(), events: agent.session.snapshotEvents(), requestCount: requests.length }
         } else if (input.action === 'fork') {
           value = await ctx.sessionController.fork({ sessionId: input.sessionId, atSeq: input.atSeq })
         } else if (input.action === 'turn') {

@@ -97,25 +97,43 @@ assert.equal(turn.messages.filter(message => message.source?.provider === 'mayor
 assert.ok(turn.messages.some(message => message.role === 'assistant' && JSON.stringify(message).includes('Welcome to the archive.')))
 assert.doesNotMatch(JSON.stringify(modelInput.messages), /smoke-private-extension/)
 assert.deepEqual((modelInput.tools ?? []).map(tool => tool.name), ['rollDice'])
-const diceCall = turn.events.findLast(event => event.type === 'tool/call' && event.data.name === 'rollDice')
-const diceEvent = turn.events.findLast(event => event.type === 'tool/result' && event.data.message.toolCallId === diceCall?.data.callId)
-assert.ok(diceEvent, 'A real native dice invocation must be recorded by the loop')
-assert.ok(!diceEvent.data.message.isError, JSON.stringify(diceEvent))
-const rolled = JSON.parse(diceEvent.data.message.content[0].text)
-assert.ok(!rolled.error, JSON.stringify(rolled))
-assert.equal(rolled.details.length, 4)
-assert.ok(modelInput.messages.some(message => message.role === 'tool' && message.content[0]?.text === diceEvent.data.message.content[0].text),
-  'The next model step receives exactly the recorded dice trace')
-for (const detail of rolled.details) {
-  for (const dice of detail.dice) assert.ok(dice.results.every(face => Number.isInteger(face) && face >= 1 && face <= dice.sides))
+const diceCalls = turn.events.filter(event => event.type === 'tool/call' && event.data.name === 'rollDice').slice(-2)
+assert.equal(diceCalls.length, 2, 'Exercise both default compact and explicit full responses')
+for (const [index, diceCall] of diceCalls.entries()) {
+  const diceEvent = turn.events.findLast(event => event.type === 'tool/result' && event.data.message.toolCallId === diceCall.data.callId)
+  assert.ok(diceEvent, 'A real native dice invocation must be recorded by the loop')
+  assert.ok(!diceEvent.data.message.isError, JSON.stringify(diceEvent))
+  const body = JSON.parse(diceEvent.data.message.content[0].text)
+  assert.equal(Object.hasOwn(body, 'details'), index === 1)
+  assert.equal(diceEvent.data.meta.kind, 'mayori-dice')
+  const rolled = diceEvent.data.meta.result
+  const { details, ...summary } = rolled
+  assert.deepEqual(body, index === 1 ? rolled : summary)
+  assert.ok(!rolled.error, JSON.stringify(rolled))
+  assert.equal(rolled.schemaVersion, 1)
+  assert.equal(rolled.purpose, 'Проверка механики бросков')
+  assert.equal(rolled.details.length, 5)
+  assert.ok(modelInput.messages.some(message => message.role === 'tool' && message.content[0]?.text === diceEvent.data.message.content[0].text),
+    'The next model step receives exactly the chosen recorded response')
+  for (const detail of rolled.details) {
+    for (const dice of detail.dice) assert.ok(dice.results.every(face => Number.isInteger(face) && face >= 1 && face <= dice.sides))
+  }
+  assert.equal(rolled.values.attack, Math.max(...rolled.details[0].dice[0].results) + 4)
+  assert.equal(rolled.values.damage.weapon, [...rolled.details[1].dice[0].results].sort((a, b) => b - a).slice(0, 3).reduce((sum, face) => sum + face, 0) + 4)
+  assert.equal(rolled.values.checks[0], Math.min(...rolled.details[2].dice[0].results))
+  assert.equal(rolled.values.checks[1], Math.floor(rolled.details[3].dice[0].results.reduce((sum, face) => sum + face, 0) / 2))
+  assert.equal(rolled.values.checks[2], rolled.details[4].dice[0].results[0])
+  for (const detail of rolled.details.slice(0, 3)) {
+    const dice = detail.dice[0]
+    assert.equal(dice.keptIndices.length, dice.keep.count)
+    assert.equal(dice.results.length, detail.path[0] === 'damage' ? 4 : 2)
+  }
 }
-assert.equal(rolled.values.attack, rolled.details[0].dice[0].results[0] + 4)
-assert.equal(rolled.values.damage.weapon, rolled.details[1].dice[0].results.reduce((sum, face) => sum + face, 0) + 4)
-assert.equal(rolled.values.checks[0], rolled.details[2].dice[0].results[0])
-assert.equal(rolled.values.checks[1], Math.floor(rolled.details[3].dice[0].results.reduce((sum, face) => sum + face, 0) / 2))
 const completed = turn.events.findLast(event => event.type === 'assistant/message')
 const diceFork = await call('/_mayori-smoke', { action: 'fork', sessionId, atSeq: completed.seq })
 const forkedDice = await call('/_mayori-smoke', { action: 'inspect', sessionId: diceFork.sessionId })
 assert.deepEqual(forkedDice.messages.filter(message => message.role === 'tool'), turn.messages.filter(message => message.role === 'tool'),
   'A fork retains the original dice results without rerolling')
-console.log(JSON.stringify({ ok: true, sessionId, loggedMessages: turn.messages.length, codingTools: 0, diceExpressions: rolled.details.length }))
+assert.deepEqual(forkedDice.events.filter(event => event.type === 'tool/result').map(event => event.data.meta),
+  turn.events.filter(event => event.type === 'tool/result').map(event => event.data.meta), 'A fork retains complete dice presentation metadata')
+console.log(JSON.stringify({ ok: true, sessionId, loggedMessages: turn.messages.length, codingTools: 0, diceExpressions: 5, diceResponseModes: 2 }))

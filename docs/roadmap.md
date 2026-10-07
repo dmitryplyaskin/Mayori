@@ -25,10 +25,10 @@ Roadmap разбит на вертикальные срезы: каждый эт
 ## 2. Rules and dice
 
 - нейтральный Rules Service Definition;
-- numeric DiceService, CryptoDiceProvider и native `rollDice` — готово: дерево выражений, арифметика, лимиты и журнал всех граней;
+- numeric DiceService, CryptoDiceProvider и native `rollDice` — готово: дерево выражений, арифметика, `kh`/`kl`, цель, версионированный результат, лимиты и журнал всех граней;
 - systemless rules provider;
 - инструменты проверки и разрешения действия;
-- отображение бросков без разбора свободного текста.
+- отображение бросков через публичный `tool.call.toolview` из структурированного записанного результата — готово.
 
 ## 3. RPG Web experience
 

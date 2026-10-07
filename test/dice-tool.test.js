@@ -6,6 +6,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { Session } from '@deepseek-ai/dsh-session'
 import { CryptoDiceProvider } from '../src/dice.js'
 import * as DicePlugin from '../src/dice-tool.js'
+import { readDiceResult } from '../src/dice-result.js'
 
 async function runtime(t) {
   const ctx = new Context()
@@ -20,7 +21,8 @@ test('registers the native tool and service through Cordis and removes both on u
   const fiber = ctx.plugin(DicePlugin)
   await fiber
   assert.equal(ctx.tools.schemas().find(tool => tool.name === 'rollDice').parameters.properties.rolls.oneOf.length, 2)
-  const result = await ctx.tools.execute({ name: 'rollDice', callId: 'dice-1', arguments: { rolls: { one: 'd1', custom: 'd37' } }, signal: new AbortController().signal })
+  assert.equal(ctx.tools.schemas().find(tool => tool.name === 'rollDice').parameters.properties.details.type, 'boolean')
+  const result = await ctx.tools.execute({ name: 'rollDice', callId: 'dice-1', arguments: { details: true, rolls: { one: 'd1', custom: 'd37' } }, signal: new AbortController().signal })
   assert.equal(result.isError, false)
   const rendered = JSON.parse(result.content[0].text)
   assert.deepEqual(rendered, result.value)
@@ -31,16 +33,21 @@ test('registers the native tool and service through Cordis and removes both on u
   assert.equal(ctx.mayoriDice, undefined)
 })
 
-test('consumer uses a replaceable provider; errors retain trace in model-visible result content', async t => {
+test('consumer uses a replaceable provider; both response modes retain error traces in the log', async t => {
   const ctx = await runtime(t)
-  const faces = [2, 1]
+  const faces = [2, 1, 2, 1]
   new CryptoDiceProvider(ctx, {}, () => faces.shift())
   DicePlugin.registerDiceTool(ctx)
-  const result = await ctx.tools.execute({ name: 'rollDice', callId: 'dice-2', arguments: { rolls: ['d6 / (d6 - 1)'] }, signal: new AbortController().signal })
-  const value = JSON.parse(result.content[0].text)
-  assert.equal(value.values, null)
-  assert.deepEqual(value.details[0].dice.map(item => item.results), [[2], [1]])
-  assert.match(value.error.message, /Division by zero/)
+  for (const details of [false, true]) {
+    const result = await ctx.tools.execute({ name: 'rollDice', callId: `dice-error-${details}`,
+      arguments: { details, rolls: ['d6 / (d6 - 1)'] }, signal: new AbortController().signal })
+    const value = JSON.parse(result.content[0].text)
+    assert.equal(value.values, null)
+    assert.equal(Object.hasOwn(value, 'details'), details)
+    assert.deepEqual(result.meta.result.details[0].dice.map(item => item.results), [[2], [1]])
+    assert.deepEqual(readDiceResult(result.content, result.meta), result.value)
+    assert.match(value.error.message, /Division by zero/)
+  }
   assert.equal(faces.length, 0)
 })
 
@@ -49,7 +56,8 @@ test('schema and expression failures become normal DSH tool errors before drawin
   let draws = 0
   new CryptoDiceProvider(ctx, {}, () => { draws++; return 1 })
   DicePlugin.registerDiceTool(ctx)
-  for (const argumentsValue of [{}, { rolls: 6 }, { rolls: ['d6', 'd0'] }]) {
+  for (const argumentsValue of [{}, { rolls: 6 }, { rolls: ['d6', 'd0'] },
+    ...['true', 1, null, {}].map(details => ({ details, rolls: ['d6'] }))]) {
     const result = await ctx.tools.execute({ name: 'rollDice', callId: 'invalid', arguments: argumentsValue, signal: new AbortController().signal })
     assert.equal(result.isError, true)
     assert.match(result.content[0].text, /Error:/)
@@ -57,21 +65,45 @@ test('schema and expression failures become normal DSH tool errors before drawin
   assert.equal(draws, 0)
 })
 
-test('logged rendered results reconstruct all values and faces without invoking the provider again', async t => {
+test('compact logged content and metadata reconstruct all values and faces without invoking the provider again', async t => {
   const ctx = await runtime(t)
   let draws = 0
   new CryptoDiceProvider(ctx, {}, () => { draws++; return 3 })
   DicePlugin.registerDiceTool(ctx)
-  const args = { rolls: { action: ['2d6 + 4'] } }
+  const args = { purpose: 'Проверка навыка', rolls: { action: ['2d6kh1 + 4'] } }
   const result = await ctx.tools.execute({ name: 'rollDice', callId: 'recorded', arguments: args, signal: new AbortController().signal })
   const session = Session.create('dice-session')
   session.append('tool/result', { turn: 1, step: 1, message: {
     id: 'dice-result', role: 'tool', toolCallId: 'recorded', source: { kind: 'tool', callId: 'recorded' }, content: result.content,
-  } }, { surfaceOp: 'append' })
+  }, meta: result.meta }, { surfaceOp: 'append' })
   const events = JSON.parse(JSON.stringify(session.snapshotEvents()))
   const restored = Session.create('restored', events)
-  const value = JSON.parse(restored.deriveMessages().at(-1).content[0].text)
-  assert.deepEqual(value.values, { action: [10] })
-  assert.deepEqual(value.details[0].dice, [{ sides: 6, results: [3, 3] }])
+  const recorded = restored.snapshotEvents().findLast(event => event.type === 'tool/result').data
+  assert.equal(Object.hasOwn(JSON.parse(recorded.message.content[0].text), 'details'), false)
+  const value = readDiceResult(recorded.message.content, recorded.meta)
+  assert.deepEqual(value.values, { action: [7] })
+  assert.equal(value.schemaVersion, 1)
+  assert.equal(value.purpose, 'Проверка навыка')
+  assert.deepEqual(value.details[0].dice, [{ sides: 6, results: [3, 3], keep: { mode: 'highest', count: 1 }, keptIndices: [0] }])
   assert.equal(draws, 2)
+})
+
+test('details is opt-in and affects only model content, with the same complete canonical result and metadata', async t => {
+  const ctx = await runtime(t)
+  let draws = 0
+  new CryptoDiceProvider(ctx, {}, () => { draws++; return 3 })
+  DicePlugin.registerDiceTool(ctx)
+  for (const options of [{}, { details: false }, { details: true }]) {
+    const result = await ctx.tools.execute({ name: 'rollDice', callId: 'projection',
+      arguments: { ...options, purpose: 'Атака', rolls: { hit: '2d6kh1 + 4' } }, signal: new AbortController().signal })
+    assert.equal(result.isError, false)
+    const body = JSON.parse(result.content[0].text)
+    assert.deepEqual(body.values, { hit: 7 })
+    assert.equal(body.purpose, 'Атака')
+    assert.equal(body.schemaVersion, 1)
+    assert.equal(Object.hasOwn(body, 'details'), options.details === true)
+    assert.deepEqual(result.meta, { kind: 'mayori-dice', result: result.value })
+    assert.deepEqual(readDiceResult(result.content, result.meta), result.value)
+  }
+  assert.equal(draws, 6)
 })

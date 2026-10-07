@@ -98,10 +98,12 @@ test('registers reversible Mayori client contributions', async () => {
 
     assert.equal(typeof provided.mayoriCharacters.importFiles, 'function')
     assert.deepEqual(slotInjections.map(item => item.name), [
+      'tool.call.toolview',
       'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark', 'sidebar.workspaces', 'sidebar', 'shell.leading',
       'main', 'sidebar.panellist', 'main.conversation', 'main', 'main', 'main', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'conversation.chat.node', 'conversation.view', 'conversation.session.header',
     ])
     for (const slot of slotInjections) slot.callback()
+    assert.equal(registrations.find(item => item.options.name === 'tool.call.toolview').options.key, 'rollDice')
     const slotRegistration = registrations.find(item => item.options.name === 'sidebar.workspaces')
     assert.equal(slotRegistration.options.name, 'sidebar.workspaces')
     assert.equal(slotRegistration.options.priority, -100)
@@ -206,6 +208,78 @@ test('built client artifact registers a lazy DSH module factory', async () => {
   assert.equal(typeof exports.apply, 'function')
   assert.deepEqual(exports.inject, ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout'])
   assert.deepEqual(required.sort(), ['react', 'react-dom', 'react/jsx-runtime'])
+})
+
+test('dice card renders recorded totals, purpose, selection and discarded faces with native controls', async () => {
+  const { exports: client } = await loadBuiltClient({ react: React, jsx: jsxRuntime })
+  const value = { schemaVersion: 1, purpose: 'Проверка скрытности', values: { stealth: 21 }, details: [{
+    path: ['stealth'], expression: '2d20kh1 + 4', value: 21,
+    dice: [{ sides: 20, results: [8, 17], keep: { mode: 'highest', count: 1 }, keptIndices: [1] }],
+  }] }
+  const block = { kind: 'tool-result', call: { argsRaw: '{}' }, content: [{ type: 'text', text: JSON.stringify(value) }], isError: false }
+  const props = { phase: 'result', block, useDisclosure: () => ({ expanded: true, toggle() {} }), inspect() {} }
+  const html = renderToStaticMarkup(React.createElement(client.DiceToolCard, props))
+  assert.match(html, /data-state="ok"/)
+  assert.match(html, /Проверка скрытности/)
+  assert.match(html, /2d20kh1 \+ 4/)
+  assert.match(html, /Итог: <\/span>21/)
+  assert.match(html, /<s class="mayori-dice-face mayori-dice-dropped">.*Отброшен:.*8<\/s>/)
+  assert.match(html, /Учтён: <\/span>17/)
+  assert.match(html, /<button[^>]+type="button"[^>]+aria-expanded="true"[^>]+aria-controls=/)
+  assert.match(html, /В журнал/)
+  assert.match(html, /<summary>Показать исходный результат<\/summary>/)
+  const compact = renderToStaticMarkup(React.createElement(client.DiceToolCard, { ...props, useDisclosure: () => ({ expanded: false, toggle() {} }) }))
+  assert.match(compact, /Итог: <\/span>21/)
+  assert.doesNotMatch(compact, /mayori-dice-face /)
+  const { details, ...summary } = value
+  const compactResult = { ...block, content: [{ type: 'text', text: JSON.stringify(summary) }], meta: { kind: 'mayori-dice', result: value } }
+  const fromMetadata = renderToStaticMarkup(React.createElement(client.DiceToolCard, { ...props, block: compactResult }))
+  assert.match(fromMetadata, /data-state="ok"/)
+  assert.match(fromMetadata, /Итог: <\/span>21/)
+  assert.match(fromMetadata, /Отброшен:.*8<\/s>/)
+  const missingMetadata = renderToStaticMarkup(React.createElement(client.DiceToolCard, { ...props, block: { ...compactResult, meta: undefined } }))
+  assert.match(missingMetadata, /Исходный результат/)
+  assert.doesNotMatch(missingMetadata, /mayori-dice-total/)
+})
+
+test('dice card supports pending, failed, interrupted, historical and future-format results without invented totals', async () => {
+  const { exports: client } = await loadBuiltClient({ react: React, jsx: jsxRuntime })
+  const render = (phase, block) => renderToStaticMarkup(React.createElement(client.DiceToolCard, {
+    phase, block, useDisclosure: () => ({ expanded: true, toggle() {} }),
+  }))
+  const preparing = render('preparing', { args: { textPrefix: () => 'Подкрасться' } })
+  assert.match(preparing, /Готовится бросок/)
+  assert.match(preparing, /Подкрасться/)
+  assert.doesNotMatch(preparing, /mayori-dice-total/)
+  assert.match(render('start', { argsRaw: '{}' }), /Бросаем кубики/)
+  const failed = render('result', { isError: true, content: [{ type: 'text', text: 'Error: invalid expression' }] })
+  assert.match(failed, /Не удалось вычислить/)
+  assert.match(failed, /Error: invalid expression/)
+  assert.doesNotMatch(failed, /mayori-dice-total/)
+  assert.match(render('result', { isError: true, error: { code: 'ABORTED' }, content: [] }), /Бросок прерван/)
+  const legacy = { values: [4], details: [{ path: [0], expression: 'd6', dice: [{ sides: 6, results: [4] }], value: 4 }] }
+  assert.match(render('result', { content: [{ type: 'text', text: JSON.stringify(legacy) }] }), /Итог: <\/span>4/)
+  legacy.schemaVersion = 2
+  const future = render('result', { content: [{ type: 'text', text: JSON.stringify(legacy) }] })
+  assert.match(future, /Исходный результат/)
+  assert.doesNotMatch(future, /mayori-dice-total/)
+})
+
+test('dice card preserves error traces, escapes authored text and folds long dice groups', async () => {
+  const { exports: client } = await loadBuiltClient({ react: React, jsx: jsxRuntime })
+  const failed = { schemaVersion: 1, purpose: '<script>bad</script>', values: null,
+    error: { path: ['damage'], message: 'Division by zero' }, details: [{ path: ['damage'],
+      expression: '30d6 / (d6 - 1)', dice: [{ sides: 6, results: Array(30).fill(3) }, { sides: 6, results: [1] }], error: 'Division by zero' }] }
+  const html = renderToStaticMarkup(React.createElement(client.DiceToolCard, { phase: 'result',
+    block: { content: [{ type: 'text', text: JSON.stringify(failed) }] }, useDisclosure: () => ({ expanded: true, toggle() {} }),
+  }))
+  assert.match(html, /data-state="error"/)
+  assert.match(html, /Деление на ноль\. Проверьте знаменатель\./)
+  assert.match(html, /Вычисление остановлено/)
+  assert.match(html, /Показать все грани \(30\)/)
+  assert.equal((html.match(/class="mayori-dice-face"/g) ?? []).length, 25)
+  assert.doesNotMatch(html, /<script>/)
+  assert.match(html, /&lt;script&gt;/)
 })
 
 test('sidebar omits New Session while preserving home, panels, toggle, settings and teardown', async () => {

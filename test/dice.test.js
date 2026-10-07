@@ -47,7 +47,8 @@ test('validates the complete request before any draw and reports the failing pat
   const { service, calls } = harness(t)
   for (const expression of ['', 'd0', 'd-1', 'd1.5', '0d6', '1.5d6', 'd1000001',
     '1001d6', 'd6 +', 'd6 / 0', 'd6 / (3 - 3)', 'd6; process.exit()',
-    'roll(8)', 'Math.random()', '2(3)', '2 ** 3', '2e3', '2d6kh1', 'floor(1, 2)',
+    'roll(8)', 'Math.random()', '2(3)', '2 ** 3', '2e3', '2d6kh0', '2d6kh3', '2d6kl1.5',
+    '2d6kh', '2d6kh1kl1', 'floor(1, 2)',
     '9007199254740992', '9007199254740991 * 2']) {
     assert.throws(() => service.roll({ good: 'd6', nested: { bad: expression } }),
       error => error instanceof TypeError && error.message.includes('["nested","bad"]'), expression)
@@ -135,4 +136,42 @@ test('production provider returns genuine faces within arbitrary numeric dice bo
   assert.equal(faces.length, 100)
   assert.ok(faces.every(value => Number.isInteger(value) && value >= 1 && value <= 37))
   assert.equal(result.values[1], faces.reduce((sum, value) => sum + value, 0))
+})
+
+test('keep-highest and keep-lowest sum selected dice while retaining every original face', t => {
+  const { service, calls } = harness(t, {}, [8, 17, 8, 17, 1, 5, 3, 6])
+  const result = service.roll(['2d20kh1 + 4', '2d20kl1', '4d6kh3'])
+  assert.deepEqual(result.values, [21, 8, 14])
+  assert.deepEqual(result.details.map(detail => detail.dice[0].keptIndices), [[1], [0], [1, 2, 3]])
+  assert.deepEqual(result.details[2].dice[0], { sides: 6, results: [1, 5, 3, 6], keep: { mode: 'highest', count: 3 }, keptIndices: [1, 2, 3] })
+  assert.deepEqual(calls, [20, 20, 20, 20, 6, 6, 6, 6])
+})
+
+test('ties keep earlier dice, modifiers support whitespace/case, and keeping all is valid', t => {
+  const { service } = harness(t, {}, [6, 6, 1, 6, 1, 1, 6, 1, 3, 4, 5])
+  const result = service.roll(['4D6 KH 2', '4d6kl2', '3d6kh3'])
+  assert.deepEqual(result.values, [12, 2, 12])
+  assert.deepEqual(result.details.map(detail => detail.dice[0].keptIndices), [[0, 1], [0, 1], [0, 1, 2]])
+})
+
+test('discarded dice still count against the full-request budget', t => {
+  const { service, calls } = harness(t, { maxDice: 3 })
+  assert.throws(() => service.roll(['4d6kh1']), /count|dice/)
+  assert.throws(() => service.roll(['2d6kh1', '2d6kl1']), /Request exceeds/)
+  assert.equal(calls.length, 0)
+})
+
+test('purpose is validated before randomness and recorded with format version, including errors', t => {
+  const { service, calls } = harness(t, { maxPurposeLength: 12 }, [5, 2, 1])
+  for (const purpose of ['', ' ', 5, null, 'x'.repeat(13)]) {
+    assert.throws(() => service.roll(['d6'], { purpose }), /purpose/)
+  }
+  assert.equal(calls.length, 0)
+  const result = service.roll(['d6'], { purpose: ' Скрытность ' })
+  assert.equal(result.purpose, 'Скрытность')
+  assert.equal(result.schemaVersion, 1)
+  const failed = service.roll(['d6 / (d6 - 1)'], { purpose: 'Проверка' })
+  assert.equal(failed.purpose, 'Проверка')
+  assert.equal(failed.schemaVersion, 1)
+  assert.equal(failed.values, null)
 })

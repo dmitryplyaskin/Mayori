@@ -1,6 +1,7 @@
 /** Numeric dice capability: bounded expression parsing and real random draws. */
 import { Service } from '@deepseek-ai/cordis'
 import { randomInt } from 'node:crypto'
+import { DICE_RESULT_VERSION } from './dice-result.js'
 
 export const DEFAULT_DICE_CONFIG = Object.freeze({
   maxSides: 1_000_000,
@@ -10,11 +11,13 @@ export const DEFAULT_DICE_CONFIG = Object.freeze({
   maxNodes: 1000,
   maxExpressionLength: 1024,
   maxExpressionDepth: 64,
+  maxPurposeLength: 300,
 })
 
 const CONFIG_CEILINGS = Object.freeze({
   maxSides: 1_000_000_000, maxDice: 100_000, maxExpressions: 1000,
   maxDepth: 64, maxNodes: 10_000, maxExpressionLength: 8192, maxExpressionDepth: 128,
+  maxPurposeLength: 2000,
 })
 
 export function resolveDiceConfig(config = {}) {
@@ -63,8 +66,10 @@ function parseExpression(source, config, budget) {
     const rest = source.slice(position)
     const number = /^(?:\d+(?:\.\d+)?|\.\d+)/.exec(rest)
     const name = /^(floor|ceil|round)\b/.exec(rest)
+    const keep = /^(kh|kl)/i.exec(rest)
     if (number) { position += number[0].length; token = { kind: 'number', raw: number[0], start }; return }
     if (name) { position += name[0].length; token = { kind: 'function', raw: name[0], start }; return }
+    if (keep) { position += keep[0].length; token = { kind: keep[0].toLowerCase(), start }; return }
     if (/^[dD+\-*/()]/.test(rest)) { position++; token = { kind: rest[0].toLowerCase(), start }; return }
     throw new TypeError(`Unexpected character at position ${start + 1}`)
   }
@@ -86,7 +91,18 @@ function parseExpression(source, config, budget) {
     }
     budget.dice += count
     if (budget.dice > config.maxDice) throw new TypeError(`Request exceeds ${config.maxDice} dice`)
-    return { kind: 'dice', count, sides }
+    let keep
+    if (token.kind === 'kh' || token.kind === 'kl') {
+      const mode = token.kind === 'kh' ? 'highest' : 'lowest'
+      next()
+      const kept = expect('number')
+      const keptCount = Number(kept.raw)
+      if (!/^\d+$/.test(kept.raw) || !Number.isSafeInteger(keptCount) || keptCount < 1 || keptCount > count) {
+        throw new TypeError(`Keep count must be an integer from 1 to ${count}`)
+      }
+      keep = { mode, count: keptCount }
+    }
+    return { kind: 'dice', count, sides, keep }
   }
   function nested(parse) {
     if (++nesting > config.maxExpressionDepth) throw new TypeError(`Expression exceeds nesting depth ${config.maxExpressionDepth}`)
@@ -190,8 +206,12 @@ export class CryptoDiceProvider extends DiceService {
   }
 
   /** Return the same tree plus a complete trace. Runtime arithmetic failure retains consumed draws. */
-  roll(rolls, { signal } = {}) {
+  roll(rolls, { signal, purpose } = {}) {
     signal?.throwIfAborted()
+    if (purpose !== undefined && (typeof purpose !== 'string' || !purpose.trim() || purpose.length > this.config.maxPurposeLength)) {
+      throw new TypeError(`purpose must contain 1 to ${this.config.maxPurposeLength} characters`)
+    }
+    const header = { schemaVersion: DICE_RESULT_VERSION, ...(purpose === undefined ? {} : { purpose: purpose.trim() }) }
     const tree = compileTree(rolls, this.config)
     const details = []
     let failed
@@ -206,6 +226,13 @@ export class CryptoDiceProvider extends DiceService {
           const result = this.draw(node.sides)
           if (!Number.isSafeInteger(result) || result < 1 || result > node.sides) throw new Error('Dice provider returned an invalid face')
           dice.results.push(result)
+        }
+        if (node.keep) {
+          dice.keep = node.keep
+          dice.keptIndices = dice.results.map((_, index) => index)
+            .sort((a, b) => (node.keep.mode === 'highest' ? dice.results[b] - dice.results[a] : dice.results[a] - dice.results[b]) || a - b)
+            .slice(0, node.keep.count).sort((a, b) => a - b)
+          return checked(dice.keptIndices.reduce((sum, index) => sum + dice.results[index], 0))
         }
         return checked(dice.results.reduce((sum, result) => sum + result, 0))
       }
@@ -226,10 +253,10 @@ export class CryptoDiceProvider extends DiceService {
         throw error
       }
     }
-    try { return { values: visit(tree), details } }
+    try { return { ...header, values: visit(tree), details } }
     catch (error) {
       if (!failed) throw error
-      return { values: null, details, error: failed }
+      return { ...header, values: null, details, error: failed }
     }
   }
 }

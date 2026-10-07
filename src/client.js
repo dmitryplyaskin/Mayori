@@ -14,11 +14,44 @@ import { mirroredChildren, mirrorSlot } from './slot-mirror.js'
 import { RemoteTrajectoryContextProvider } from './trajectory-context.js'
 import { ContextTrajectory, TrajectorySessionHeader } from './trajectory.jsx'
 import { HomePanel, HomeConversation, HomeIcon } from './home.jsx'
+import { DiceToolCard } from './dice-card.jsx'
+export { DiceToolCard } from './dice-card.jsx'
 
 export const inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout']
 
 /** Plugin-owned style; removed with the client fiber. */
 export const BRAND_STYLE = String.raw`
+.mayori-dice-card { min-inline-size: 0; margin-block: 8px; padding: 12px 16px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; }
+.mayori-dice-header { display: flex; align-items: flex-start; gap: 8px; }
+.mayori-dice-toggle { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1; min-inline-size: 0; min-block-size: 36px; padding: 4px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; }
+button.mayori-dice-toggle { cursor: pointer; }
+.mayori-dice-toggle > svg { flex: none; }
+.mayori-dice-toggle > span:first-of-type { font-weight: 600; }
+.mayori-dice-chevron { margin-inline-start: auto; }
+.mayori-dice-status, .mayori-dice-path, .mayori-dice-hint, .mayori-dice-group-label { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.mayori-dice-status { margin-inline-start: auto; }
+.mayori-dice-inspect { min-block-size: 36px; padding: 4px 8px; flex: none; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.mayori-dice-inspect:hover, button.mayori-dice-toggle:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.mayori-dice-card :is(button, summary):focus-visible { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 3px; }
+.mayori-dice-purpose { margin: 4px 0 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.mayori-dice-results { list-style: none; margin: 0; padding: 0; }
+.mayori-dice-results > li { padding-block: 10px; border-block-start: 1px solid var(--dsw-alias-border-l2); }
+.mayori-dice-result-row { display: flex; align-items: baseline; gap: 16px; }
+.mayori-dice-formula { display: grid; flex: 1; min-inline-size: 0; gap: 3px; }
+.mayori-dice-card code { color: inherit; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mayori-dice-path { overflow-wrap: anywhere; }
+.mayori-dice-total { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mayori-dice-result-error { font-weight: 600; }
+.mayori-dice-breakdown { display: grid; gap: 8px; margin-block-start: 10px; }
+.mayori-dice-group-label { display: flex; flex-wrap: wrap; gap: 8px; margin-block-end: 6px; }
+.mayori-dice-faces { display: flex; flex-wrap: wrap; gap: 6px; }
+.mayori-dice-face { display: inline-flex; align-items: center; justify-content: center; min-inline-size: 28px; min-block-size: 28px; padding-inline: 4px; box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; font-variant-numeric: tabular-nums; }
+.mayori-dice-dropped { color: var(--dsw-alias-label-secondary); text-decoration-thickness: 2px; }
+.mayori-dice-error { margin-block: 8px; line-height: 1.5; overflow-wrap: anywhere; }
+.mayori-dice-card summary { min-block-size: 32px; padding-block: 4px; box-sizing: border-box; cursor: pointer; }
+.mayori-dice-record pre, .mayori-dice-all-faces p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.5; }
+.mayori-dice-hint { margin: 8px 0 0; line-height: 1.5; }
+.mayori-dice-sr { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .mayori-navigation { --dsh-sidebar-inline-padding: 12px; display: flex; flex-direction: column; box-sizing: border-box; block-size: 100%; min-block-size: 0; padding: 6px 12px; background: var(--dsw-specific-sidebar-fill); color: var(--dsw-alias-label-primary); font-size: 14px; }
 .mayori-navigation-header { display: flex; align-items: center; gap: 8px; flex: none; block-size: 48px; padding-inline: 4px; }
 :is(.mayori-navigation-brand, .mayori-navigation-toggle, .mayori-navigation-row) { display: flex; align-items: center; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
@@ -384,6 +417,9 @@ export function apply(ctx) {
     document.head.appendChild(style)
     return () => { style.remove() }
   }, 'mayori: client styles')
+  ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
+    name: 'tool.call.toolview', key: 'rollDice',
+  }, DiceToolCard))
 
   ctx.slots.inject('sidebar.brand.mark', () => ctx.slots.register({
     name: 'sidebar.brand.mark', priority: -100,

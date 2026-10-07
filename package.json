@@ -15,6 +15,7 @@
     "index.js",
     "src/dice.js",
     "src/dice-tool.js",
+    "src/dice-result.js",
     "src/character-card.js",
     "src/character-library-host.js",
     "src/character-play-host.js",
@@ -62,7 +63,8 @@
       "inject": [
         "@deepseek-ai/dsh-client-ui-sidebar",
         "@deepseek-ai/dsh-client-ui-chat",
-        "@deepseek-ai/dsh-client-ui-trajectory"
+        "@deepseek-ai/dsh-client-ui-trajectory",
+        "@deepseek-ai/dsh-client-ui-tool"
       ]
     }
   },
