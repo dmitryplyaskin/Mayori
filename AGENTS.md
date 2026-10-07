@@ -14,6 +14,14 @@ Mayori is a DeepSeek Harness RPG bundle. Read `docs/architecture.md` before chan
 - Use ESM, keep files newline-terminated, and preserve player agency in user-facing behavior.
 - Update tests and the affected guide with every behavior change.
 
+## Source layout
+
+- Keep capabilities in `src/features/<name>` with explicit `host`, `client`, `domain`, and `shared` boundaries as needed.
+- Compose Host providers in `src/host/application.js`; register browser contributions in `src/client/plugin.js`.
+- Feature modules must not import composition roots; Host and browser must not import each other's implementation.
+- Keep domain/shared code independent of platform SDKs and mirror ownership under `test`.
+- Preserve public package exports and update the package files allowlist when moving Host modules.
+
 ## Checks
 
 ```sh

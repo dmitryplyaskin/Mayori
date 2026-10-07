@@ -6,24 +6,25 @@
   "main": "index.js",
   "exports": {
     ".": "./index.js",
-    "./dice": "./src/dice-tool.js",
+    "./dice": "./src/features/dice/host/plugin.js",
     "./client": "./lib/client.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "files": [
     "index.js",
-    "src/dice.js",
-    "src/dice-expression.js",
-    "src/dice-tool.js",
-    "src/dice-result.js",
-    "src/character-card.js",
-    "src/character-library-host.js",
-    "src/character-play-host.js",
-    "src/templates.js",
-    "src/persona-host.js",
-    "src/trajectory-context-host.js",
-    "src/history-details-host.js",
+    "src/host",
+    "src/shared",
+    "src/features/characters/host",
+    "src/features/character-session/host",
+    "src/features/personas/host",
+    "src/features/history/host",
+    "src/features/trajectory/host",
+    "src/features/dice/host",
+    "src/features/character-session/domain",
+    "src/features/characters/shared",
+    "src/features/dice/shared",
+    "src/features/dice/domain",
     "lib/client.js",
     "lib/client.js.map",
     "cordis.patch.yml",
@@ -33,7 +34,7 @@
   "scripts": {
     "bundle": "tsdown --config tsdown.config.js",
     "test": "node --test",
-    "check": "pnpm run bundle && node --check index.js && node --check src/client.js && node --test"
+    "check": "pnpm run bundle && node --check index.js && node --check src/client/plugin.js && node --test"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0"

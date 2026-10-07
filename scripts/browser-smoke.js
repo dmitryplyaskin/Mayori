@@ -80,10 +80,25 @@ try {
   await page.goto(url.href)
   await page.getByRole('button', { name: 'История чатов', exact: true }).waitFor()
   try { await page.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 2000 }) } catch {}
-  await page.getByRole('button', { name: 'История чатов', exact: true }).click()
-  await page.getByRole('searchbox', { name: 'Поиск по названию или ID чата' }).fill(session.sessionId)
-  await page.locator('.mayori-history-row').first().click()
-  await page.locator('.mayori-message-avatar img').first().waitFor()
+  const openChat = async () => {
+    await page.getByRole('button', { name: 'История чатов', exact: true }).click()
+    await page.getByRole('searchbox', { name: 'Поиск по названию или ID чата' }).fill(session.sessionId)
+    await page.locator('.mayori-history-row').first().click()
+    await page.locator('.mayori-message-avatar img').first().waitFor()
+  }
+  await openChat()
+  const assertPortraits = async () => {
+    assert.equal(await page.locator('.mayori-message-character > .mayori-message-avatar').count(), 2,
+      'One portrait for the greeting and one for the response, including split reasoning/tool steps')
+    assert.equal(await page.locator('.mayori-message-user > .mayori-message-avatar').count(), 1)
+    assert.equal(await page.locator('[data-chat-group-part="reasoning"] .mayori-message-avatar').count(), 0)
+    assert.equal(await page.locator('.mayori-message-content .mayori-message-avatar').count(), 0,
+      'Portraits are siblings of message content, outside its box')
+  }
+  await assertPortraits()
+  await page.reload()
+  await openChat()
+  await assertPortraits()
   const chat = page.getByText('Chat', { exact: true })
   const trajectory = page.getByText('Trajectory', { exact: true })
   assert.ok((await chat.boundingBox()).x < (await trajectory.boundingBox()).x)
@@ -94,6 +109,7 @@ try {
     }, theme)
     for (const width of [1280, 390, 320]) {
       await page.setViewportSize({ width, height: 900 })
+      await assertPortraits()
       for (const role of ['character', 'user']) {
         const row = page.locator(`.mayori-message-${role}`).first()
         const bounds = await row.evaluate(row => {

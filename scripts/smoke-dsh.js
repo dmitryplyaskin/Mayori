@@ -1,6 +1,6 @@
 /** Keyless integration assertions against an isolated DSH with dsh-smoke-probe.js. */
 import assert from 'node:assert/strict'
-import { readDiceResult } from '../src/dice-result.js'
+import { readDiceResult } from '../src/features/dice/shared/result.js'
 
 const origin = process.argv[2] ?? 'http://127.0.0.1:3090'
 async function call(path, payload) {

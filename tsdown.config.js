@@ -6,7 +6,7 @@ const PLUGIN_ID = 'dsh-mayori'
 
 export default defineConfig({
   name: `${PLUGIN_ID}/client`,
-  entry: { client: 'src/client.js' },
+  entry: { client: 'src/client/plugin.js' },
   outDir: 'lib',
   format: 'cjs',
   platform: 'browser',

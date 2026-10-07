@@ -2,6 +2,59 @@
 
 Mayori следует архитектуре DeepSeek Harness: каждая функция подключается Cordis-плагином, а заменяемая возможность оформляется как полный capability seam — Service Definition, один или несколько Provider и Consumer. Mayori не меняет `agent-loop`.
 
+## Структура исходников
+
+Исходники организованы по игровым возможностям, внутри которых явно разделены Host, browser и общий код. Это один bundle, без отдельных пакетов и дополнительного framework.
+
+```text
+Mayori/
+├── index.js                       # стабильный публичный Host entry
+├── cordis.patch.yml               # deployment-композиция и preset
+├── src/
+│   ├── host/
+│   │   ├── plugin.js              # Cordis entry и director section
+│   │   ├── config.js              # схема и валидация deployment config
+│   │   ├── director.js            # текст правил ведущего
+│   │   ├── application.js         # сборка Host capability providers
+│   │   └── transport/             # HTTP boundary и адаптер операций
+│   ├── client/
+│   │   ├── plugin.js              # browser composition и обратимые slots
+│   │   ├── shell/                 # главная, навигация и бренд
+│   │   ├── components/            # общая пагинация
+│   │   ├── infrastructure/        # RPC и зеркалирование DSH slots
+│   │   └── styles.js              # lifecycle-bound стили интерфейса
+│   ├── features/
+│   │   ├── characters/           # импорт, библиотека, каталог и галерея
+│   │   ├── character-session/    # выбор, snapshots, приветствия и сообщения
+│   │   ├── personas/             # каталог и редактор персон игрока
+│   │   ├── history/              # каталог DSH, архив и cold previews
+│   │   ├── trajectory/           # реконструкция и отображение контекста
+│   │   └── dice/                 # parser, настоящий provider и tool card
+│   └── shared/
+│       └── templates.js           # воспроизводимые ST substitutions
+├── test/                         # host/client/shared и те же features
+├── scripts/                      # интеграционные smoke-сценарии
+├── docs/                         # архитектура и руководства
+└── lib/                          # генерируемый browser artifact
+```
+
+Внутри feature используются только необходимые ей каталоги:
+
+- `host/` — Cordis Service Definition, Provider, durable store и Host adapters. В библиотеке, персонах и игровых сессиях контракт (`service.js`), хранилище (`store.js`) и координация (`provider.js`) имеют отдельных владельцев. Dice дополнительно содержит конфигурацию и preset plugin.
+- `client/` — observable consumers, browser providers и React-компоненты этой возможности.
+- `domain/` — платформонезависимые правила и преобразования: parser выражений Dice, валидация и модельная проекция выбранной карточки.
+- `shared/` — форматы и codecs, которые нужны обеим сторонам: Character Card и записанный Dice result.
+
+`src/host/application.js` создаёт providers в порядке зависимостей и связывает их с транспортом. Библиотека персонажей больше не создаёт историю, персоны или игровой runtime. `src/host/transport/routes.js` получает готовые сервисы и адаптирует HTTP, не управляя их жизненным циклом. Browser providers используют общий `src/client/infrastructure/rpc.js`; история и персоны не зависят от транспорта библиотеки.
+
+### Направление зависимостей
+
+Host и browser могут потреблять свои feature-модули и общий код. Они не импортируют реализацию другой платформы. `domain/` и `shared/` не зависят от React, Cordis, Node.js API или composition roots. Feature-модуль не импортирует `src/host/` и browser plugin/shell/styles: сборка приложения зависит от возможностей, обратной зависимости нет. Между features допустимы явные зависимости одного слоя; например, cold history reader читает durable store Character Session, а не создаёт его Provider. Циклы импортов запрещены.
+
+Общее поведение переносится в `shared` или browser infrastructure только при реальном использовании несколькими возможностями. Новая игровая возможность получает собственный каталог в `features`, полный Service Definition / Provider / Consumer seam и регистрацию через composition roots и `ctx`. Для маленького seam сервис и provider могут оставаться в одном файле; пустые слои и универсальный `utils` не нужны.
+
+`test/architecture.test.js` проверяет направление импортов, отсутствие циклов, существование локальных зависимостей и полноту Host import graph в `package.json.files`. Публичные entry points остаются `dsh-mayori`, `dsh-mayori/dice` и `dsh-mayori/client`; внутренние пути не являются API. Host source поставляется как ESM, browser source собирается в `lib/client.js`. Перенос каталогов не изменяет HTTP endpoints, Cordis service names, расположение пользовательских данных или формат session log.
+
 ## Текущий вертикальный срез
 
 ```text
@@ -10,12 +63,14 @@ dsh-mayori bundle
 │   ├── заменяет deployment:persona через строку system-prompt
 │   ├── монтирует mayori-director
 │   └── объявляет preset mayori с изолированным dsh-mayori/dice
-├── src/dice-tool.js
+├── src/features/dice/host/plugin.js
 │   └── регистрирует Dice provider и native rollDice
 ├── index.js
-│   ├── регистрирует mayori:director через ctx.systemPrompt.section()
-│   └── публикует Host Character Library через ctx.webServer
+│   └── src/host/plugin.js
+│       ├── регистрирует mayori:director через ctx.systemPrompt.section()
+│       └── собирает Host services и transport через src/host/application.js
 └── lib/client.js
+    ├── собирается из src/client/plugin.js
     ├── замещает project/session region через публичный `sidebar.workspaces` slot
     ├── сохраняет штатный `sidebar.settings` consumer
     └── добавляет RPC proxy, нативные panel entries для галереи и истории, запуск character chat
@@ -71,7 +126,7 @@ Codec принимает JSON v2/v3 и стандартные PNG `tEXt` payload
 
 Свайп выполняется под `agent.runMaintenance` и добавляет штатный `user/message` с `surfaceOp: replace` и полным `sourceEventSeqs` для текущего приветствия. Его source `mayori-greeting` и JSON-поле `mayori_authored_opening` обозначают авторский сценарный материал, а не действие игрока. Это публичный контекстный seam DSH: `assistant/message` не допускает `sourceEventSeqs`, необходимых для такой замены. Начальный assistant остаётся историческим фактом, но в модельном surface существует только выбранное начало. Индекс закодирован в идентификаторе replacement message и восстанавливается из журнала; mutable browser state не является источником выбора. Компактация модельного surface не удаляет выбранное приветствие из отображаемой истории: Host восстанавливает его из последней авторской записи журнала. Перед ответом consumer вызывает `sessions.flush`.
 
-Browser `CharacterChatService` / `RemoteCharacterChatProvider` читают Host snapshot. `CharacterMessage` занимает публичные keyed slots `assistant-step`, `user` и `steering`, делегируя приветствие `GreetingMessage`; `GreetingTurnTail` занимает `turn-tail`. Приоритет `-100` сохраняет стандартные renderer, injection hooks, Markdown и locale. Аватар персонажа показан слева, персоны игрока справа; изображения читаются из snapshot чата, а при отсутствии картинки используется буква имени. Native dialog показывает полный аватар, поддерживает Escape, backdrop и возврат фокуса. Вне character chat штатные сообщения не получают аватаров. Регистрация ожидает стандартные entries через `slots.subscribe`, поскольку объявление слота предшествует регистрации компонентов. Child slots имеют единственного владельца: wrapper объявляет собственные alias seats, зеркалит туда исходные contributions вместе с injections и вложенными children и перенаправляет вызовы стандартного renderer. Исходные registrations не изменяются; новые и удалённые contributions отражаются через подписку. Приветствие, Copy и точка Fork получают актуальный текст и sequence; остальные сообщения делегируются штатным компонентам. Подписки и registrations снимаются с fiber. Ownership и teardown проверяются реальным `SlotCore` опубликованного DSH.
+Browser `CharacterChatService` / `RemoteCharacterChatProvider` читают Host snapshot. `CharacterMessage` занимает публичные keyed slots `assistant-step`, `user` и `steering`, делегируя приветствие `GreetingMessage`; `GreetingTurnTail` занимает `turn-tail`. Приоритет `-100` сохраняет стандартные renderer, injection hooks, Markdown и locale. Один аватар персонажа показан слева от содержательной реплики, персоны игрока справа от её сообщения, снаружи штатного блока содержимого. Отдельные reasoning-part того же шага, шаги только с мыслями/вызовами инструментов и пустой текст аватар не получают, в том числе при streaming и interrupted status; изображения читаются из snapshot чата, а при отсутствии картинки используется буква имени. Native dialog показывает полный аватар, поддерживает Escape, backdrop и возврат фокуса. Вне character chat штатные сообщения не получают аватаров. Регистрация ожидает стандартные entries через `slots.subscribe`, поскольку объявление слота предшествует регистрации компонентов. Child slots имеют единственного владельца: wrapper объявляет собственные alias seats, зеркалит туда исходные contributions вместе с injections и вложенными children и перенаправляет вызовы стандартного renderer. Исходные registrations не изменяются; новые и удалённые contributions отражаются через подписку. Приветствие, Copy и точка Fork получают актуальный текст и sequence; остальные сообщения делегируются штатным компонентам. Подписки и registrations снимаются с fiber. Ownership и teardown проверяются реальным `SlotCore` опубликованного DSH.
 
 Provider готовит закрытый начальный ход через стандартный `agents.create({ seed })`: turn/start, step/start, пустой system/message, assistant/message, step/end и turn/end. Приветствие занимает `turn: 1, step: 1`, реальный ввод начинает следующий ход. Пустой system node сохраняет место для системного prompt: DSH заполнит его при первом запросе. Assistant stream пуст (LLM не вызывается, usage не выдумывается). Контракт DSH требует model source для assistant-role: отдельная статическая identity `mayori-character-card` / `authored-greeting` обозначает авторский текст карточки, а не ответ настроенной модели; adapter-private replay state отсутствует.
 
@@ -113,7 +168,7 @@ Character Session Provider регистрирует scoped waterfall `agent/pre-
 - **Provider** — `CryptoDiceProvider`: ограниченный парсер выражений и независимые равномерные целочисленные броски через `node:crypto.randomInt`, без каталога видов костей;
 - **Consumer** — native `rollDice`, зарегистрированный через `ctx.tools.register` в дочернем плагине пресета Mayori. `registerDiceTool` можно подключить к другому provider того же сервиса.
 
-Вход — дерево объектов/массивов со строковыми выражениями в листьях. Ограниченный парсер `src/dice-expression.js` поддерживает арифметику, сравнения, boolean-логику, count, kh/kl, взрывы, перебросы и ссылки. Provider сначала разбирает все листья и валидирует структуру/бюджеты/граф зависимостей, затем вычисляет результаты с memoization, ленивым if и short-circuit логикой. Ошибка выражения сохраняется в своём поле; глобальные структурные лимиты проверяются до случайности. Никакого eval или agent-loop patch нет.
+Вход — дерево объектов/массивов со строковыми выражениями в листьях. Ограниченный парсер `src/features/dice/domain/expression.js` поддерживает арифметику, сравнения, boolean-логику, count, kh/kl, взрывы, перебросы и ссылки. Provider сначала разбирает все листья и валидирует структуру/бюджеты/граф зависимостей, затем вычисляет результаты с memoization, ленивым if и short-circuit логикой. Ошибка выражения сохраняется в своём поле; глобальные структурные лимиты проверяются до случайности. Никакого eval или agent-loop patch нет.
 
 Canonical result версии 2 содержит values с числовыми/boolean/null листьями, массив errors и полную details. Каждая грань имеет глобальный drawIndex, исходную кость и причину появления; модифицированные группы сохраняют цепочки, перебросы и выбор. Ссылки и выбранные ветки входят в trace. Лимиты взрывов/перебросов возвращают ошибку поля с фактическими гранями, никогда неполный итог. `details: true` включает полный JSON в model-visible content; иначе поле details исключено, errors остаётся. `output.presentationMeta` сохраняет полный результат в metadata штатного tool/result. Resume/fork читают прежние события без повторных бросков; скрытое состояние/seed не вводятся. Все deployment-лимиты входят в валидируемый Config. Полная семантика описана в [dice guide](dice.md).
 

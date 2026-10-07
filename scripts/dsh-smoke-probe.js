@@ -18,6 +18,10 @@ export function apply(ctx) {
     async *stream(options) {
       requests.push({ messages: options.messages, tools: options.tools })
       const last = options.messages.findLast(message => message.role !== 'system' && message.role !== 'developer')
+      const thought = last?.role === 'tool' ? 'Present the recorded dice results.' : 'Use the real dice provider.'
+      yield { type: 'block-start', index: 0, blockType: 'reasoning' }
+      yield { type: 'reasoning-delta', index: 0, text: thought }
+      yield { type: 'block-end', index: 0, block: { type: 'reasoning', text: thought } }
       if (last?.role !== 'tool') {
         for (const [index, details] of [undefined, true].entries()) {
           const id = randomUUID()
@@ -27,16 +31,16 @@ export function apply(ctx) {
             save: 'd20 + 3 >= 14', baseDamage: '3d6', halfDamage: 'if($save, floor($baseDamage / 2), $baseDamage)',
             broken: 'd6!!', dependent: '$broken + 1', isolated: 'd1', skipped: 'if(false,d6!,0)', explosion: 'd6!', reroll: 'd6r<3',
           } })
-          yield { type: 'block-start', index, blockType: 'tool-call' }
-          yield { type: 'tool-call-delta', index, id, name: 'rollDice', argumentsDelta: args }
-          yield { type: 'block-end', index, block: { type: 'tool-call', id, name: 'rollDice', arguments: args } }
+          yield { type: 'block-start', index: index + 1, blockType: 'tool-call' }
+          yield { type: 'tool-call-delta', index: index + 1, id, name: 'rollDice', argumentsDelta: args }
+          yield { type: 'block-end', index: index + 1, block: { type: 'tool-call', id, name: 'rollDice', arguments: args } }
         }
         yield { type: 'finish', reason: { kind: 'tool-calls' } }
         return
       }
-      yield { type: 'block-start', index: 0, blockType: 'text' }
-      yield { type: 'text-delta', index: 0, text: 'Welcome to the archive.' }
-      yield { type: 'block-end', index: 0, block: { type: 'text', text: 'Welcome to the archive.' } }
+      yield { type: 'block-start', index: 1, blockType: 'text' }
+      yield { type: 'text-delta', index: 1, text: 'Welcome to the archive.' }
+      yield { type: 'block-end', index: 1, block: { type: 'text', text: 'Welcome to the archive.' } }
       yield { type: 'finish', reason: { kind: 'stop' } }
     },
   }

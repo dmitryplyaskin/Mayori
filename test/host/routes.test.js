@@ -1,0 +1,73 @@
+import assert from 'node:assert/strict'
+import { Readable } from 'node:stream'
+import test from 'node:test'
+import { createMayoriRoute } from '../../src/host/transport/routes.js'
+
+async function request(route, endpoint, payload, options = {}) {
+  const req = Readable.from([Buffer.from(options.body ?? JSON.stringify(payload))])
+  req.url = `${route.path}/${endpoint}`
+  req.method = options.method ?? 'POST'
+  req.headers = { host: '127.0.0.1:3081', origin: 'http://127.0.0.1:3081', 'sec-fetch-site': 'same-origin', ...options.headers }
+  const res = {
+    writeHead(status, headers) { this.status = status; this.headers = headers },
+    end(body) { this.body = body },
+  }
+  await route.handler(req, res)
+  return res
+}
+
+test('HTTP adapter dispatches each existing endpoint to its owning capability without constructing providers', async () => {
+  const calls = []
+  const service = name => new Proxy({}, {
+    get: (_target, method) => (...args) => { calls.push([name, method, args]); return `${name}.${method}` },
+  })
+  const route = createMayoriRoute(Object.fromEntries(['library', 'personas', 'characterSessions', 'trajectoryContext', 'historyDetails'].map(name => [name, service(name)])))
+  const input = { id: 'resource', ids: ['session'], sessionId: 'session', characterId: 'character', workspaceId: 'workspace', greetingIndex: 1, index: 2, personaId: 'persona', selection: 'current' }
+  const cases = [
+    ['list', 'library', 'list', [], { cards: 'library.list' }],
+    ['import', 'library', 'import', [input], 'library.import'],
+    ['remove', 'library', 'remove', [input.id], { removed: true }],
+    ['history-details', 'historyDetails', 'read', [input.ids], 'historyDetails.read'],
+    ['persona-list', 'personas', 'list', [], 'personas.list'],
+    ['persona-save', 'personas', 'save', [input], 'personas.save'],
+    ['persona-remove', 'personas', 'remove', [input.id], { removed: true }],
+    ['persona-default', 'personas', 'setDefault', [input.id], { saved: true }],
+    ['prepare-campaign', 'characterSessions', 'prepareCampaign', [], 'characterSessions.prepareCampaign'],
+    ['start', 'characterSessions', 'create', [input.characterId, input.workspaceId, input.greetingIndex], 'characterSessions.create'],
+    ['play', 'characterSessions', 'select', [input.sessionId, input.characterId], 'characterSessions.select'],
+    ['session-state', 'characterSessions', 'state', [input.sessionId], 'characterSessions.state'],
+    ['swipe', 'characterSessions', 'swipe', [input.sessionId, input.index], 'characterSessions.swipe'],
+    ['session-persona', 'characterSessions', 'setPersona', [input.sessionId, input.personaId], 'characterSessions.setPersona'],
+    ['trajectory-context', 'trajectoryContext', 'inspect', [input.sessionId, input.selection], 'trajectoryContext.inspect'],
+  ]
+  for (const [endpoint, name, method, args, value] of cases) {
+    const response = await request(route, endpoint, input)
+    assert.equal(response.status, 200, endpoint)
+    assert.equal(response.headers['cache-control'], 'no-store')
+    assert.deepEqual(JSON.parse(response.body), { ok: true, value }, endpoint)
+    assert.deepEqual(calls.at(-1), [name, method, args], endpoint)
+  }
+  assert.equal(calls.length, cases.length)
+})
+
+test('HTTP adapter preserves same-origin checks, method restrictions and error envelopes', async () => {
+  let calls = 0
+  const route = createMayoriRoute({ library: { list() { calls++; throw new Error('catalog unavailable') } } })
+  for (const headers of [
+    { origin: 'http://other.localhost:3081' },
+    { host: 'example.com', origin: 'http://example.com' },
+    { 'sec-fetch-site': 'cross-site' },
+    { origin: undefined },
+  ]) assert.equal((await request(route, 'list', {}, { headers })).status, 403)
+  const method = await request(route, 'list', {}, { method: 'GET' })
+  assert.equal(method.status, 405)
+  assert.equal(method.headers.allow, 'POST')
+  assert.equal((await request(route, 'list', {}, { body: '{invalid' })).status, 400)
+  assert.equal((await request(route, 'unknown', {})).status, 404)
+  assert.equal((await request(route, 'start', null)).status, 400)
+  assert.equal(calls, 0)
+  const failure = await request(route, 'list', {})
+  assert.equal(failure.status, 400)
+  assert.deepEqual(JSON.parse(failure.body), { ok: false, error: 'catalog unavailable' })
+  assert.equal(calls, 1)
+})
