@@ -10,6 +10,8 @@ import { registerDiceTool } from '../features/dice/host/plugin.js'
 import { NumericRulesProvider } from '../features/rules/host/provider.js'
 import { registerRulesTool } from '../features/rules/host/tool.js'
 import { resolveRulesConfig } from '../features/rules/domain/check.js'
+import { SessionRollHistoryProvider } from '../features/roll-history/host/provider.js'
+import { registerRollHistoryTool } from '../features/roll-history/host/tool.js'
 
 /** Compose Host services in dependency order within the plugin's Cordis lifetime. */
 export function registerHostCapabilities(ctx, { charactersPath, campaignsPath, personasPath }) {
@@ -32,6 +34,8 @@ export function registerMechanicsCapabilities(ctx, config = {}) {
   const diceConfig = resolveDiceConfig(limits), rulesConfig = resolveRulesConfig(profiles === undefined ? {} : { profiles })
   if (rulesConfig.profiles.some(profile => profile.sides > diceConfig.maxSides || profile.criticalFailureEffects.length > diceConfig.maxSides)) throw new TypeError('Rules profile dice must fit maxSides')
   new CryptoDiceProvider(ctx, diceConfig)
+  new SessionRollHistoryProvider(ctx)
+  registerRollHistoryTool(ctx)
   ctx.inject(['mayoriDice'], scope => {
     new NumericRulesProvider(scope, scope.mayoriDice, rulesConfig)
     registerDiceTool(scope)

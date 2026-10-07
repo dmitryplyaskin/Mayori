@@ -15,6 +15,14 @@ export function buildCheckResult(request, rules, dice) {
 }
 
 export function compactCheckResult(result) {
+  if (result.rollId) {
+    const { margin, ...check } = result.check ?? {}
+    return { rollId: result.rollId, check: result.check ? check : null,
+      ...(result.damage ? { damage: result.damage.value } : {}),
+      ...(result.consequence ? { consequence: result.consequence.text } : {}),
+      ...(result.errors.length ? { errors: result.errors } : {}) }
+  }
+  // Historical compact records included the request and complete rules snapshot.
   const { dice, ...summary } = result
   return { ...summary, observations: dice.observations }
 }
@@ -25,6 +33,7 @@ export function readCheckResult(content, meta) {
     const value = JSON.parse(content[0].text)
     const full = Object.hasOwn(value, 'dice') ? value : meta?.kind === 'mayori-check' ? meta.result : null
     if (!full || full.schemaVersion !== 1 || !validateDiceResult(full.dice) || full.dice.schemaVersion !== 3) return null
+    if (Object.hasOwn(full, 'rollId') && (typeof full.rollId !== 'string' || !full.rollId.trim())) return null
     const request = normalizeCheck(full.request), rules = validateProfile(full.rules)
     if (request.profile !== rules.id || full.dice.purpose !== request.purpose) return null
     const expected = checkRolls(request, rules)
@@ -36,7 +45,8 @@ export function readCheckResult(content, meta) {
       if (pool.sides !== rules.sides || pool.faces.length !== 1 || pool.faces[0] !== full.dice.values.natural) return null
     }
     const rebuilt = buildCheckResult(request, rules, full.dice)
-    if (JSON.stringify(rebuilt) !== JSON.stringify(full)) return null
+    const { rollId, ...payload } = full
+    if (JSON.stringify(rebuilt) !== JSON.stringify(payload)) return null
     if (!Object.hasOwn(value, 'dice') && JSON.stringify(compactCheckResult(full)) !== JSON.stringify(value)) return null
     return full
   } catch { return null }

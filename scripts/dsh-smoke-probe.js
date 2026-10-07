@@ -44,6 +44,18 @@ export function apply(ctx) {
         yield { type: 'finish', reason: { kind: 'tool-calls' } }
         return
       }
+      const saved = JSON.parse(last.content[0].text)
+      if (saved.rollId) {
+        const rollIds = options.messages.filter(message => message.role === 'tool').flatMap(message => {
+          try { const value = JSON.parse(message.content[0].text); return value.rollId ? [value.rollId] : [] } catch { return [] }
+        }).slice(-3)
+        const id = randomUUID(), args = JSON.stringify({ rollIds: [...rollIds, 'smoke-missing-roll'] })
+        yield { type: 'block-start', index: 1, blockType: 'tool-call' }
+        yield { type: 'tool-call-delta', index: 1, id, name: 'getRollDetails', argumentsDelta: args }
+        yield { type: 'block-end', index: 1, block: { type: 'tool-call', id, name: 'getRollDetails', arguments: args } }
+        yield { type: 'finish', reason: { kind: 'tool-calls' } }
+        return
+      }
       yield { type: 'block-start', index: 1, blockType: 'text' }
       yield { type: 'text-delta', index: 1, text: 'Welcome to the archive.' }
       yield { type: 'block-end', index: 1, block: { type: 'text', text: 'Welcome to the archive.' } }
@@ -68,6 +80,13 @@ export function apply(ctx) {
           const agent = ctx.agents.get(input.sessionId)
           if (!agent) throw new Error('Expected live session')
           value = { messages: agent.session.deriveMessages(), events: agent.session.snapshotEvents(), requestCount: requests.length }
+        } else if (input.action === 'details') {
+          const agent = ctx.agents.get(input.sessionId)
+          if (!agent) throw new Error('Expected live session')
+          const result = await agent.ctx.tools.execute({ name: 'getRollDetails', callId: randomUUID(),
+            arguments: { rollIds: input.rollIds }, agent, signal: new AbortController().signal })
+          if (result.isError) throw new Error(result.content[0].text)
+          value = JSON.parse(result.content[0].text)
         } else if (input.action === 'fork') {
           value = await ctx.sessionController.fork({ sessionId: input.sessionId, atSeq: input.atSeq })
         } else if (input.action === 'turn') {
@@ -80,6 +99,7 @@ export function apply(ctx) {
           value = { messages: agent.session.deriveMessages(), requests, events: agent.session.snapshotEvents(),
             hostHasDiceTool: ctx.tools.get('rollDice') !== undefined,
             hostHasRulesTool: ctx.tools.get('resolveCheck') !== undefined,
+            hostHasRollHistoryTool: ctx.tools.get('getRollDetails') !== undefined,
             header: agent.session.header }
         } else throw new Error('Unknown smoke operation')
         res.writeHead(200, { 'content-type': 'application/json' })

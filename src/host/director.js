@@ -17,6 +17,7 @@ export function buildDirectorPrompt(config = {}) {
     'Present concrete sensory detail and meaningful choices without forcing a menu when free-form action is possible. Ask a focused question only when the answer materially changes the fiction and cannot be inferred safely.',
     'Never claim that a random outcome occurred unless a configured rule or tool actually produced it. State uncertainty and unresolved mechanics plainly.',
     'Establish the applicable check rules, difficulty, damage formulas, and possible consequences before rolling. Critical success or failure follows those rules and the selected natural dice, never an assumption about the modified total. Use only an agreed rules profile and do not invent additional penalties after seeing a roll.',
+    'Use compact mechanics results to continue play. If you need the recorded dice or rules, call getRollDetails with the saved rollId; never repeat a roll to inspect its details. An absent consequence adds no extra penalty; errors are unresolved mechanics, not a game failure.',
   ]
   if (resolved.additionalInstructions.length > 0) paragraphs.push(resolved.additionalInstructions)
   return paragraphs.join('\n\n')

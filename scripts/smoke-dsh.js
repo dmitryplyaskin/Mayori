@@ -1,6 +1,6 @@
 /** Keyless integration assertions against an isolated DSH with dsh-smoke-probe.js. */
 import assert from 'node:assert/strict'
-import { readDiceResult } from '../src/features/dice/shared/result.js'
+import { readDiceResult, compactDiceResult } from '../src/features/dice/shared/result.js'
 import { readCheckResult } from '../src/features/rules/shared/result.js'
 
 const origin = process.argv[2] ?? 'http://127.0.0.1:3090'
@@ -15,6 +15,7 @@ async function call(path, payload) {
 }
 
 let sessionId = process.argv.slice(3).find(argument => !argument.startsWith('--'))
+const resuming = sessionId !== undefined
 const greetingIndex = process.argv.includes('--alternate') ? 1 : 0
 const expectedGreeting = greetingIndex === 0 ? 'Aster: You came back, Alex.' : 'Aster: Another greeting.'
 if (sessionId === undefined) {
@@ -98,7 +99,7 @@ assert.equal(rejectedSwipe.status, 400, 'Played greeting is locked')
 assert.equal(turn.messages.filter(message => message.source?.provider === 'mayori-character-card' || message.source?.kind === 'mayori-greeting').length, 1)
 assert.ok(turn.messages.some(message => message.role === 'assistant' && JSON.stringify(message).includes('Welcome to the archive.')))
 assert.doesNotMatch(JSON.stringify(modelInput.messages), /smoke-private-extension/)
-assert.deepEqual((modelInput.tools ?? []).map(tool => tool.name).sort(), ['resolveCheck', 'rollDice'])
+assert.deepEqual((modelInput.tools ?? []).map(tool => tool.name).sort(), ['getRollDetails', 'resolveCheck', 'rollDice'])
 const diceCalls = turn.events.filter(event => event.type === 'tool/call' && event.data.name === 'rollDice').slice(-2)
 assert.equal(diceCalls.length, 2, 'Exercise both default compact and explicit full responses')
 for (const [index, diceCall] of diceCalls.entries()) {
@@ -109,8 +110,8 @@ for (const [index, diceCall] of diceCalls.entries()) {
   assert.equal(Object.hasOwn(body, 'details'), index === 1)
   assert.equal(diceEvent.data.meta.kind, 'mayori-dice')
   const rolled = diceEvent.data.meta.result
-  const { details, ...summary } = rolled
-  assert.deepEqual(body, index === 1 ? rolled : summary)
+  assert.equal(body.rollId, diceCall.data.callId)
+  assert.deepEqual(body, index === 1 ? rolled : compactDiceResult(rolled))
   assert.deepEqual(readDiceResult(diceEvent.data.message.content, diceEvent.data.meta), rolled)
   assert.deepEqual(rolled.errors.map(error => error.code), ['invalid_expression', 'dependency_failed'])
   assert.equal(rolled.schemaVersion, 3)
@@ -154,10 +155,31 @@ assert.equal(checked.check.outcome, checked.check.natural === 20 ? 'critical_suc
 assert.equal(Object.hasOwn(JSON.parse(checkEvent.data.message.content[0].text), 'dice'), false)
 assert.ok(modelInput.messages.some(message => message.role === 'tool' && message.content[0]?.text === checkEvent.data.message.content[0].text))
 assert.equal(turn.hostHasRulesTool, false, 'Rules remain isolated to the RPG preset')
+assert.equal(turn.hostHasRollHistoryTool, false, 'Roll history remains isolated to the RPG preset')
+if (resuming) {
+  const previous = turn.events.find(event => event.type === 'tool/result' && ['mayori-dice', 'mayori-check'].includes(event.data.meta?.kind))
+  const restoredDetails = await call('/_mayori-smoke', { action: 'details', sessionId, rollIds: [previous.data.message.toolCallId] })
+  assert.deepEqual(restoredDetails.rolls[0].result, previous.data.meta.result, 'The original trace is readable after Host restart')
+}
+const detailCall = turn.events.findLast(event => event.type === 'tool/call' && event.data.name === 'getRollDetails')
+const detailEvent = turn.events.findLast(event => event.type === 'tool/result' && event.data.message.toolCallId === detailCall?.data.callId)
+assert.ok(detailEvent && !detailEvent.data.message.isError, 'The model reads saved details in a separate native step')
+const expanded = JSON.parse(detailEvent.data.message.content[0].text)
+assert.equal(expanded.rolls.length, 4)
+assert.equal(expanded.rolls[3].error.code, 'not_found')
+assert.deepEqual(expanded.rolls[2].result, checked)
+for (const record of expanded.rolls.slice(0, 2)) {
+  const original = turn.events.find(event => event.type === 'tool/result' && event.data.message.toolCallId === record.rollId)
+  assert.deepEqual(record.result, original.data.meta.result)
+}
+assert.ok(modelInput.messages.some(message => message.role === 'tool' && message.content[0]?.text === detailEvent.data.message.content[0].text))
 const diceFork = await call('/_mayori-smoke', { action: 'fork', sessionId, atSeq: completed.seq })
 const forkedDice = await call('/_mayori-smoke', { action: 'inspect', sessionId: diceFork.sessionId })
 assert.deepEqual(forkedDice.messages.filter(message => message.role === 'tool'), turn.messages.filter(message => message.role === 'tool'),
   'A fork retains the original dice results without rerolling')
 assert.deepEqual(forkedDice.events.filter(event => event.type === 'tool/result').map(event => event.data.meta),
   turn.events.filter(event => event.type === 'tool/result').map(event => event.data.meta), 'A fork retains complete dice presentation metadata')
+const forkDetails = await call('/_mayori-smoke', { action: 'details', sessionId: diceFork.sessionId,
+  rollIds: [checked.rollId, expanded.rolls[0].rollId] })
+assert.deepEqual(forkDetails.rolls.map(record => record.result), [checked, expanded.rolls[0].result], 'Inherited ids retrieve the original traces')
 console.log(JSON.stringify({ ok: true, sessionId, loggedMessages: turn.messages.length, codingTools: 0, diceExpressions: 16, diceResponseModes: 2 }))

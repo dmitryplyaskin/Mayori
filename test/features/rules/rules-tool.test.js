@@ -14,11 +14,11 @@ test('mechanics compose reversible Dice and Rules services and both native tools
   const ctx = new Context(); t.after(() => ctx.fiber.dispose())
   await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime)
   const fiber = ctx.plugin(Mechanics); await fiber
-  assert.deepEqual(ctx.tools.schemas().map(tool => tool.name), ['rollDice', 'resolveCheck'])
+  assert.deepEqual(ctx.tools.schemas().map(tool => tool.name), ['getRollDetails', 'rollDice', 'resolveCheck'])
   assert.match(ctx.tools.get('resolveCheck').description, /d20-attack/)
   await fiber.dispose()
-  for (const key of ['mayoriDice', 'mayoriRules']) assert.equal(ctx[key], undefined)
-  for (const key of ['rollDice', 'resolveCheck']) assert.equal(ctx.tools.get(key), undefined)
+  for (const key of ['mayoriDice', 'mayoriRules', 'mayoriRollHistory']) assert.equal(ctx[key], undefined)
+  for (const key of ['rollDice', 'resolveCheck', 'getRollDetails']) assert.equal(ctx.tools.get(key), undefined)
 })
 
 test('tool compact/full output and session restoration preserve natural-one outcomes without new draws', async t => {

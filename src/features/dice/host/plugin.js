@@ -3,7 +3,9 @@ import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { CryptoDiceProvider } from './provider.js'
 import { DEFAULT_DICE_CONFIG, resolveDiceConfig } from './config.js'
-import { DICE_RESULT_VERSION } from '../shared/result.js'
+import { DICE_RESULT_VERSION, compactDiceResult } from '../shared/result.js'
+import { SessionRollHistoryProvider } from '../../roll-history/host/provider.js'
+import { registerRollHistoryTool } from '../../roll-history/host/tool.js'
 export { DiceService } from './service.js'
 export { CryptoDiceProvider } from './provider.js'
 export const name = 'mayori-dice'
@@ -26,17 +28,18 @@ export function registerDiceTool(ctx) {
       + 'Example: {"attack":"1d20 + 5","hit":"$attack >= 15","damage":"if($hit, 2d6! + 3, 0)"}. '
       + 'Every explicit dice occurrence rolls independently; dice inside an unselected branch are not drawn. All requested leaves are evaluated, so put conditional dice inside if. '
       + 'Division may be fractional; round explicitly according to the rules. Optionally state purpose before rolling. '
-      + 'Returns schemaVersion 3, values with number/boolean leaves, errors, and observations with kept faces and chain totals even without details. Failed leaves are null; independent leaves still resolve. '
-      + 'Set details: true for full traces; every face, branch and reference remains recorded in the session regardless. '
+      + 'Returns rollId and values; errors appear only when present. Failed leaves are null; independent leaves still resolve. '
+      + 'Use resolveCheck for explicit game outcomes or compute required natural faces/success counts in rolls. Read full saved traces with getRollDetails({rollIds:[rollId]}) only when needed. '
       + 'Explosion/reroll limits return an error, never a silently truncated total. Do not automatically reroll errors or seek a preferred outcome. '
       + 'Do not choose voluntary actions for the player. These are numeric mechanics; game rules determine success and consequences.',
     parameters: {
       purpose: { type: 'string', description: 'Optional brief purpose stated before rolling.' },
-      details: { type: 'boolean', description: 'Include complete traces. Defaults to false; the session still records every draw.' },
+      details: { type: 'boolean', description: 'Legacy full-output option; prefer getRollDetails for saved traces. Defaults to false.' },
       rolls: { required: true, oneOf: [{ type: 'object', additionalProperties: true }, { type: 'array' }], description: 'Nested object/array with expression strings; references name other expression leaves in this same batch.' },
     },
     output: {
       schema: { type: 'object', additionalProperties: false, properties: {
+        rollId: { type: 'string', required: true },
         schemaVersion: { type: 'integer', required: true, const: DICE_RESULT_VERSION }, purpose: { type: 'string' }, values: { type: 'json', required: true },
         errors: { type: 'array', required: true, items: { type: 'object', additionalProperties: false, properties: {
           path: { ...path, required: true }, code: { type: 'string', required: true }, message: { type: 'string', required: true },
@@ -62,13 +65,15 @@ export function registerDiceTool(ctx) {
           } } },
         } } },
       } },
-      render: (args, value) => { const { details, ...summary } = value; return [{ type: 'text', text: JSON.stringify(args.details === true ? value : summary) }] },
+      render: (args, value) => [{ type: 'text', text: JSON.stringify(args.details === true ? value : compactDiceResult(value)) }],
       presentationMeta: (_args, value) => ({ kind: 'mayori-dice', result: value }),
     },
-    async execute(args, exec) { return ctx.mayoriDice.roll(args.rolls, { signal: exec.signal, purpose: args.purpose }) },
+    async execute(args, exec) { return { ...await ctx.mayoriDice.roll(args.rolls, { signal: exec.signal, purpose: args.purpose }), rollId: exec.callId } },
   }))
 }
 export function apply(ctx, config = {}) {
   new CryptoDiceProvider(ctx, resolveDiceConfig(config))
+  new SessionRollHistoryProvider(ctx)
+  registerRollHistoryTool(ctx)
   ctx.inject(['mayoriDice'], registerDiceTool)
 }

@@ -30,7 +30,9 @@ test('registers the native tool and service through Cordis and removes both on u
   assert.ok(rendered.values.custom >= 1 && rendered.values.custom <= 37)
   await fiber.dispose()
   assert.equal(ctx.tools.get('rollDice'), undefined)
+  assert.equal(ctx.tools.get('getRollDetails'), undefined)
   assert.equal(ctx.mayoriDice, undefined)
+  assert.equal(ctx.mayoriRollHistory, undefined)
 })
 
 test('consumer uses a replaceable provider; both response modes retain error traces in the log', async t => {
@@ -106,8 +108,11 @@ test('details is opt-in and affects only model content, with the same complete c
     assert.equal(result.isError, false)
     const body = JSON.parse(result.content[0].text)
     assert.deepEqual(body.values, { hit: 7 })
-    assert.equal(body.purpose, 'Атака')
-    assert.equal(body.schemaVersion, 3)
+    assert.equal(body.rollId, 'projection')
+    if (options.details === true) {
+      assert.equal(body.purpose, 'Атака')
+      assert.equal(body.schemaVersion, 3)
+    } else assert.deepEqual(body, { rollId: 'projection', values: { hit: 7 } })
     assert.equal(Object.hasOwn(body, 'details'), options.details === true)
     assert.deepEqual(result.meta, { kind: 'mayori-dice', result: result.value })
     assert.deepEqual(readDiceResult(result.content, result.meta), result.value)

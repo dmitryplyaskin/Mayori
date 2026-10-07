@@ -25,6 +25,7 @@
     "src/features/rules/host",
     "src/features/rules/domain",
     "src/features/rules/shared",
+    "src/features/roll-history/host",
     "src/features/character-session/domain",
     "src/features/characters/shared",
     "src/features/dice/shared",

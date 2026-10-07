@@ -31,7 +31,7 @@ test('compact check card shows natural one, modified seven, critical failure and
   new CryptoDiceProvider(ctx, {}, () => 1)
   new NumericRulesProvider(ctx, ctx.mayoriDice, { profiles: [{ id: 'house', version: '1', sides: 20, criticalFailureMax: 1,
     criticalFailureEffects: ['<script>Шум привлекает внимание</script>'] }] })
-  const result = ctx.mayoriRules.resolve({ profile: 'house', modifier: 6, target: 5 })
+  const result = { ...ctx.mayoriRules.resolve({ profile: 'house', modifier: 6, target: 5 }), rollId: 'saved-critical' }
   const block = { content: [{ type: 'text', text: JSON.stringify(compactCheckResult(result)) }], meta: { kind: 'mayori-check', result } }
   const html = renderToStaticMarkup(React.createElement(Card, { phase: 'result', block, useDisclosure: () => ({ expanded: false, toggle() {} }), inspect() {} }))
   assert.match(html, /Критический провал/); assert.match(html, /На d20: <strong>1<\/strong>/)

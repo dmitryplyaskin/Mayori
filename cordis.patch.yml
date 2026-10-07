@@ -46,6 +46,7 @@
             isolate:
               mayoriDice: true
               mayoriRules: true
+              mayoriRollHistory: true
             config:
               maxSides: 1000000
               maxDice: 1000

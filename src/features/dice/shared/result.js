@@ -8,11 +8,20 @@ const pathValid = path => Array.isArray(path) && path.length <= 64 && path.every
 const indices = (list, maximum) => Array.isArray(list) && list.every((index, at) => Number.isSafeInteger(index) && index >= 0 && index < maximum && (at === 0 || index > list[at - 1]))
 const comparators = ['>', '>=', '<', '<=', '==', '!=']
 
+/** Model projection: the complete trace stays in the recorded metadata. */
+export function compactDiceResult(result) {
+  return { rollId: result.rollId, values: result.values, ...(result.errors.length ? { errors: result.errors } : {}) }
+}
+
 export function readDiceResult(content, meta) {
   if (!Array.isArray(content) || content.length !== 1 || content[0]?.type !== 'text' || typeof content[0].text !== 'string' || content[0].text.length > 8_000_000) return null
   let value
   try { value = JSON.parse(content[0].text) } catch { return null }
   if (record(value) && !Object.hasOwn(value, 'details')) {
+    if (Object.hasOwn(value, 'rollId')) {
+      const full = meta?.kind === 'mayori-dice' ? validateDiceResult(meta.result) : null
+      return full?.schemaVersion === 3 && full.rollId === value.rollId && JSON.stringify(compactDiceResult(full)) === JSON.stringify(value) ? full : null
+    }
     if (![1, 2, 3].includes(value.schemaVersion) || !record(meta) || meta.kind !== 'mayori-dice') return null
     const full = validateDiceResult(meta.result)
     const fields = value.schemaVersion >= 2 ? ['schemaVersion', 'purpose', 'values', 'errors', ...(value.schemaVersion === 3 ? ['observations'] : [])] : ['schemaVersion', 'purpose', 'values', 'error']
@@ -24,6 +33,7 @@ export function readDiceResult(content, meta) {
 }
 export function validateDiceResult(value) {
   if (!record(value) || (Object.hasOwn(value, 'schemaVersion') && ![1, 2, 3].includes(value.schemaVersion))
+    || (Object.hasOwn(value, 'rollId') && (typeof value.rollId !== 'string' || !value.rollId.trim()))
     || (value.purpose !== undefined && (typeof value.purpose !== 'string' || !value.purpose.trim() || value.purpose.length > 2000))
     || !Array.isArray(value.details) || !value.details.length || value.details.length > 1000) return null
   const v2 = value.schemaVersion >= 2, paths = new Map(), drawIndices = new Set()

@@ -27,7 +27,7 @@
 
 ## Config и последствия
 
-Профили находятся в валидируемом `Config.profiles` плагина `mayori-mechanics` (`dsh-mayori/mechanics`) в `config.plugins` пресета `mayori`. При переопределении списка плагинов сохраняйте весь список и изоляцию `mayoriDice` и `mayoriRules`. `dsh-mayori/dice` остаётся отдельным публичным плагином только с `rollDice`.
+Профили находятся в валидируемом `Config.profiles` плагина `mayori-mechanics` (`dsh-mayori/mechanics`) в `config.plugins` пресета `mayori`. При переопределении списка плагинов сохраняйте весь список и изоляцию `mayoriDice`, `mayoriRules` и `mayoriRollHistory`. `dsh-mayori/dice` остаётся отдельным публичным плагином с `rollDice` и чтением сохранённых подробностей.
 
 Каждый профиль содержит:
 
@@ -70,9 +70,11 @@ profiles:
 
 ## Результат и журнал
 
-Результат версии 1 содержит полный snapshot `rules`, нормализованный `request`, `check`, `damage`, `consequence` и `errors`. `check` включает `natural`, `modifier`, `total`, `target`, `margin`, `outcome` (`success`, `failure`, `critical_success`, `critical_failure`) и машинную причину `reason`. `margin` — total минус target, даже при автоматическом исходе.
+Полная запись версии 1 содержит `rollId`, полный snapshot `rules`, нормализованный `request`, `check`, `damage`, `consequence` и `errors`. `check` включает `natural`, `modifier`, `total`, `target`, `margin`, `outcome` (`success`, `failure`, `critical_success`, `critical_failure`) и машинную причину `reason`. `margin` — total минус target, даже при автоматическом исходе.
 
-`details: false` по умолчанию исключает полный Dice trace из модельного content, но сохраняет все сведения о проверке и `observations` с выбранными гранями. `details: true` добавляет вложенный `dice` версии 3. Полный результат всегда записывается в `tool/result` metadata `{ kind: 'mayori-check', result }`.
+По умолчанию модель получает `rollId` и `check` без вычисляемого `margin`. Поле `damage` содержит только число при разрешённом уроне, `consequence` — только выбранный текст при установленном последствии, `errors` — только непустой массив ошибок. Отсутствие `damage` не выдаёт ошибку урона за ноль: такую ошибку обозначает `errors`. `check: null` означает, что сама проверка не разрешена. Отсутствие `consequence` не разрешает модели придумывать дополнительный штраф.
+
+Краткий ответ исключает `request`, snapshot правил, таблицы, `observations` и Dice trace. Описание инструмента перечисляет только идентификаторы/версии профилей, размер кубика и включённые пороги. Полный результат всегда записывается в `tool/result` metadata `{ kind: 'mayori-check', result }`. [getRollDetails](roll-history.md) читает его по `rollId`. Совместимый `details: true` возвращает полную запись сразу при новом вызове; для проверки прежнего результата не вызывайте `resolveCheck` повторно.
 
 Карточка показывает натуральную грань, модификатор, итог, сложность, исход, урон и последствие без раскрытия. Подробности содержат snapshot правил и полный trace. Reader проверяет совпадение content с metadata и записанными гранями; повреждённые и неизвестные версии показываются исходным текстом. Возобновление и форк читают запись без запуска provider и без использования текущего Config.
 
