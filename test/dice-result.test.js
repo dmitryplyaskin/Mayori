@@ -1,11 +1,44 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readDiceResult, dicePurpose } from '../src/dice-result.js'
+import { Context } from '@deepseek-ai/cordis'
+import { CryptoDiceProvider } from '../src/dice.js'
 
 const content = value => [{ type: 'text', text: JSON.stringify(value) }]
 const fixture = () => ({ schemaVersion: 1, purpose: 'Скрытность', values: { attack: 21 }, details: [{
   path: ['attack'], expression: '2d20kh1 + 4', dice: [{ sides: 20, results: [8, 17], keep: { mode: 'highest', count: 1 }, keptIndices: [1] }], value: 21,
 }] })
+
+test('version 2 replays mixed errors, booleans, references and modified chains in both response modes', t => {
+  const ctx = new Context(); t.after(() => ctx.fiber.dispose())
+  const faces = [6, 2, 1, 4, 17, 1]
+  new CryptoDiceProvider(ctx, {}, () => faces.shift())
+  const full = ctx.mayoriDice.roll({ explosion: 'd6!', reroll: 'd6ro<3', attack: 'd20', hit: '$attack >= 15', damage: 'if($hit,d1,0)', bad: 'd6!!', dependent: '$bad' })
+  const { details, ...compact } = full
+  const meta = { kind: 'mayori-dice', result: full }
+  assert.deepEqual(readDiceResult(content(full)), full)
+  assert.deepEqual(readDiceResult(content(compact), meta), full)
+  assert.equal(readDiceResult(content(compact)), null)
+  for (const mutate of [
+    value => { value.schemaVersion = 3 },
+    value => { value.errors = [] },
+    value => { value.errors[0].code = 'wrong' },
+    value => { value.values.hit = null },
+    value => { value.details[0].dice[0].draws[1].drawIndex = 0 },
+    value => { value.details[0].dice[0].draws[0].reason = 'invented' },
+    value => { value.details[0].dice[0].chains[0].indices = [99] },
+    value => { value.details[0].dice[0].chains[0].value = 9 },
+    value => { value.details[1].dice[0].draws[1].replaces = 99 },
+    value => { value.details[1].dice[0].keptIndices = [0, 1] },
+    value => { value.details[3].references[0].value = 20 },
+    value => { value.details[4].decisions[0].branch = 'else' },
+  ]) {
+    const damaged = structuredClone(full); mutate(damaged)
+    assert.equal(readDiceResult(content(damaged)), null)
+  }
+  assert.equal(readDiceResult(content({ ...compact, errors: [] }), meta), null)
+  assert.equal(faces.length, 0)
+})
 
 test('decodes current and unversioned historical results without recomputing any rolls', () => {
   const current = fixture()
@@ -36,7 +69,7 @@ test('compact results read a matching durable trace and reject missing, mismatch
 
 test('future versions, inconsistent totals, malformed paths and invalid keep indices use raw fallback', () => {
   for (const mutate of [
-    value => { value.schemaVersion = 2 },
+    value => { value.schemaVersion = 3 },
     value => { value.values.attack = 20 },
     value => { value.details[0].path = ['missing'] },
     value => { value.details[0].dice[0].results[0] = 21 },

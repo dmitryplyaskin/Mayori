@@ -3,6 +3,8 @@ import test from 'node:test'
 import * as React from 'react'
 import * as jsxRuntime from 'react/jsx-runtime'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { Context } from '@deepseek-ai/cordis'
+import { CryptoDiceProvider } from '../src/dice.js'
 
 async function loadBuiltClient(runtime = {}) {
   let handoff
@@ -242,6 +244,30 @@ test('dice card renders recorded totals, purpose, selection and discarded faces 
   assert.doesNotMatch(missingMetadata, /mayori-dice-total/)
 })
 
+test('dice version 2 card shows valid totals beside errors, boolean outcomes, references and reroll causes', async t => {
+  const { exports: client } = await loadBuiltClient({ react: React, jsx: jsxRuntime })
+  const ctx = new Context(); t.after(() => ctx.fiber.dispose())
+  const faces = [17, 1, 6, 2, 2]
+  new CryptoDiceProvider(ctx, {}, () => faces.shift())
+  const value = ctx.mayoriDice.roll({ attack: 'd20', hit: '$attack >= 15', damage: 'if($hit,d6ro<3!,0)', missed: 'false', bad: 'd6!!' })
+  const { details, ...compact } = value
+  const html = renderToStaticMarkup(React.createElement(client.DiceToolCard, {
+    phase: 'result', block: { content: [{ type: 'text', text: JSON.stringify(compact) }], meta: { kind: 'mayori-dice', result: value } },
+    useDisclosure: () => ({ expanded: true, toggle() {} }),
+  }))
+  assert.match(html, /Есть ошибки/)
+  assert.match(html, /Итог: <\/span>17/)
+  assert.match(html, /Итог: <\/span>Да/)
+  assert.match(html, /Итог: <\/span>Нет/)
+  assert.match(html, /Итог: <\/span>8/)
+  assert.match(html, /title="Переброс"/)
+  assert.match(html, /title="Взрыв"/)
+  assert.match(html, /Использовано:/)
+  assert.match(html, /Выполнена ветка «тогда»/)
+  assert.match(html, /Остальные результаты сохранены/)
+  assert.equal(faces.length, 0)
+})
+
 test('dice card supports pending, failed, interrupted, historical and future-format results without invented totals', async () => {
   const { exports: client } = await loadBuiltClient({ react: React, jsx: jsxRuntime })
   const render = (phase, block) => renderToStaticMarkup(React.createElement(client.DiceToolCard, {
@@ -259,7 +285,7 @@ test('dice card supports pending, failed, interrupted, historical and future-for
   assert.match(render('result', { isError: true, error: { code: 'ABORTED' }, content: [] }), /Бросок прерван/)
   const legacy = { values: [4], details: [{ path: [0], expression: 'd6', dice: [{ sides: 6, results: [4] }], value: 4 }] }
   assert.match(render('result', { content: [{ type: 'text', text: JSON.stringify(legacy) }] }), /Итог: <\/span>4/)
-  legacy.schemaVersion = 2
+  legacy.schemaVersion = 3
   const future = render('result', { content: [{ type: 'text', text: JSON.stringify(legacy) }] })
   assert.match(future, /Исходный результат/)
   assert.doesNotMatch(future, /mayori-dice-total/)

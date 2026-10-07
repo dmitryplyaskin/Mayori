@@ -14,6 +14,7 @@
   "files": [
     "index.js",
     "src/dice.js",
+    "src/dice-expression.js",
     "src/dice-tool.js",
     "src/dice-result.js",
     "src/character-card.js",

@@ -22,7 +22,10 @@ export function apply(ctx) {
         for (const [index, details] of [undefined, true].entries()) {
           const id = randomUUID()
           const args = JSON.stringify({ ...(details === undefined ? {} : { details }), purpose: 'Проверка механики бросков', rolls: {
-            attack: '2d20kh1 + 4', damage: { weapon: '4d6kh3 + 4' }, checks: ['2d20kl1', 'floor(2d8 / 2)', 'd37'],
+            attack: '2d20kh1 + 4', hit: '$attack >= 15', damage: { weapon: 'if($hit, 4d6!ro<3kh3 + 4, 0)' },
+            checks: ['2d20kl1', 'floor(2d8 / 2)', 'd37'], successes: 'count(5d10, >=8)',
+            save: 'd20 + 3 >= 14', baseDamage: '3d6', halfDamage: 'if($save, floor($baseDamage / 2), $baseDamage)',
+            broken: 'd6!!', dependent: '$broken + 1', isolated: 'd1', skipped: 'if(false,d6!,0)', explosion: 'd6!', reroll: 'd6r<3',
           } })
           yield { type: 'block-start', index, blockType: 'tool-call' }
           yield { type: 'tool-call-delta', index, id, name: 'rollDice', argumentsDelta: args }

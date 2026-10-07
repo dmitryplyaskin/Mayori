@@ -54,6 +54,8 @@
               maxExpressionLength: 1024
               maxExpressionDepth: 64
               maxPurposeLength: 300
+              maxExtraRollsPerDie: 100
+              maxDependencyDepth: 64
     - id: mayori-director
       name: dsh-mayori
       config:

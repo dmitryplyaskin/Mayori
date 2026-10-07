@@ -1,5 +1,6 @@
 /** Keyless integration assertions against an isolated DSH with dsh-smoke-probe.js. */
 import assert from 'node:assert/strict'
+import { readDiceResult } from '../src/dice-result.js'
 
 const origin = process.argv[2] ?? 'http://127.0.0.1:3090'
 async function call(path, payload) {
@@ -109,24 +110,36 @@ for (const [index, diceCall] of diceCalls.entries()) {
   const rolled = diceEvent.data.meta.result
   const { details, ...summary } = rolled
   assert.deepEqual(body, index === 1 ? rolled : summary)
-  assert.ok(!rolled.error, JSON.stringify(rolled))
-  assert.equal(rolled.schemaVersion, 1)
+  assert.deepEqual(readDiceResult(diceEvent.data.message.content, diceEvent.data.meta), rolled)
+  assert.deepEqual(rolled.errors.map(error => error.code), ['invalid_expression', 'dependency_failed'])
+  assert.equal(rolled.schemaVersion, 2)
   assert.equal(rolled.purpose, 'Проверка механики бросков')
-  assert.equal(rolled.details.length, 5)
+  assert.equal(rolled.details.length, 16)
   assert.ok(modelInput.messages.some(message => message.role === 'tool' && message.content[0]?.text === diceEvent.data.message.content[0].text),
     'The next model step receives exactly the chosen recorded response')
   for (const detail of rolled.details) {
     for (const dice of detail.dice) assert.ok(dice.results.every(face => Number.isInteger(face) && face >= 1 && face <= dice.sides))
   }
   assert.equal(rolled.values.attack, Math.max(...rolled.details[0].dice[0].results) + 4)
-  assert.equal(rolled.values.damage.weapon, [...rolled.details[1].dice[0].results].sort((a, b) => b - a).slice(0, 3).reduce((sum, face) => sum + face, 0) + 4)
-  assert.equal(rolled.values.checks[0], Math.min(...rolled.details[2].dice[0].results))
-  assert.equal(rolled.values.checks[1], Math.floor(rolled.details[3].dice[0].results.reduce((sum, face) => sum + face, 0) / 2))
-  assert.equal(rolled.values.checks[2], rolled.details[4].dice[0].results[0])
-  for (const detail of rolled.details.slice(0, 3)) {
+  const at = (...path) => rolled.details.find(detail => JSON.stringify(detail.path) === JSON.stringify(path))
+  assert.equal(rolled.values.hit, rolled.values.attack >= 15)
+  const damage = at('damage', 'weapon')
+  assert.equal(damage.decisions[0].branch, rolled.values.hit ? 'then' : 'else')
+  if (rolled.values.hit) assert.equal(rolled.values.damage.weapon, [...damage.dice[0].chains].sort((a, b) => b.value - a.value).slice(0, 3).reduce((sum, chain) => sum + chain.value, 0) + 4)
+  else { assert.equal(rolled.values.damage.weapon, 0); assert.equal(damage.dice.length, 0) }
+  assert.equal(rolled.values.checks[0], Math.min(...at('checks', 0).dice[0].results))
+  assert.equal(rolled.values.checks[1], Math.floor(at('checks', 1).dice[0].results.reduce((sum, face) => sum + face, 0) / 2))
+  assert.equal(rolled.values.checks[2], at('checks', 2).dice[0].results[0])
+  assert.equal(rolled.values.successes, at('successes').dice[0].results.filter(face => face >= 8).length)
+  assert.equal(rolled.values.halfDamage, rolled.values.save ? Math.floor(rolled.values.baseDamage / 2) : rolled.values.baseDamage)
+  assert.equal(rolled.values.broken, null); assert.equal(rolled.values.dependent, null); assert.equal(rolled.values.isolated, 1)
+  assert.equal(rolled.values.skipped, 0); assert.equal(at('skipped').dice.length, 0)
+  assert.equal(rolled.values.explosion, at('explosion').dice[0].chains[0].value)
+  assert.ok(rolled.values.reroll >= 3)
+  for (const detail of [at('attack'), at('checks', 0)]) {
     const dice = detail.dice[0]
     assert.equal(dice.keptIndices.length, dice.keep.count)
-    assert.equal(dice.results.length, detail.path[0] === 'damage' ? 4 : 2)
+    assert.equal(dice.results.length, 2)
   }
 }
 const completed = turn.events.findLast(event => event.type === 'assistant/message')
@@ -136,4 +149,4 @@ assert.deepEqual(forkedDice.messages.filter(message => message.role === 'tool'),
   'A fork retains the original dice results without rerolling')
 assert.deepEqual(forkedDice.events.filter(event => event.type === 'tool/result').map(event => event.data.meta),
   turn.events.filter(event => event.type === 'tool/result').map(event => event.data.meta), 'A fork retains complete dice presentation metadata')
-console.log(JSON.stringify({ ok: true, sessionId, loggedMessages: turn.messages.length, codingTools: 0, diceExpressions: 5, diceResponseModes: 2 }))
+console.log(JSON.stringify({ ok: true, sessionId, loggedMessages: turn.messages.length, codingTools: 0, diceExpressions: 16, diceResponseModes: 2 }))
