@@ -1,8 +1,9 @@
 import { PAGE_SIZE_OPTIONS } from './pagination-model.js'
+import { Select } from './select.jsx'
 
 export function Pagination({ pagination, total, pageSize, onPage, onPageSize }) {
   return <nav className="mayori-pagination" aria-label="Страницы списка">
-    <label className="mayori-filter-control"><span>На странице</span><select aria-label="На странице" value={pageSize} onChange={event => { onPageSize(Number(event.target.value)) }}>{PAGE_SIZE_OPTIONS.map(size => <option key={size} value={size}>{size}</option>)}</select></label>
+    <div className="mayori-filter-control"><span>На странице</span><Select aria-label="На странице" value={pageSize} onChange={value => onPageSize(Number(value))} options={PAGE_SIZE_OPTIONS.map(size => ({ value: size, label: size }))} /></div>
     <span role="status">{total === 0 ? '0' : `${pagination.start + 1}–${pagination.end}`} из {total}</span>
     <div className="mayori-page-actions">
       <button type="button" className="mayori-secondary-button" disabled={pagination.page <= 1} onClick={() => { onPage(pagination.page - 1) }} aria-label="Предыдущая страница">‹</button>

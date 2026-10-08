@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { remapChildProps } from '../../../client/infrastructure/slot-mirror.js'
+import { Select } from '../../../client/components/select.jsx'
 import { deduplicateViews } from './context.js'
 import { contextTrajectorySnapshot } from './snapshot.js'
 
@@ -36,20 +37,13 @@ export function ContextTrajectory({ stock: Stock, stockChildren, childPrefix, co
   const journal = mode === 'journal' || props.viewRequest?.focus != null
   return <div className="mayori-trajectory">
     <div className="mayori-trajectory-controls">
-      <label>Показывать <select aria-label="Показывать" value={journal ? 'journal' : 'context'} onChange={event => {
-        props.completeViewRequest?.(); setMode(event.target.value)
-      }}>
-        <option value="context">Контекст запроса</option>
-        <option value="journal">Полный журнал</option>
-      </select></label>
+      <div className="mayori-trajectory-field"><span>Показывать</span><Select aria-label="Показывать" value={journal ? 'journal' : 'context'} onChange={value => {
+        props.completeViewRequest?.(); setMode(value)
+      }} options={[{ value: 'context', label: 'Контекст запроса' }, { value: 'journal', label: 'Полный журнал' }]} /></div>
       {!journal && <>
-        <label>Запрос <select aria-label="Запрос" value={selection} onChange={event => { setSelection(event.target.value) }}>
-          <option value="latest">Последний запрос</option>
-          <option value="current">Текущий сохранённый контекст</option>
-          {snapshot.value?.requests.map(request => <option key={request.seq} value={request.seq}>
-            {`№${request.number} · Ход ${request.turn}, шаг ${request.step}${request.failed ? ' · Неудачная попытка' : ''}`}
-          </option>)}
-        </select></label>
+        <div className="mayori-trajectory-field"><span>Запрос</span><Select aria-label="Запрос" value={selection} onChange={setSelection}
+          options={[{ value: 'latest', label: 'Последний запрос' }, { value: 'current', label: 'Текущий сохранённый контекст' },
+            ...(snapshot.value?.requests ?? []).map(request => ({ value: request.seq, label: `№${request.number} · Ход ${request.turn}, шаг ${request.step}${request.failed ? ' · Неудачная попытка' : ''}` }))]} /></div>
         <button type="button" onClick={refresh} disabled={snapshot.status === 'loading'}>Обновить</button>
       </>}
     </div>

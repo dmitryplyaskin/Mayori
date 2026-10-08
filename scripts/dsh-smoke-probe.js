@@ -100,6 +100,8 @@ export function apply(ctx) {
           value = JSON.parse(result.content[0].text)
         } else if (input.action === 'fork') {
           value = await ctx.sessionController.fork({ sessionId: input.sessionId, atSeq: input.atSeq })
+        } else if (input.action === 'active-sessions') {
+          value = ctx.agents.list().map(agent => agent.id)
         } else if (input.action === 'presets') {
           value = { defaultId: ctx.agentPresets.defaultId, presets: await ctx.agentPresets.list(), inventory: await ctx.agentPresets.compositionInventory() }
         } else if (input.action === 'default-preset') {

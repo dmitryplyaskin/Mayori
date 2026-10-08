@@ -27,6 +27,10 @@ async function loadBuiltClient(runtime = {}) {
       }
       if (id === 'react/jsx-runtime') return runtime.jsx ?? { Fragment: Symbol('Fragment'), jsx() {}, jsxs() {} }
       if (id === 'react-dom') return { createPortal(value) { return value } }
+      if (id === '@deepseek-ai/dsh-client-ui-primitives') return runtime.primitives ?? {
+        Menu({ anchor }) { return anchor },
+        IconChevronDownOutlineRegular() { return null },
+      }
       throw new Error(`unexpected client runtime module: ${id}`)
     })
     return { handoff, exports, required }
@@ -103,7 +107,7 @@ test('registers reversible Mayori client contributions', async () => {
       'settings.section',
       'tool.call.toolview', 'tool.call.toolview',
       'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark', 'sidebar.workspaces', 'sidebar', 'shell.leading',
-      'main', 'sidebar.panellist', 'main.conversation', 'main', 'main', 'main', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'conversation.chat.node', 'conversation.view', 'conversation.session.header',
+      'main', 'sidebar.panellist', 'main.conversation', 'main', 'main', 'main', 'main', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'conversation.chat.node', 'conversation.view', 'conversation.session.header',
     ])
     for (const slot of slotInjections) slot.callback()
     assert.equal(registrations.find(item => item.options.name === 'tool.call.toolview').options.key, 'rollDice')
@@ -114,7 +118,9 @@ test('registers reversible Mayori client contributions', async () => {
     assert.equal(typeof slotRegistration.component, 'function')
     const sidebar = registrations.find(item => item.options.key === 'mayori-characters').options.inject()
     assert.equal(registrations.find(item => item.options.key === 'mayori-history').options.inject().history, provided.mayoriHistory)
-    assert.deepEqual(registrations.filter(item => item.options.name === 'sidebar.panellist').map(item => [item.options.id, item.options.label]), [['mayori-home', 'Главная'], ['mayori-characters', 'Персонажи'], ['mayori-history', 'История чатов'], ['mayori-personas', 'Персоны']])
+    assert.deepEqual(registrations.filter(item => item.options.name === 'sidebar.panellist').map(item => [item.options.id, item.options.label]), [['mayori-home', 'Главная'], ['mayori-characters', 'Персонажи'], ['mayori-history', 'История чатов'], ['mayori-personas', 'Персоны'], ['mayori-presets', 'Пресеты']])
+    assert.equal(registrations.find(item => item.options.key === 'mayori-presets').options.inject().presets, provided.mayoriPresets)
+    assert.equal(registrations.find(item => item.options.key === 'mayori-presets').options.inject().presetFor('session'), provided.mayoriSessionPresets.forSession('session'))
     assert.equal(registrations.find(item => item.options.key === 'mayori-home').options.inject().history, provided.mayoriHistory)
     assert.equal(registrations.find(item => item.options.name === 'main.conversation').options.priority, -100)
     assert.equal(registrations.find(item => item.options.key === 'mayori-personas').options.inject().personas, provided.mayoriPersonas)
@@ -246,7 +252,7 @@ test('built client artifact registers a lazy DSH module factory', async () => {
   assert.equal(handoff.id, 'dsh-mayori')
   assert.equal(typeof exports.apply, 'function')
   assert.deepEqual(exports.inject, ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout'])
-  assert.deepEqual(required.sort(), ['react', 'react-dom', 'react/jsx-runtime'])
+  assert.deepEqual(required.sort(), ['@deepseek-ai/dsh-client-ui-primitives', 'react', 'react-dom', 'react/jsx-runtime'])
 })
 
 test('dice card renders recorded totals, purpose, selection and discarded faces with native controls', async () => {

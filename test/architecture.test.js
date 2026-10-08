@@ -46,7 +46,7 @@ test('source layers resolve imports, keep platform boundaries and contain no dep
       if (!specifier.startsWith('.')) {
         if (ownLayer !== 'host') assert.ok(!specifier.startsWith('node:'), `${portable(file)} imports ${specifier}`)
         if (ownLayer === 'shared') assert.fail(`${portable(file)} depends on platform package ${specifier}`)
-        if (ownLayer === 'client') assert.ok(!specifier.startsWith('@deepseek-ai/'), `${portable(file)} imports Host SDK ${specifier}`)
+        if (ownLayer === 'client') assert.ok(!specifier.startsWith('@deepseek-ai/') || specifier === '@deepseek-ai/dsh-client-ui-primitives', `${portable(file)} imports Host SDK ${specifier}`)
         if (ownLayer === 'host') assert.ok(!/^react(?:-dom)?(?:\/|$)/.test(specifier), `${portable(file)} imports browser UI`)
         continue
       }

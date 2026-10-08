@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
+import { Select } from '../../../client/components/select.jsx'
 import { branchRows } from '../domain/revisions.js'
 
 function RevisionIcon({ repeat }) {
@@ -128,8 +129,6 @@ export function RevisionBranchNavigation({ sessionId, sessions, open }) {
   const rows = branchRows(snapshot, sessionId)
   if (rows.length < 2) return null
   return <div className="mayori-revision-branches">
-    <label>Ветка чата <select value={sessionId} onChange={event => { open(event.target.value) }}>
-      {rows.map(row => <option key={row.id} value={row.id}>{row.label}</option>)}
-    </select></label>
+    <span>Ветка чата</span><Select aria-label="Ветка чата" value={sessionId} onChange={open} options={rows.map(row => ({ value: row.id, label: row.label }))} />
   </div>
 }

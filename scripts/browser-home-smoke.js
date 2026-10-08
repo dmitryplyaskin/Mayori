@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import { mkdir, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { chooseMenu } from './browser-select.js'
 
 const require = createRequire(import.meta.url)
 const { chromium } = require(process.env.MAYORI_PLAYWRIGHT_PATH ?? 'playwright')
@@ -87,7 +88,7 @@ try {
   assert.equal(await page.locator('.mayori-card').count(), 20)
   assert.equal(await page.getByText('Начало истории', { exact: true }).count(), 0)
   assert.equal(await page.getByText('Приветствие', { exact: true }).count(), 0)
-  assert.equal(await page.getByLabel('Карточек в ряд').inputValue(), '5')
+  assert.equal(await page.getByRole('button', { name: 'Карточек в ряд', exact: true }).getAttribute('data-value'), '5')
   const geometry = await page.evaluate(() => {
     const grid = document.querySelector('.mayori-card-grid')
     return { columns: getComputedStyle(grid).gridTemplateColumns.split(' ').length,
@@ -101,20 +102,20 @@ try {
   await page.getByRole('button', { name: 'Следующая страница' }).click()
   await page.getByRole('status').filter({ hasText: '41–45 из 45' }).waitFor()
   assert.equal(await page.locator('.mayori-card').count(), 5)
-  await page.getByLabel('Автор', { exact: true }).selectOption('Small group')
+  await chooseMenu(page, 'Автор', 'Small group')
   await page.getByRole('status').filter({ hasText: '1–3 из 3' }).waitFor()
   assert.equal(await page.getByLabel('Страница', { exact: true }).inputValue(), '1')
   await page.getByRole('button', { name: 'Сбросить фильтры' }).click()
-  await page.getByLabel('Карточек в ряд').selectOption('7')
-  await page.getByLabel('На странице', { exact: true }).selectOption('40')
+  await chooseMenu(page, 'Карточек в ряд', '7')
+  await chooseMenu(page, 'На странице', '40')
   await page.getByRole('status').filter({ hasText: '1–40 из' }).waitFor()
   await page.reload()
   await page.getByRole('button', { name: 'Персонажи', exact: true }).click()
-  assert.equal(await page.getByLabel('Карточек в ряд').inputValue(), '7')
-  assert.equal(await page.getByLabel('На странице', { exact: true }).inputValue(), '40')
-  await page.getByLabel('Карточек в ряд').selectOption('3')
+  assert.equal(await page.getByRole('button', { name: 'Карточек в ряд', exact: true }).getAttribute('data-value'), '7')
+  assert.equal(await page.getByRole('button', { name: 'На странице', exact: true }).getAttribute('data-value'), '40')
+  await chooseMenu(page, 'Карточек в ряд', '3')
   assert.equal(await page.locator('.mayori-card-grid').evaluate(grid => getComputedStyle(grid).gridTemplateColumns.split(' ').length), 3)
-  await page.getByLabel('Карточек в ряд').selectOption('5')
+  await chooseMenu(page, 'Карточек в ряд', '5')
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => { if (theme === 'dark') document.body.setAttribute('data-ds-dark-theme', ''); else document.body.removeAttribute('data-ds-dark-theme') }, theme)
     for (const width of [1600, 1280, 390, 320]) {
@@ -153,7 +154,7 @@ try {
   await page.getByLabel('Поиск', { exact: true }).fill('Empty opening regression')
   await page.locator('.mayori-card-edit').first().click()
   const info = page.getByRole('dialog')
-  await info.getByLabel('Начало истории', { exact: true }).selectOption('1')
+  await chooseMenu(page, 'Начало истории', 'Альтернатива 1')
   await info.getByRole('button', { name: 'Играть', exact: true }).click()
   await page.locator('.mayori-message-character').filter({ hasText: 'Alternative' }).waitFor()
   assert.equal(await page.getByRole('button', { name: /new session/i }).count(), 0)

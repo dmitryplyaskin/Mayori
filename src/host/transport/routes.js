@@ -4,7 +4,7 @@ const ROUTE_PATH = '/mayori/characters'
 const message = error => error instanceof Error ? error.message : String(error)
 
 /** Adapt HTTP requests to already constructed capability services. */
-export function createMayoriRoute({ library, personas, characterSessions, trajectoryContext, historyDetails, messageRevisions }) {
+export function createMayoriRoute({ library, personas, presets, sessionPresets, characterSessions, trajectoryContext, historyDetails, messageRevisions }) {
   const route = {
     kind: 'prefix',
     path: ROUTE_PATH,
@@ -28,9 +28,15 @@ export function createMayoriRoute({ library, personas, characterSessions, trajec
         else if (endpoint === 'history-details') sendJson(res, 200, { ok: true, value: await historyDetails.read(payload?.ids) })
         else if (endpoint === 'persona-list') sendJson(res, 200, { ok: true, value: await personas.list() })
         else if (endpoint === 'persona-save') sendJson(res, 200, { ok: true, value: await personas.save(payload) })
-        else if (['persona-remove', 'persona-default', 'session-state', 'swipe', 'session-persona', 'trajectory-context', 'message-inspect', 'message-edit', 'message-regenerate'].includes(endpoint)) {
+        else if (endpoint === 'preset-list') sendJson(res, 200, { ok: true, value: await presets.list() })
+        else if (endpoint === 'preset-save') sendJson(res, 200, { ok: true, value: await presets.save(payload) })
+        else if (['preset-remove', 'preset-default', 'session-preset-state', 'session-preset', 'persona-remove', 'persona-default', 'session-state', 'swipe', 'session-persona', 'trajectory-context', 'message-inspect', 'message-edit', 'message-regenerate'].includes(endpoint)) {
           if (!payload || typeof payload !== 'object') throw new TypeError('Некорректный запрос.')
           let value
+          if (endpoint === 'preset-remove') { await presets.remove(payload.id); value = { removed: true } }
+          if (endpoint === 'preset-default') { await presets.setDefault(payload.id); value = { saved: true } }
+          if (endpoint === 'session-preset-state') value = await sessionPresets.state(payload.sessionId)
+          if (endpoint === 'session-preset') value = await sessionPresets.select(payload.sessionId, payload.presetId)
           if (endpoint === 'persona-remove') { await personas.remove(payload.id); value = { removed: true } }
           if (endpoint === 'persona-default') { await personas.setDefault(payload.id); value = { saved: true } }
           if (endpoint === 'session-state') value = await characterSessions.state(payload.sessionId)

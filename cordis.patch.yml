@@ -5,9 +5,7 @@
   config:
     includeHarnessIdentity: false
     includeRuntimeContext: false
-    personaPrefix: >-
-      You are Mayori, an AI game master for persistent, collaborative role-playing games.
-      Facilitate play as a fair and responsive narrator.
+    personaPrefix: ''
     personaSuffix: ''
 
 - id: web-runtime
@@ -41,7 +39,7 @@
       config:
         id: mayori
         name: Mayori
-        description: Collaborative, character-driven role-playing.
+        description: Mayori tools and capabilities.
         plugins:
           - id: mayori-plugins
             name: '@deepseek-ai/cordis-plugin-group'
@@ -56,10 +54,7 @@
     - id: mayori-director
       name: dsh-mayori
       config:
-        narratorName: Mayori
-        languagePolicy: Reply in the language used by the player unless they request another.
-        campaignStyle: Collaborative, character-driven role-playing with consequential choices.
-        additionalInstructions: ''
         charactersPath: !!js dshHomePath('mayori', 'characters')
         campaignsPath: !!js dshHomePath('mayori', 'campaigns')
         personasPath: !!js dshHomePath('mayori', 'personas')
+        presetsPath: !!js dshHomePath('mayori', 'presets')

@@ -8,6 +8,7 @@ import { validateCardId, validateSessionId, characterSnapshot, buildCharacterCon
 import { CharacterSessionService } from './service.js'
 import { FileSystemCharacterSessionStore } from './store.js'
 import { greetingSeed } from './greeting.js'
+import { PRESET_SOURCE } from '../../presets/shared/preset.js'
 
 const CHARACTER_CONTEXT_NAME = 'mayori:active-character'
 const CHARACTER_CONTEXT_VARIABLE = 'mayori_active_character_text'
@@ -91,7 +92,9 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
   _assertEmpty(agent) {
     this._assertLive(agent)
     if (agent.status !== 'idle') throw new Error('Дождитесь окончания ответа перед выбором персонажа.')
-    if (agent.session.surface.nodes.length > 0) {
+    const events = agent.session.snapshotEvents()
+    if (agent.session.surface.nodes.some(seq => events[seq]?.type !== 'system/message'
+      && !(events[seq]?.type === 'user/message' && [PRESET_SOURCE, 'runtime-context'].includes(events[seq].data.source?.kind)))) {
       throw new Error('Для другого персонажа создайте новый чат из галереи.')
     }
   }
@@ -176,7 +179,7 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
   _canSwipe(agent, character) {
     if (!character.greeting || agent.status !== 'idle') return false
     const events = agent.session.snapshotEvents()
-    return !events.some(event => event.type === 'user/message' && event.data.source?.kind !== 'mayori-greeting'
+    return !events.some(event => event.type === 'user/message' && !['mayori-greeting', 'runtime-context', PRESET_SOURCE].includes(event.data.source?.kind)
       || event.type === 'turn/start' && event.data.turn > 1)
       && !(agent.inbox?.nextTurn.length || agent.inbox?.nextStep.length)
   }

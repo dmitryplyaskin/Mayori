@@ -18,6 +18,7 @@ async function loadCard() {
       if (id === 'react') return React
       if (id === 'react/jsx-runtime') return jsx
       if (id === 'react-dom') return { createPortal(value) { return value } }
+      if (id === '@deepseek-ai/dsh-client-ui-primitives') return {}
       throw new Error(`Unexpected module: ${id}`)
     }).CheckToolCard
   } finally {

@@ -9,6 +9,8 @@ import { MayoriSidebar, MayoriMark, MayoriBrandName, MayoriNavigationSidebar, Ma
 import { RemotePersonaProvider } from '../features/personas/client/personas.js'
 import { RemoteCharacterChatProvider } from '../features/character-session/client/chat.js'
 import { PersonaPanel, PersonaIcon } from '../features/personas/client/panel.jsx'
+import { RemoteRoleplayPresetProvider, RemoteSessionPresetProvider } from '../features/presets/client/presets.js'
+import { PresetPanel, PresetIcon } from '../features/presets/client/panel.jsx'
 import { GreetingTurnTail } from '../features/character-session/client/greeting.jsx'
 import { CharacterMessage } from '../features/character-session/client/messages.jsx'
 import { RemoteMessageRevisionProvider } from '../features/message-revisions/client/revisions.js'
@@ -39,6 +41,14 @@ export function apply(ctx) {
   ctx.provide('mayoriCharacters', library)
   const personas = new RemotePersonaProvider()
   ctx.provide('mayoriPersonas', personas)
+  const presets = new RemoteRoleplayPresetProvider()
+  ctx.provide('mayoriPresets', presets)
+  const sessionPresets = new Map()
+  const presetFor = sessionId => {
+    if (!sessionPresets.has(sessionId)) sessionPresets.set(sessionId, new RemoteSessionPresetProvider(sessionId))
+    return sessionPresets.get(sessionId)
+  }
+  ctx.provide('mayoriSessionPresets', { forSession: presetFor })
   const chats = new Map()
   const chatFor = sessionId => {
     if (!chats.has(sessionId)) chats.set(sessionId, new RemoteCharacterChatProvider(sessionId))
@@ -157,6 +167,9 @@ export function apply(ctx) {
   ctx.slots.inject('main', () => ctx.slots.register({
     name: 'main', key: 'mayori-personas', inject: () => ({ personas, sessions: ctx.sessions, chatFor }),
   }, PersonaPanel))
+  ctx.slots.inject('main', () => ctx.slots.register({
+    name: 'main', key: 'mayori-presets', inject: () => ({ presets, sessions: ctx.sessions, presetFor }),
+  }, PresetPanel))
   ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
     name: 'sidebar.panellist', id: 'mayori-characters', order: -20, label: 'Персонажи',
   }, CharacterGalleryIcon))
@@ -166,6 +179,9 @@ export function apply(ctx) {
   ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
     name: 'sidebar.panellist', id: 'mayori-personas', order: -15, label: 'Персоны',
   }, PersonaIcon))
+  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+    name: 'sidebar.panellist', id: 'mayori-presets', order: -12, label: 'Пресеты',
+  }, PresetIcon))
   ctx.slots.inject('conversation.chat.node', () => ctx.effect(() => {
     const installed = new Set()
     const disposers = []

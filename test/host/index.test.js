@@ -35,7 +35,7 @@ test('rejects blank required configuration', () => {
   )
 })
 
-test('registers one ordered system-prompt section', async () => {
+test('registers a user-owned preset catalog without global role-playing instructions', async () => {
   const sections = []
   const provided = []
   let rpcRegistration
@@ -79,23 +79,24 @@ test('registers one ordered system-prompt section', async () => {
   })
   await registrationReady
 
-  assert.equal(sections.length, 1)
-  assert.equal(sections[0].name, 'mayori:director')
-  assert.equal(sections[0].order, 10)
-  assert.match(sections[0].text, /A compact one-shot\./)
+  assert.equal(sections.length, 0)
   assert.equal(provided[0].name, 'mayoriCharacters')
   assert.equal(provided[0].service.constructor.name, 'FileSystemCharacterLibraryProvider')
   assert.match(provided[0].service.root, /test-characters$/)
   assert.equal(provided[1].name, 'mayoriPersonas')
   assert.equal(provided[1].service.constructor.name, 'FileSystemPersonaProvider')
-  assert.equal(provided[2].name, 'mayoriCharacterSessions')
-  assert.equal(provided[2].service.constructor.name, 'PersistentCharacterSessionProvider')
-  assert.match(provided[2].service.defaultCampaignPath, /test-campaigns[\\/]default$/)
-  assert.equal(provided[3].name, 'mayoriTrajectoryContext')
-  assert.equal(provided[3].service.constructor.name, 'SessionTrajectoryContextProvider')
-  assert.equal(provided[4].name, 'mayoriHistoryDetails')
-  assert.equal(provided[5].name, 'mayoriMessageRevisions')
-  assert.equal(provided[5].service.constructor.name, 'SessionMessageRevisionProvider')
+  assert.equal(provided[2].name, 'mayoriPresets')
+  assert.equal(provided[2].service.constructor.name, 'FileSystemRoleplayPresetProvider')
+  assert.match(provided[2].service.store.initialPreset.instructions, /A compact one-shot\./)
+  assert.equal(provided[3].name, 'mayoriCharacterSessions')
+  assert.equal(provided[3].service.constructor.name, 'PersistentCharacterSessionProvider')
+  assert.match(provided[3].service.defaultCampaignPath, /test-campaigns[\\/]default$/)
+  assert.equal(provided[4].name, 'mayoriSessionPresets')
+  assert.equal(provided[5].name, 'mayoriTrajectoryContext')
+  assert.equal(provided[5].service.constructor.name, 'SessionTrajectoryContextProvider')
+  assert.equal(provided[6].name, 'mayoriHistoryDetails')
+  assert.equal(provided[7].name, 'mayoriMessageRevisions')
+  assert.equal(provided[7].service.constructor.name, 'SessionMessageRevisionProvider')
   assert.equal(rpcRegistration.kind, 'prefix')
   assert.equal(rpcRegistration.path, '/mayori/characters')
 })

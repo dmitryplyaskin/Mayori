@@ -21,8 +21,8 @@ test('HTTP adapter dispatches each existing endpoint to its owning capability wi
   const service = name => new Proxy({}, {
     get: (_target, method) => (...args) => { calls.push([name, method, args]); return `${name}.${method}` },
   })
-  const route = createMayoriRoute(Object.fromEntries(['library', 'personas', 'characterSessions', 'trajectoryContext', 'historyDetails', 'messageRevisions'].map(name => [name, service(name)])))
-  const input = { id: 'resource', ids: ['session'], sessionId: 'session', characterId: 'character', workspaceId: 'workspace', greetingIndex: 1, index: 2, personaId: 'persona', selection: 'current', seq: 9, text: 'Changed' }
+  const route = createMayoriRoute(Object.fromEntries(['library', 'personas', 'presets', 'sessionPresets', 'characterSessions', 'trajectoryContext', 'historyDetails', 'messageRevisions'].map(name => [name, service(name)])))
+  const input = { id: 'resource', ids: ['session'], sessionId: 'session', characterId: 'character', workspaceId: 'workspace', greetingIndex: 1, index: 2, personaId: 'persona', presetId: 'preset', selection: 'current', seq: 9, text: 'Changed' }
   const cases = [
     ['list', 'library', 'list', [], { cards: 'library.list' }],
     ['import', 'library', 'import', [input], 'library.import'],
@@ -32,6 +32,12 @@ test('HTTP adapter dispatches each existing endpoint to its owning capability wi
     ['persona-save', 'personas', 'save', [input], 'personas.save'],
     ['persona-remove', 'personas', 'remove', [input.id], { removed: true }],
     ['persona-default', 'personas', 'setDefault', [input.id], { saved: true }],
+    ['preset-list', 'presets', 'list', [], 'presets.list'],
+    ['preset-save', 'presets', 'save', [input], 'presets.save'],
+    ['preset-remove', 'presets', 'remove', [input.id], { removed: true }],
+    ['preset-default', 'presets', 'setDefault', [input.id], { saved: true }],
+    ['session-preset-state', 'sessionPresets', 'state', [input.sessionId], 'sessionPresets.state'],
+    ['session-preset', 'sessionPresets', 'select', [input.sessionId, input.presetId], 'sessionPresets.select'],
     ['prepare-campaign', 'characterSessions', 'prepareCampaign', [], 'characterSessions.prepareCampaign'],
     ['start', 'characterSessions', 'create', [input.characterId, input.workspaceId, input.greetingIndex], 'characterSessions.create'],
     ['play', 'characterSessions', 'select', [input.sessionId, input.characterId], 'characterSessions.select'],

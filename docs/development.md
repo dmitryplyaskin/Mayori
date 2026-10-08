@@ -23,6 +23,12 @@ pnpm run bundle
 
 Команда создаёт `lib/client.js` и source map. Оба artifact входят в Git, чтобы установка из GitHub не выполняла код сборки на машине пользователя.
 
+Выпадающие поля используют общий `src/client/components/select.jsx`: тот же `Menu` и `IconChevronDownOutlineRegular` из публичного `@deepseek-ai/dsh-client-ui-primitives`, что и штатные настройки DSH. Примитивы предоставляет таблица browser platform modules Web DSH; сборка оставляет этот import внешним рядом с React. Копии меню, его CSS и дополнительная plugin registration не нужны. `Menu` владеет portal, размещением, прокруткой, клавиатурой, закрытием и восстановлением фокуса. Поле передаёт подпись, выбранный ID, варианты и действие; числовые значения преобразуются в потребителе.
+
+Меню по умолчанию выводится через portal, чтобы его не обрезали панели. Поле приветствия внутри native `<dialog>` использует штатный inline-режим `Menu`: список остаётся внутри top layer диалога. Повторный выбор того же значения закрывает меню без записи; доступное описание кнопки включает выбранное значение.
+
+Во временном профиле browser-сценарии `browser-presets-smoke.js`, `browser-home-smoke.js` и `browser-revisions-smoke.js` покрывают все 11 полей: пресеты, фильтры/колонки галереи, пагинацию, приветствие, ветки и контекст запросов. Проверки используют реальные `menuitem`, включая клавиатуру, Escape/возврат фокуса, закрытие снаружи, длинные списки и узкий экран. Общие browser-операции выбора находятся в `scripts/browser-select.js`.
+
 ## Где размещать изменения
 
 Полное дерево и правила зависимостей описаны в [структуре исходников](architecture.md#структура-исходников).
@@ -94,13 +100,15 @@ pnpm dsh --profile mayori
 Отдельный путь credentials не даёт настройкам Mayori перезаписать общее
 `$DSH_HOME/.credentials.yaml`.
 
-В dump должны присутствовать слой `dsh-mayori`, роль Mayori в `system-prompt`, один `preset-mayori` с изолированным group и `dsh-mayori/optional-plugins`, корневой entry `mayori-plugin-settings`, default `mayori`, director и пути каталогов. Browser module должен добавить **Настройки → Mayori → Плагины**. Проверьте отключение всех tools и независимость трёх переключателей в существующем чате, перезапуск и чтение ранее сохранённого броска. [Руководство](plugins.md).
+В dump должны присутствовать слой `dsh-mayori`, пустой `system-prompt.personaPrefix`, один агентный `preset-mayori` с изолированным group и `dsh-mayori/optional-plugins`, корневой entry `mayori-plugin-settings`, default `mayori`, director и пути каталогов, включая `presetsPath`. Игровых инструкций в агентном пресете быть не должно. Browser module добавляет вкладку **Пресеты** и **Настройки → Mayori → Плагины**. Проверьте отключение всех tools и независимость трёх переключателей в существующем чате, перезапуск и чтение ранее сохранённого броска. [Руководства по пресетам](presets.md) и [плагинам](plugins.md).
 
 Для проверки опубликованного пакета вместо source launcher используйте `pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.1`. Все проверки делайте с отдельным `DSH_HOME`; реальный профиль игрока автоматически не переустанавливается.
 
 При проверке системной инструкции убедитесь, что в `--dump-config` у `system-prompt` выставлены `includeHarnessIdentity: false` и `includeRuntimeContext: false`, у `web-runtime` — `surfaceContext: false`, у `tools` — `mode: native`, а `ui-deliverables` отключён. Web runtime должен сохранить `openBrowser`, `printUrl`, `publicUrl` и `trustedHosts`: config строки заменяется целиком, поэтому все параметры запуска повторены в bundle. Для проверки независимости от coding presentation задайте `DSH_TOOLS_MODE=ptc` в тестовом процессе. Keyless smoke должен подтвердить, что фактический system message содержит роль ведущего, agency и карточку, а технические Web/source инструкции, file-reference и `present` guidance, runtime snapshots, coding tools и `run_code` отсутствуют.
 
 ### Keyless smoke
+
+`node scripts/presets-smoke.js http://127.0.0.1:3094` проверяет библиотеку игровых пресетов, новый default, применение, модельный system prompt, буквальные макросы, удаление, отключение и fork из старого префикса. `node scripts/browser-presets-smoke.js <URL-test-Host> <output-directory>` проверяет создание и выбор через UI, сохранение и явное применение, дублирование, удаление, клавиатуру и reflow на 320 px. Оба сценария требуют временный профиль с probe.
 
 В изолированном профиле добавьте тестовый overlay (не в профиль игрока):
 

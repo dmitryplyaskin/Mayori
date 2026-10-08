@@ -8,8 +8,9 @@ const configuredDshHome = typeof process.env.DSH_HOME === 'string' && process.en
 const DEFAULT_CHARACTERS_PATH = join(resolve(configuredDshHome), 'mayori', 'characters')
 const DEFAULT_CAMPAIGNS_PATH = join(resolve(configuredDshHome), 'mayori', 'campaigns')
 const DEFAULT_PERSONAS_PATH = join(resolve(configuredDshHome), 'mayori', 'personas')
+const DEFAULT_PRESETS_PATH = join(resolve(configuredDshHome), 'mayori', 'presets')
 
-/** Configuration accepted by the Mayori director plugin. */
+/** Host paths and legacy defaults for first-time preset catalog initialization. */
 export const Config = z.object({
   narratorName: z.string().default('Mayori'),
   languagePolicy: z.string().default('Reply in the language used by the player unless they request another.'),
@@ -18,6 +19,7 @@ export const Config = z.object({
   charactersPath: z.string().default(DEFAULT_CHARACTERS_PATH),
   campaignsPath: z.string().default(DEFAULT_CAMPAIGNS_PATH),
   personasPath: z.string().default(DEFAULT_PERSONAS_PATH),
+  presetsPath: z.string().default(DEFAULT_PRESETS_PATH),
 })
 
 const DEFAULTS = Object.freeze({
@@ -28,6 +30,7 @@ const DEFAULTS = Object.freeze({
   charactersPath: DEFAULT_CHARACTERS_PATH,
   campaignsPath: DEFAULT_CAMPAIGNS_PATH,
   personasPath: DEFAULT_PERSONAS_PATH,
+  presetsPath: DEFAULT_PRESETS_PATH,
 })
 
 /** Resolve Loader-normalized config and fail loudly for direct invalid calls. */
@@ -54,5 +57,7 @@ export function resolveConfig(config = {}) {
   resolved.campaignsPath = resolve(resolved.campaignsPath.trim())
   if (typeof resolved.personasPath !== 'string' || !resolved.personasPath.trim()) throw new TypeError('personasPath must be a non-empty string')
   resolved.personasPath = resolve(resolved.personasPath.trim())
+  if (typeof resolved.presetsPath !== 'string' || !resolved.presetsPath.trim()) throw new TypeError('presetsPath must be a non-empty string')
+  resolved.presetsPath = resolve(resolved.presetsPath.trim())
   return resolved
 }

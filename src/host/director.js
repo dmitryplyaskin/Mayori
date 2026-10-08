@@ -1,7 +1,7 @@
 import { resolveConfig } from './config.js'
 
 /**
- * Render Mayori's stable game-master rules from deployment configuration.
+ * Build the initial editable preset from legacy deployment configuration.
  *
  * @param {object} [config] - Loader-normalized plugin configuration.
  * @returns {string} The model-facing prompt section.

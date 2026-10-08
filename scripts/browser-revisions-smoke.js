@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { chooseMenu, chooseMenuValue } from './browser-select.js'
 
 const require = createRequire(import.meta.url)
 const { chromium } = require(process.env.MAYORI_PLAYWRIGHT_PATH ?? 'playwright')
@@ -53,18 +54,31 @@ try {
     await page.locator('.mayori-message-actions').first().waitFor()
   }
   const branch = async from => {
-    const picker = page.getByRole('combobox', { name: 'Ветка чата' })
+    const picker = page.getByRole('button', { name: 'Ветка чата', exact: true })
     await picker.waitFor()
-    await page.waitForFunction(from => document.querySelector('.mayori-revision-branches select')?.value !== from, from)
-    return picker.inputValue()
+    await page.waitForFunction(from => document.querySelector('.mayori-revision-branches .mayori-select-trigger')?.dataset.value !== from, from)
+    return picker.getAttribute('data-value')
   }
   const choose = async id => {
-    await page.getByRole('combobox', { name: 'Ветка чата' }).selectOption(id)
-    await page.waitForFunction(id => document.querySelector('.mayori-revision-branches select')?.value === id, id)
+    await chooseMenuValue(page, 'Ветка чата', id)
+    await page.waitForFunction(id => document.querySelector('.mayori-revision-branches .mayori-select-trigger')?.dataset.value === id, id)
   }
   const settle = id => rpc('/_mayori-smoke', { action: 'settle', sessionId: id })
   const editor = page.getByRole('dialog', { name: 'Редактировать сообщение', exact: true })
   await openChat(fixture.source)
+  await page.getByText('Trajectory', { exact: true }).click()
+  await page.getByRole('button', { name: 'Показывать', exact: true }).waitFor()
+  await chooseMenu(page, 'Запрос', 'Текущий сохранённый контекст')
+  assert.equal(await page.getByRole('button', { name: 'Запрос', exact: true }).getAttribute('data-value'), 'current')
+  await chooseMenu(page, 'Показывать', 'Полный журнал')
+  assert.equal(await page.getByRole('button', { name: 'Запрос', exact: true }).count(), 0)
+  await chooseMenu(page, 'Показывать', 'Контекст запроса')
+  await chooseMenu(page, 'Запрос', 'Последний запрос')
+  assert.equal(await page.getByRole('button', { name: 'Запрос', exact: true }).getAttribute('data-value'), 'latest')
+  await page.setViewportSize({ width: 320, height: 900 })
+  assert.equal(await page.locator('.mayori-trajectory-controls').evaluate(element => element.scrollWidth <= element.clientWidth + 1), true)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.getByText('Chat', { exact: true }).click()
   if (process.argv[4] === '--restore') {
     await choose(fixture.manual)
     assert.ok((await settle(fixture.manual)).messages.some(message => message.content.some(block => block.text === 'The archive door remains shut.')))
@@ -84,7 +98,7 @@ try {
     assert.equal(new Set(turns).size, turns.length, 'Resumed Agent must continue with a fresh turn number')
     await page.reload()
     await openChat(fixture.manual)
-    await page.getByRole('combobox', { name: 'Ветка чата' }).waitFor()
+    await page.getByRole('button', { name: 'Ветка чата', exact: true }).waitFor()
     await page.screenshot({ path: join(output, 'restored.png') })
   } else {
     const original = await settle(fixture.source)
@@ -176,12 +190,14 @@ try {
     assert.deepEqual(unchanged.events, original.events)
     await page.screenshot({ path: join(output, 'regenerated-1280.png') })
     await page.reload(); await openChat(fixture.manual)
-    await page.getByRole('combobox', { name: 'Ветка чата' }).waitFor()
-    assert.equal(await page.getByRole('combobox', { name: 'Ветка чата' }).locator('option').count(), 4)
+    await page.getByRole('button', { name: 'Ветка чата', exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Ветка чата', exact: true }).click()
+    assert.equal(await page.getByRole('menuitem').count(), 4)
+    await page.keyboard.press('Escape')
     const opening = original.events.find(event => event.type === 'assistant/message')
     fixture.greeting = (await rpc('/mayori/characters/message-edit', { sessionId: fixture.source, seq: opening.seq, text: 'My edited opening.' })).sessionId
     const greeting = await settle(fixture.greeting)
-    assert.equal(greeting.messages.at(-1).content[0].text, 'My edited opening.')
+    assert.equal(greeting.messages.findLast(message => message.role === 'assistant').content[0].text, 'My edited opening.')
     assert.equal(greeting.requestCount, unchanged.requestCount)
     await choose(fixture.greeting)
     assert.equal(await page.getByRole('button', { name: 'Повторить ответ', exact: true }).count(), 0)
@@ -192,6 +208,6 @@ try {
 } catch (error) {
   await page?.screenshot({ path: join(output, 'failure.png') })
   console.error(JSON.stringify({ fixture, alerts: await page?.getByRole('alert').allTextContents(),
-    pickers: await page?.locator('select').evaluateAll(nodes => nodes.map(node => ({ value: node.value, text: node.textContent }))) }))
+    pickers: await page?.locator('.mayori-select-trigger').evaluateAll(nodes => nodes.map(node => ({ value: node.dataset.value, text: node.textContent }))) }))
   throw error
 } finally { await browser.close() }
