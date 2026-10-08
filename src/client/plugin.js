@@ -11,6 +11,8 @@ import { RemoteCharacterChatProvider } from '../features/character-session/clien
 import { PersonaPanel, PersonaIcon } from '../features/personas/client/panel.jsx'
 import { GreetingTurnTail } from '../features/character-session/client/greeting.jsx'
 import { CharacterMessage } from '../features/character-session/client/messages.jsx'
+import { RemoteMessageRevisionProvider } from '../features/message-revisions/client/revisions.js'
+import { RevisionBranchNavigation } from '../features/message-revisions/client/controls.jsx'
 import { mirroredChildren, mirrorSlot } from './infrastructure/slot-mirror.js'
 import { RemoteTrajectoryContextProvider } from '../features/trajectory/client/context.js'
 import { ContextTrajectory, TrajectorySessionHeader } from '../features/trajectory/client/view.jsx'
@@ -48,6 +50,14 @@ export function apply(ctx) {
     return contexts.get(sessionId)
   }
   ctx.provide('mayoriTrajectoryContext', { forSession: contextFor })
+  const revisions = new Map()
+  const revisionFor = sessionId => {
+    if (!revisions.has(sessionId)) revisions.set(sessionId, new RemoteMessageRevisionProvider(sessionId, async id => {
+      try { await ctx.sessions.refresh() } finally { ctx.uiWorkspace.openSession(id) }
+    }))
+    return revisions.get(sessionId)
+  }
+  ctx.provide('mayoriMessageRevisions', { forSession: revisionFor })
 
   ctx.effect(() => {
     const style = document.createElement('style')
@@ -169,7 +179,7 @@ export function apply(ctx) {
         disposers.push(ctx.slots.register({
           name: 'conversation.chat.node', key, priority: -100,
           locale: stock.locale, children: mirroredChildren(stock.children, prefix),
-          inject: (...args) => ({ ...stock.inject?.(...args), stock: stock.component, stockChildren: stock.children, childPrefix: prefix, chatFor }),
+          inject: (...args) => ({ ...stock.inject?.(...args), stock: stock.component, stockChildren: stock.children, childPrefix: prefix, chatFor, revisionFor }),
         }, component))
         for (const name of Object.keys(stock.children ?? {})) {
           disposers.push(mirrorSlot(ctx, name, `${prefix}.${name}`))
@@ -212,7 +222,8 @@ export function apply(ctx) {
       disposers.push(ctx.slots.register({
         name: 'conversation.session.header', priority: -100,
         store: stock.store, locale: stock.locale, children: mirroredChildren(stock.children, prefix),
-        inject: (...args) => ({ ...stock.inject?.(...args), stock: stock.component, stockChildren: stock.children, childPrefix: prefix }),
+        inject: (...args) => ({ ...stock.inject?.(...args), stock: stock.component, stockChildren: stock.children, childPrefix: prefix,
+          revisionNavigation: RevisionBranchNavigation, revisionNavigationProps: { sessions: ctx.sessions, open: id => ctx.uiWorkspace.openSession(id) } }),
       }, TrajectorySessionHeader))
       for (const name of Object.keys(stock.children ?? {})) disposers.push(mirrorSlot(ctx, name, `${prefix}.${name}`))
     }

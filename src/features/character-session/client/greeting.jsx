@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { remapChildProps } from '../../../client/infrastructure/slot-mirror.js'
+import { AssistantRevisionActions } from '../../message-revisions/client/controls.jsx'
 
 /** Keep the shipped Markdown renderer; only authored greetings use the Host view. */
 export function GreetingMessage({ stock: Stock, chatFor, ...props }) {
@@ -39,8 +40,13 @@ function AuthoredGreeting({ stock: Stock, chatFor, ...props }) {
 }
 
 /** Copy and fork actions refer to the selected greeting, including logged swipes. */
-export function GreetingTurnTail({ stock: Stock, stockChildren, childPrefix, chatFor, ...props }) {
+export function GreetingTurnTail({ stock: Stock, stockChildren, childPrefix, chatFor, revisionFor, ...props }) {
   const mapped = remapChildProps(props, stockChildren, childPrefix)
+  const render = mapped.renderSlot
+  mapped.renderSlot = (name, owner, options) => name === 'conversation.chat.assistant-actions'
+    ? <>{render(name, owner, options)}<AssistantRevisionActions chatFor={chatFor} revisionFor={revisionFor}
+      sessionId={props.sessionId} closing={props.node.data.closing} useSession={props.useSession} turn={props.node.data.turn} /></>
+    : render(name, owner, options)
   return props.node.data.turn === 1 && props.node.data.closing
     ? <AuthoredGreetingTail stock={Stock} chatFor={chatFor} {...mapped} /> : <Stock {...mapped} />
 }

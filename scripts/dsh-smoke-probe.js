@@ -81,10 +81,16 @@ export function apply(ctx) {
           value = { workspaceId: workspace.id, requestCount: requests.length }
         } else if (input.action === 'adopt') {
           value = await ctx.sessionController.create({ sessionId: input.sessionId, workspaceId: input.workspaceId })
-        } else if (input.action === 'inspect') {
-          const agent = ctx.agents.get(input.sessionId)
-          if (!agent) throw new Error('Expected live session')
-          value = { messages: agent.session.deriveMessages(), events: agent.session.snapshotEvents(), requestCount: requests.length }
+        } else if (input.action === 'inspect' || input.action === 'settle') {
+          let agent = ctx.agents.get(input.sessionId)
+          if (!agent) {
+            const resolved = await ctx.sessionController.resolveAgent(input.sessionId)
+            if (resolved.error) throw resolved.error
+            agent = resolved.agent
+          }
+          if (input.action === 'settle') { await agent.whenIdle(); await ctx.sessions.flush(agent.session) }
+          value = { messages: agent.session.deriveMessages(), events: agent.session.snapshotEvents(), requestCount: requests.length,
+            ...(input.action === 'settle' ? { requests: [...requests] } : {}) }
         } else if (input.action === 'details') {
           const agent = ctx.agents.get(input.sessionId)
           if (!agent) throw new Error('Expected live session')

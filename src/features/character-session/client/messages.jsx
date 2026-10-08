@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { remapChildProps } from '../../../client/infrastructure/slot-mirror.js'
 import { GreetingMessage } from './greeting.jsx'
+import { MessageRevisionControls, UserRevisionToolbar } from '../../message-revisions/client/controls.jsx'
 
 function Avatar({ name, image }) {
   const dialog = useRef(null)
@@ -37,8 +38,47 @@ function Avatar({ name, image }) {
   </>
 }
 
+/** Keep the stock text column intact; use a separate row when its gutters cannot fit a portrait. */
+function MessageWithAvatar({ assistant, name, image, children, actions }) {
+  const row = useRef(null)
+  const [placement, setPlacement] = useState('above')
+  useEffect(() => {
+    const element = row.current
+    const viewport = element.ownerDocument.documentElement
+    const view = element.ownerDocument.defaultView
+    const clips = []
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      const style = view.getComputedStyle(parent)
+      if ([style.overflowX, style.overflowY].some(value => value !== 'visible')) clips.push(parent)
+    }
+    const measure = () => {
+      let left = 0
+      let right = viewport.clientWidth
+      for (const clip of clips) {
+        const bounds = clip.getBoundingClientRect()
+        left = Math.max(left, bounds.left + clip.clientLeft)
+        right = Math.min(right, bounds.left + clip.clientLeft + clip.clientWidth)
+      }
+      const bounds = element.getBoundingClientRect()
+      // 44px portrait + 12px gap + room for the keyboard focus outline.
+      setPlacement(bounds.left - left >= 60 && right - bounds.right >= 60 ? 'side' : 'above')
+    }
+    const observer = new view.ResizeObserver(measure)
+    for (const target of [element, viewport, ...clips]) observer.observe(target)
+    measure()
+    return () => { observer.disconnect() }
+  }, [])
+  return <div ref={row} className={`mayori-message mayori-message-${assistant ? 'character' : 'user'}`}
+    data-avatar-placement={placement}>
+    {assistant && <Avatar name={name} image={image} />}
+    <div className="mayori-message-content">{children}</div>
+    {actions && <UserRevisionToolbar container={row}>{actions}</UserRevisionToolbar>}
+    {!assistant && <Avatar name={name} image={image} />}
+  </div>
+}
+
 /** Session snapshots own portraits; the stock renderer still owns message content. */
-export function CharacterMessage({ stock, stockChildren, childPrefix, chatFor, ...props }) {
+export function CharacterMessage({ stock, stockChildren, childPrefix, chatFor, revisionFor, ...props }) {
   const chat = chatFor(props.sessionId)
   const snapshot = useSyncExternalStore(chat.subscribe, chat.getSnapshot, chat.getSnapshot)
   const mapped = remapChildProps(props, stockChildren, childPrefix)
@@ -59,9 +99,12 @@ export function CharacterMessage({ stock, stockChildren, childPrefix, chatFor, .
   }
   const person = assistant ? snapshot.value.character : snapshot.value.persona
   const name = person?.name || (assistant ? 'Персонаж' : 'Игрок')
-  return <div className={`mayori-message mayori-message-${assistant ? 'character' : 'user'}`}>
-    {assistant && <Avatar name={name} image={person?.image} />}
-    <div className="mayori-message-content">{content}</div>
-    {!assistant && <Avatar name={name} image={person?.avatar} />}
-  </div>
+  const seq = assistant ? props.node.data.finalNode?.seq : props.node.data.seq
+  const editable = !assistant && revisionFor && props.useSession && Number.isSafeInteger(seq) && seq > 0
+    && props.node.data.content?.some(block => block.type === 'text' && block.text.trim())
+  return <MessageWithAvatar assistant={assistant} name={name} image={assistant ? person?.image : person?.avatar}
+    actions={editable && <MessageRevisionControls revisions={revisionFor(props.sessionId)} seq={seq}
+      useSession={props.useSession} canRepeat={false} />}>
+    {content}
+  </MessageWithAvatar>
 }

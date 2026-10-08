@@ -115,9 +115,22 @@ try {
         const bounds = await row.evaluate(row => {
           const avatar = row.querySelector('.mayori-message-avatar').getBoundingClientRect()
           const content = row.querySelector('.mayori-message-content').getBoundingClientRect()
-          return { avatarLeft: avatar.left, avatarRight: avatar.right, contentLeft: content.left, contentRight: content.right }
+          const bounds = row.getBoundingClientRect()
+          return { placement: row.dataset.avatarPlacement, rowLeft: bounds.left, rowRight: bounds.right,
+            avatarLeft: avatar.left, avatarRight: avatar.right, avatarBottom: avatar.bottom, avatarTop: avatar.top,
+            contentLeft: content.left, contentRight: content.right, contentTop: content.top }
         })
-        assert.ok(role === 'character' ? bounds.avatarRight <= bounds.contentLeft : bounds.avatarLeft >= bounds.contentRight)
+        assert.ok(Math.abs(bounds.contentLeft - bounds.rowLeft) < 1 && Math.abs(bounds.contentRight - bounds.rowRight) < 1,
+          'Portraits must not indent or narrow the native text column')
+        assert.equal(bounds.placement, width === 1280 ? 'side' : 'above',
+          'ResizeObserver must move portraits between the gutters and a separate row as the viewport changes')
+        assert.ok(bounds.avatarLeft >= 0 && bounds.avatarRight <= width && bounds.avatarTop >= 0,
+          'Portrait triggers must remain inside the viewport')
+        if (bounds.placement === 'side') {
+          assert.ok(role === 'character' ? bounds.avatarRight <= bounds.contentLeft - 12 : bounds.avatarLeft >= bounds.contentRight + 12)
+        } else {
+          assert.ok(bounds.avatarBottom <= bounds.contentTop - 8, 'Narrow layouts put the portrait above the full-width content')
+        }
         const trigger = row.locator('.mayori-message-avatar')
         await trigger.click()
         const dialog = page.getByRole('dialog', { name: role === 'character' ? 'Browser Character' : 'Browser Player', exact: true })
@@ -155,6 +168,7 @@ try {
         assert.equal(await trigger.evaluate(node => node === document.activeElement), true)
       }
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+      await page.screenshot({ path: join(output, `${theme}-${width}-chat.png`) })
     }
   }
   await page.setViewportSize({ width: 1280, height: 900 })
@@ -163,5 +177,5 @@ try {
   await page.mouse.click(1, 1)
   await page.getByRole('dialog').waitFor({ state: 'detached' })
   assert.deepEqual(errors, [])
-  console.log(JSON.stringify({ ok: true, sessionId: session.sessionId, output, screenshots: 12 }))
+  console.log(JSON.stringify({ ok: true, sessionId: session.sessionId, output, screenshots: 18 }))
 } finally { await browser.close() }

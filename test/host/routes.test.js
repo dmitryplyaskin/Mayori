@@ -21,8 +21,8 @@ test('HTTP adapter dispatches each existing endpoint to its owning capability wi
   const service = name => new Proxy({}, {
     get: (_target, method) => (...args) => { calls.push([name, method, args]); return `${name}.${method}` },
   })
-  const route = createMayoriRoute(Object.fromEntries(['library', 'personas', 'characterSessions', 'trajectoryContext', 'historyDetails'].map(name => [name, service(name)])))
-  const input = { id: 'resource', ids: ['session'], sessionId: 'session', characterId: 'character', workspaceId: 'workspace', greetingIndex: 1, index: 2, personaId: 'persona', selection: 'current' }
+  const route = createMayoriRoute(Object.fromEntries(['library', 'personas', 'characterSessions', 'trajectoryContext', 'historyDetails', 'messageRevisions'].map(name => [name, service(name)])))
+  const input = { id: 'resource', ids: ['session'], sessionId: 'session', characterId: 'character', workspaceId: 'workspace', greetingIndex: 1, index: 2, personaId: 'persona', selection: 'current', seq: 9, text: 'Changed' }
   const cases = [
     ['list', 'library', 'list', [], { cards: 'library.list' }],
     ['import', 'library', 'import', [input], 'library.import'],
@@ -39,6 +39,9 @@ test('HTTP adapter dispatches each existing endpoint to its owning capability wi
     ['swipe', 'characterSessions', 'swipe', [input.sessionId, input.index], 'characterSessions.swipe'],
     ['session-persona', 'characterSessions', 'setPersona', [input.sessionId, input.personaId], 'characterSessions.setPersona'],
     ['trajectory-context', 'trajectoryContext', 'inspect', [input.sessionId, input.selection], 'trajectoryContext.inspect'],
+    ['message-inspect', 'messageRevisions', 'inspect', [input.sessionId, input.seq], 'messageRevisions.inspect'],
+    ['message-edit', 'messageRevisions', 'edit', [input.sessionId, input.seq, input.text], 'messageRevisions.edit'],
+    ['message-regenerate', 'messageRevisions', 'regenerate', [input.sessionId, input.seq], 'messageRevisions.regenerate'],
   ]
   for (const [endpoint, name, method, args, value] of cases) {
     const response = await request(route, endpoint, input)

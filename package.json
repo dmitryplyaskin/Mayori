@@ -22,6 +22,8 @@
     "src/shared",
     "src/features/characters/host",
     "src/features/character-session/host",
+    "src/features/message-revisions/host",
+    "src/features/message-revisions/domain",
     "src/features/personas/host",
     "src/features/history/host",
     "src/features/trajectory/host",

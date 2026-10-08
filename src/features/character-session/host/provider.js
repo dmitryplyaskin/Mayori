@@ -201,7 +201,13 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
   }
 
   async state(sessionId) {
-    const agent = this.ctx.agents.get(validateSessionId(sessionId))
+    const id = validateSessionId(sessionId)
+    let agent = this.ctx.agents.get(id)
+    if (!agent && this.ctx.sessionController?.resolveAgent) {
+      const result = await this.ctx.sessionController.resolveAgent(id)
+      if (result.error) throw new Error('Не удалось открыть чат персонажа.', { cause: result.error })
+      agent = result.agent
+    }
     if (!agent) throw new Error('Чат закрыт. Откройте его снова.')
     return this._state(agent, await this._store.read(sessionId))
   }

@@ -58,8 +58,36 @@ html[data-windows-titlebar] .mayori-navigation-header { block-size: 40px; }
 html[data-windows-titlebar] .mayori-navigation[data-collapsed=true] { padding: 0; }
 html[data-windows-titlebar] .mayori-navigation[data-collapsed=true] :is(.mayori-navigation-panels, .mayori-navigation-region, .mayori-navigation-footer) { display: none; }
 html[data-platform=darwin] .mayori-navigation { background: transparent; padding-block-start: 52px; }
-.mayori-message { display: flex; align-items: flex-start; gap: 12px; min-inline-size: 0; }
-.mayori-message-content { flex: 1; min-inline-size: 0; }
+.mayori-message { position: relative; display: grid; grid-template-areas: 'avatar' 'content'; gap: 8px; min-inline-size: 0; }
+.mayori-message-content { grid-area: content; min-inline-size: 0; }
+.mayori-message-actions { display: inline-flex; flex: none; align-items: center; gap: 8px; color: var(--dsw-alias-label-tertiary); }
+[data-clock]:has(> .mayori-message-actions) { flex-wrap: wrap; height: auto; min-block-size: calc(28px + var(--dsh-content-font-delta, 0px)); }
+.mayori-message-actions button { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; inline-size: calc(28px + var(--dsh-content-font-delta, 0px)); block-size: calc(28px + var(--dsh-content-font-delta, 0px)); padding: 6px; border: 0; border-radius: var(--dsw-radius-sm, 6px); background: transparent; color: inherit; cursor: pointer; }
+.mayori-message-actions svg { inline-size: calc(15px + var(--dsh-content-font-delta, 0px)); block-size: calc(15px + var(--dsh-content-font-delta, 0px)); }
+[data-clock=end] .mayori-message-actions svg { inline-size: calc(17px + var(--dsh-content-font-delta, 0px)); block-size: calc(17px + var(--dsh-content-font-delta, 0px)); }
+.mayori-message-actions button:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }
+.mayori-revision-status { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.mayori-message-actions button:disabled { cursor: default; opacity: 0.5; }
+.mayori-message-actions button:focus-visible, .mayori-message-editor :is(button, textarea):focus-visible, .mayori-revision-branches select:focus-visible { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 2px; }
+.mayori-message-editor { box-sizing: border-box; inline-size: min(720px, calc(100vw - 32px)); max-block-size: calc(100dvh - 32px); margin: auto; padding: 24px; overflow: auto; border: 1px solid var(--dsw-alias-border-l2); border-radius: 16px; background: var(--dsw-alias-bg-layer-1, Canvas); color: var(--dsw-alias-label-primary, CanvasText); }
+.mayori-message-editor::backdrop { background: oklch(0 0 0 / 0.56); }
+.mayori-message-editor form { display: grid; gap: 12px; }
+.mayori-message-editor h2, .mayori-message-editor p { margin: 0; }
+.mayori-message-editor h2 { font-size: 20px; }
+.mayori-message-editor p { line-height: 1.5; }
+.mayori-message-editor textarea { box-sizing: border-box; inline-size: 100%; min-block-size: 180px; max-block-size: 45dvh; resize: vertical; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); color: inherit; font: inherit; font-size: 16px; line-height: 1.5; }
+.mayori-message-editor-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; }
+.mayori-message-editor-actions button { min-block-size: 44px; padding: 8px 16px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); color: inherit; font: inherit; cursor: pointer; }
+.mayori-message-editor-actions button:disabled { cursor: default; opacity: 0.5; }
+.mayori-revision-branches { grid-column: 1 / -1; min-inline-size: 0; padding-block: 8px; font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.mayori-revision-branches label { display: flex; align-items: center; gap: 8px; }
+.mayori-revision-branches select { min-inline-size: 0; max-inline-size: 100%; min-block-size: 32px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; background: var(--dsw-alias-bg-layer-1); color: inherit; font: inherit; }
+.mayori-message > .mayori-message-avatar { grid-area: avatar; justify-self: start; }
+.mayori-message-user > .mayori-message-avatar { justify-self: end; }
+.mayori-message[data-avatar-placement=side] { display: block; min-block-size: 44px; }
+.mayori-message[data-avatar-placement=side] > .mayori-message-avatar { position: absolute; inset-block-start: 0; z-index: 1; }
+.mayori-message-character[data-avatar-placement=side] > .mayori-message-avatar { inset-inline-end: calc(100% + 12px); }
+.mayori-message-user[data-avatar-placement=side] > .mayori-message-avatar { inset-inline-start: calc(100% + 12px); }
 .mayori-message .mayori-message-avatar { display: grid; place-items: center; flex: none; box-sizing: border-box; inline-size: 44px; block-size: 44px; padding: 0; overflow: hidden; border: 1px solid var(--dsw-alias-border-l2); border-radius: 50%; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 20px; cursor: pointer; }
 .mayori-message-avatar img { inline-size: 100%; block-size: 100%; object-fit: cover; }
 .mayori-message-avatar:hover { border-color: var(--dsw-alias-label-secondary); }
@@ -73,7 +101,6 @@ html[data-platform=darwin] .mayori-navigation { background: transparent; padding
 .mayori-avatar-dialog button:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .mayori-avatar-dialog-media { display: grid; place-items: center; min-inline-size: 0; min-block-size: 0; overflow: hidden; padding: 16px; }
 .mayori-avatar-dialog-media img { display: block; inline-size: 100%; block-size: 100%; min-inline-size: 0; min-block-size: 0; object-fit: contain; }
-@media (max-width: 400px) { .mayori-message { gap: 8px; } }
 .mayori-trajectory { display: flex; flex-direction: column; block-size: 100%; min-block-size: 0; color: var(--dsw-alias-label-primary); }
 .mayori-trajectory-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; border-block-end: 1px solid var(--dsw-alias-border-l2); }
 .mayori-trajectory-controls label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-inline-size: 0; }

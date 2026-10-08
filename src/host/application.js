@@ -3,6 +3,7 @@ import { FileSystemPersonaProvider } from '../features/personas/host/provider.js
 import { PersistentCharacterSessionProvider } from '../features/character-session/host/provider.js'
 import { SessionTrajectoryContextProvider } from '../features/trajectory/host/context.js'
 import { SessionHistoryDetailsProvider } from '../features/history/host/details.js'
+import { SessionMessageRevisionProvider } from '../features/message-revisions/host/provider.js'
 import { createMayoriRoute } from './transport/routes.js'
 import { CryptoDiceProvider } from '../features/dice/host/provider.js'
 import { resolveDiceConfig } from '../features/dice/host/config.js'
@@ -17,12 +18,13 @@ import { registerRollHistoryTool } from '../features/roll-history/host/tool.js'
 export function registerHostCapabilities(ctx, { charactersPath, campaignsPath, personasPath }) {
   const library = new FileSystemCharacterLibraryProvider(ctx, { root: charactersPath })
   const personas = new FileSystemPersonaProvider(ctx, personasPath)
-  ctx.inject(['webServer', 'agents', 'sessions', 'workspaceRegistry', 'agentPresets', 'sessionQuery'], async consumerCtx => {
+  ctx.inject(['webServer', 'agents', 'sessions', 'workspaceRegistry', 'agentPresets', 'sessionQuery', 'sessionController'], async consumerCtx => {
     const characterSessions = new PersistentCharacterSessionProvider(consumerCtx, library, { campaignsRoot: campaignsPath, personas })
     const trajectoryContext = new SessionTrajectoryContextProvider(consumerCtx)
     const historyDetails = new SessionHistoryDetailsProvider(consumerCtx, campaignsPath)
+    const messageRevisions = new SessionMessageRevisionProvider(consumerCtx, characterSessions)
     await characterSessions.restoreActiveAgents()
-    const route = createMayoriRoute({ library, personas, characterSessions, trajectoryContext, historyDetails })
+    const route = createMayoriRoute({ library, personas, characterSessions, trajectoryContext, historyDetails, messageRevisions })
     consumerCtx.effect(() => consumerCtx.webServer.register(route), 'mayori: character library route')
   })
   return library

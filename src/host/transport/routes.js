@@ -4,7 +4,7 @@ const ROUTE_PATH = '/mayori/characters'
 const message = error => error instanceof Error ? error.message : String(error)
 
 /** Adapt HTTP requests to already constructed capability services. */
-export function createMayoriRoute({ library, personas, characterSessions, trajectoryContext, historyDetails }) {
+export function createMayoriRoute({ library, personas, characterSessions, trajectoryContext, historyDetails, messageRevisions }) {
   const route = {
     kind: 'prefix',
     path: ROUTE_PATH,
@@ -28,7 +28,7 @@ export function createMayoriRoute({ library, personas, characterSessions, trajec
         else if (endpoint === 'history-details') sendJson(res, 200, { ok: true, value: await historyDetails.read(payload?.ids) })
         else if (endpoint === 'persona-list') sendJson(res, 200, { ok: true, value: await personas.list() })
         else if (endpoint === 'persona-save') sendJson(res, 200, { ok: true, value: await personas.save(payload) })
-        else if (['persona-remove', 'persona-default', 'session-state', 'swipe', 'session-persona', 'trajectory-context'].includes(endpoint)) {
+        else if (['persona-remove', 'persona-default', 'session-state', 'swipe', 'session-persona', 'trajectory-context', 'message-inspect', 'message-edit', 'message-regenerate'].includes(endpoint)) {
           if (!payload || typeof payload !== 'object') throw new TypeError('Некорректный запрос.')
           let value
           if (endpoint === 'persona-remove') { await personas.remove(payload.id); value = { removed: true } }
@@ -37,6 +37,9 @@ export function createMayoriRoute({ library, personas, characterSessions, trajec
           if (endpoint === 'swipe') value = await characterSessions.swipe(payload.sessionId, payload.index)
           if (endpoint === 'session-persona') value = await characterSessions.setPersona(payload.sessionId, payload.personaId)
           if (endpoint === 'trajectory-context') value = trajectoryContext.inspect(payload.sessionId, payload.selection)
+          if (endpoint === 'message-inspect') value = await messageRevisions.inspect(payload.sessionId, payload.seq)
+          if (endpoint === 'message-edit') value = await messageRevisions.edit(payload.sessionId, payload.seq, payload.text)
+          if (endpoint === 'message-regenerate') value = await messageRevisions.regenerate(payload.sessionId, payload.seq)
           sendJson(res, 200, { ok: true, value })
         }
         else if (endpoint === 'import') sendJson(res, 200, { ok: true, value: await library.import(payload) })

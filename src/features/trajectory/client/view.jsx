@@ -4,9 +4,10 @@ import { deduplicateViews } from './context.js'
 import { contextTrajectorySnapshot } from './snapshot.js'
 
 /** Preserve the native header while removing duplicate tabs from raw slot entries. */
-export function TrajectorySessionHeader({ stock: Stock, stockChildren, childPrefix, ...props }) {
+export function TrajectorySessionHeader({ stock: Stock, stockChildren, childPrefix, revisionNavigation: Navigation, revisionNavigationProps, ...props }) {
   const useConversationViews = selector => props.useConversationViews(views => selector(deduplicateViews(views)))
-  return <Stock {...remapChildProps(props, stockChildren, childPrefix)} useConversationViews={useConversationViews} />
+  return <><Stock {...remapChildProps(props, stockChildren, childPrefix)} useConversationViews={useConversationViews} />
+    {Navigation && <Navigation sessionId={props.sessionId} {...revisionNavigationProps} />}</>
 }
 
 function RequestTrajectory({ stock: Stock, value, ...props }) {

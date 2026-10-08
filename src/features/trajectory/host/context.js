@@ -1,6 +1,7 @@
 /** Read-only reconstruction of request input through DSH's public surface fold. */
 import { Service } from '@deepseek-ai/cordis'
 import { deriveEventMessage, foldSurface, foldRequestHeader } from '@deepseek-ai/dsh-session'
+import { MANUAL_PROVIDER } from '../../message-revisions/domain/revisions.js'
 
 export class TrajectoryContextService extends Service {
   constructor(ctx) { super(ctx, 'mayoriTrajectoryContext') }
@@ -17,7 +18,7 @@ export function reconstructTrajectoryContext(events, selection, projections = []
     positions.set(event.seq, { time: event.time, turn: event.data.turn ?? turn, step: event.data.step ?? step, startSeq, startedAt })
   }
   const requests = events.filter(event => (event.type === 'assistant/message' || event.type === 'assistant/attempt')
-    && event.data.message?.source?.provider !== 'mayori-character-card').map((event, index) => ({
+    && !['mayori-character-card', MANUAL_PROVIDER].includes(event.data.message?.source?.provider)).map((event, index) => ({
     seq: event.seq, number: index + 1, turn: event.data.turn, step: event.data.step,
     failed: event.type === 'assistant/attempt',
     time: event.time, startSeq: positions.get(event.seq).startSeq, startedAt: positions.get(event.seq).startedAt,
