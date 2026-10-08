@@ -6,11 +6,12 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { PersistentPluginSettingsProvider } from '../../../src/features/plugins/host/provider.js'
 import { DEFAULT_PLUGINS, validatePlugins } from '../../../src/features/plugins/shared/settings.js'
 import * as OptionalPlugins from '../../../src/host/optional-plugins.js'
+import { DEFAULT_COMPACTION } from '../../../src/features/compaction/shared/settings.js'
 
 async function runtime(t) {
   const ctx = new Context(); t.after(() => ctx.fiber.dispose())
   await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime)
-  let values = { ...DEFAULT_PLUGINS }, revision = 0, busy = false
+  let values = { ...DEFAULT_PLUGINS, compactionSettings: DEFAULT_COMPACTION }, revision = 0, busy = false
   const config = Object.fromEntries(Object.keys(values).map(key => [key, { get: () => values[key] }]))
   ctx.provide('settings', { describe: () => [{ ns: 'mayori-plugin-settings', revision }],
     async update(_ns, next, expected) { assert.equal(expected, revision); values = next; revision++; ctx.emit('app-boot/config-reload') } })
@@ -64,4 +65,22 @@ test('invalid preferences and failed writes keep the existing runtime', async t 
   await assert.rejects(provider.update({ ...DEFAULT_PLUGINS, dice: false }, -1))
   assert.deepEqual(names(ctx), ['getRollDetails', 'resolveCheck', 'rollDice'])
   assert.deepEqual(provider.read().plugins, DEFAULT_PLUGINS)
+})
+
+test('compaction settings persist with revision checks and wait for the active reply', async t => {
+  const { ctx, provider, setBusy } = await runtime(t)
+  const options = { ...DEFAULT_COMPACTION, thresholdPercent: 65, instructions: 'Сохрани точные обещания.' }
+  setBusy(true)
+  const saved = await provider.update(DEFAULT_PLUGINS, 0, options)
+  assert.equal(saved.pending, true)
+  assert.deepEqual(saved.compaction, options)
+  assert.deepEqual(saved.activeCompaction, DEFAULT_COMPACTION)
+  await assert.rejects(provider.update(DEFAULT_PLUGINS, 1, { ...options, retainPercent: 65 }))
+  setBusy(false); await provider.refresh()
+  assert.equal(provider.read().pending, false)
+  assert.deepEqual(provider.read().activeCompaction, options)
+  await assert.rejects(provider.update(DEFAULT_PLUGINS, 0, DEFAULT_COMPACTION))
+  assert.deepEqual(provider.read().compaction, options)
+  await provider.update({ ...DEFAULT_PLUGINS, dice: false }, 1)
+  assert.deepEqual(provider.read().compaction, options, 'Changing a switch preserves editable compaction settings')
 })

@@ -10,19 +10,32 @@ export function apply(ctx) {
     providerRetryPolicy: () => undefined,
     imageRequestPricing: () => undefined,
     listModels: async provider => [{ provider, id: 'smoke', name: 'Smoke' }],
-    resolveModel: async (provider, id) => ({ provider, id, name: id }),
+    resolveModel: async (provider, id) => ({ provider, id, name: id, context: { contextWindow: 32000 }, defaultMaxTokens: 512 }),
     async prepareCall(provider, id) {
       return { model: await this.resolveModel(provider, id), systemPromptUpdate: 'in-history',
         stream: options => this.stream(options) }
     },
     async *stream(options) {
-      requests.push({ messages: options.messages, tools: options.tools })
+      requests.push({ messages: options.messages, tools: options.tools, purpose: options.purpose, maxTokens: options.maxTokens })
+      if (options.purpose === 'compaction') {
+        yield { type: 'block-start', index: 0, blockType: 'text' }
+        yield { type: 'block-end', index: 0, block: { type: 'text', text: 'COMPACTED: герой у северных ворот. Марта обещала помощь. Решение игрока ещё не принято.' } }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+        return
+      }
       const last = options.messages.findLast(message => message.role !== 'system' && message.role !== 'developer')
       const thought = last?.role === 'tool' ? 'Present the recorded dice results.' : 'Use the real dice provider.'
       yield { type: 'block-start', index: 0, blockType: 'reasoning' }
       yield { type: 'reasoning-delta', index: 0, text: thought }
       yield { type: 'block-end', index: 0, block: { type: 'reasoning', text: thought } }
       const names = (options.tools ?? []).map(tool => tool.name)
+      if (last?.role === 'user' && last.content.some(block => block.text?.includes('REQUEST_COMPACTION_TOOL')) && names.includes('compactHistory')) {
+        const id = randomUUID()
+        yield { type: 'block-start', index: 1, blockType: 'tool-call' }
+        yield { type: 'block-end', index: 1, block: { type: 'tool-call', id, name: 'compactHistory', arguments: '{}' } }
+        yield { type: 'finish', reason: { kind: 'tool-calls' } }
+        return
+      }
       const hasDice = names.includes('rollDice'), hasRules = names.includes('resolveCheck')
       if (last?.role !== 'tool' && (hasDice || hasRules)) {
         if (hasDice) for (const [index, details] of [undefined, true].entries()) {
@@ -118,7 +131,7 @@ export function apply(ctx) {
           }
           await ctx.sessionController.selectModel({ sessionId: input.sessionId, provider: 'mayori-smoke', model: 'smoke' })
           await ctx.sessionController.prompt({ sessionId: input.sessionId, requestId: randomUUID(), mode: 'queue',
-            content: [{ type: 'text', text: 'Hello, Aster.' }] }, new AbortController().signal)
+            content: [{ type: 'text', text: input.text ?? 'Hello, Aster.' }] }, new AbortController().signal)
           const agent = ctx.agents.get(input.sessionId)
           await agent.whenIdle()
           await ctx.sessions.flush(agent.session)
@@ -127,6 +140,7 @@ export function apply(ctx) {
             hostHasDiceTool: ctx.tools.get('rollDice') !== undefined,
             hostHasRulesTool: ctx.tools.get('resolveCheck') !== undefined,
             hostHasRollHistoryTool: ctx.tools.get('getRollDetails') !== undefined,
+            hostHasCompaction: ctx.get('compaction') !== undefined,
             header: agent.session.header }
         } else throw new Error('Unknown smoke operation')
         res.writeHead(200, { 'content-type': 'application/json' })

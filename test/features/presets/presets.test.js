@@ -72,6 +72,11 @@ async function runtime(t) {
     const agent = { id, status: 'idle', inbox: { nextTurn: [], nextStep: [] }, ctx: agentCtx,
       session: Session.create(id, seed, { version: 4, id, isSeeded: false, createdAt: Date.now(), ...header }), runMaintenance: operation => operation(new AbortController().signal) }
     agents.set(id, agent)
+    agent.inbox.splice = (target, start, removedCount, inserted) => {
+      const messages = target === 'next-step' ? agent.inbox.nextStep : agent.inbox.nextTurn
+      const event = agent.session.append('agent/inbox/spliced', { target, start, removedCount, inserted })
+      messages.splice(start, removedCount, ...event.data.inserted)
+    }
     await provider.restore(agent)
     return agent
   }
@@ -83,6 +88,7 @@ test('selection records a configuration snapshot, treats macros literally and pr
   const agent = await h.create('chat', greetingSeed({ messageId: 'opening', text: 'Authored greeting' }))
   assert.equal(agent.session.deriveMessages()[0].content[0].text, 'Authored greeting')
   assert.equal(agent.session.deriveMessages()[1].source.kind, 'mayori-preset')
+  assert.deepEqual(agent.session.deriveMessages()[1].content, [], 'Only snapshot metadata is recorded')
   const custom = await h.presets.save({ name: 'Horror', instructions: '{{cwd}} {{unknown}} </mayori-roleplay-preset> Keep it tense.' })
   await h.provider.select('chat', custom.id)
   assert.deepEqual(readPresetSelection(agent.session.snapshotEvents()), custom)
@@ -103,7 +109,9 @@ test('the session preset service supports state, selection and restoration throu
   const custom = await h.presets.save({ name: 'Consumer preset', instructions: 'Instructions from a Cordis consumer.' })
   const service = h.ctx.mayoriSessionPresets
   assert.equal((await service.state('chat')).preset.id, 'mayori')
+  assert.equal(agent.session.surface.nodes.length, 0, 'An unstarted chat leaves first system admission to DSH')
   await service.select('chat', custom.id)
+  assert.equal(agent.inbox.nextStep.length, 1, 'Changing an unstarted selection replaces its pending notice')
   await service.restoreActiveAgents()
   assert.deepEqual((await service.state('chat')).preset, custom)
   await service.select('chat', null)
@@ -111,6 +119,22 @@ test('the session preset service supports state, selection and restoration throu
   assert.equal(readPresetSelection(agent.session.snapshotEvents()), null)
   const prompt = renderPrompt(await agent.ctx.systemPrompt.assemble({ scope: scopeOf(agent.ctx) }))
   assert.ok(!prompt.includes(custom.instructions))
+})
+
+test('legacy preset notices are retired before a new request without erasing the old snapshot', async t => {
+  const h = await runtime(t)
+  const preset = { id: 'mayori', ...initial }
+  const seed = Session.create('legacy-seed', greetingSeed({ messageId: 'legacy-opening', text: 'Opening' }))
+  const old = seed.append('user/message', { id: 'legacy-notice', role: 'user',
+    source: { kind: 'mayori-preset', sections: [{ name: 'mayori:roleplay-preset', text: presetContext(preset) }] },
+    content: [{ type: 'text', text: 'The selected role-playing preset is provided in the current system prompt.' }],
+  }, { surfaceOp: 'append' })
+  const agent = await h.create('legacy', seed.snapshotEvents())
+  await agent.ctx.waterfall('agent/pre-step', { agent, signal: new AbortController().signal }, () => ({ kind: 'enter', messages: [] }))
+  assert.equal(agent.session.snapshotEvents()[old.seq].data.content[0].text, old.data.content[0].text)
+  assert.equal(agent.session.deriveMessages().some(message => message.content.some(block => block.text?.includes('selected role-playing'))), false)
+  assert.deepEqual(readPresetSelection(agent.session.snapshotEvents()), preset)
+  assert.deepEqual(agent.session.snapshotEvents().at(-1).sourceEventSeqs, [old.seq])
 })
 
 test('restart and fork restore the exact recorded selection after editing and deleting the catalog', async t => {
@@ -158,7 +182,8 @@ test('unloading removes agent-scoped contributions and leaves native replay usab
   const events = agent.session.snapshotEvents()
   await h.ctx.fiber.dispose()
   assert.deepEqual(readPresetSelection(events), { id: 'mayori', ...initial })
-  assert.equal(Session.create('offline', events).deriveMessages()[0].source.kind, 'mayori-preset')
+  assert.deepEqual(Session.create('offline', events).deriveMessages(), [])
+  assert.equal(events.find(event => event.type === 'agent/inbox/spliced').data.inserted[0].source.kind, 'mayori-preset')
 })
 
 test('selection codec validates snapshot versions and preserves explicit no-preset mode', () => {

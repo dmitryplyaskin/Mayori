@@ -48,6 +48,7 @@
               mayoriDice: true
               mayoriRules: true
               mayoriRollHistory: true
+              compaction: true
             config:
               - id: mayori-optional-plugins
                 name: dsh-mayori/optional-plugins

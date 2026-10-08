@@ -36,6 +36,15 @@ export class LoggedSessionPresetProvider extends SessionPresetService {
     let prefix
     try {
       prefix = agent.ctx.on('agent/pre-step', async (_payload, next) => {
+        // Retire text notices from earlier versions without rewriting past requests.
+        const events = agent.session.snapshotEvents()
+        for (const seq of [...agent.session.surface.nodes]) {
+          const event = events[seq]
+          if (event?.type !== 'user/message' || event.data.source?.kind !== PRESET_SOURCE || event.data.content.length === 0) continue
+          const { id: _id, ...snapshot } = event.data
+          agent.session.append('user/message', createUserMessage({ ...snapshot, content: [] }),
+            { surfaceOp: { op: 'replace', startSeq: seq, endSeq: seq }, sourceEventSeqs: [seq] })
+        }
         const decision = await next()
         return decision.kind === 'enter' ? { ...decision, startsRequestSeries: true } : decision
       })
@@ -46,7 +55,7 @@ export class LoggedSessionPresetProvider extends SessionPresetService {
   }
   _idle(agent) {
     if (this.ctx.agents.get(agent.id) !== agent || agent.status !== 'idle'
-      || agent.inbox?.nextTurn.length || agent.inbox?.nextStep.length) {
+      || agent.inbox?.nextTurn.length || agent.inbox?.nextStep.some(message => message.source?.kind !== PRESET_SOURCE)) {
       throw new Error('Дождитесь завершения ответа и отправки сообщений из очереди.')
     }
   }
@@ -65,7 +74,13 @@ export class LoggedSessionPresetProvider extends SessionPresetService {
       // A user-role configuration snapshot may be logged outside a model step.
       // Full instructions live in its source metadata; the loop records the actual
       // rendered system message at its own canonical admission boundary.
-      agent.session.append('user/message', createUserMessage(presetSelectionMessage(preset)),
+      if (agent.session.surface.nodes.length === 0) {
+        // Persist pending context without waking the agent. The loop admits the
+        // first system head before this notice through its native inbox seam.
+        const index = agent.inbox.nextStep.findIndex(message => message.source?.kind === PRESET_SOURCE)
+        agent.inbox.splice('next-step', index < 0 ? agent.inbox.nextStep.length : index, index < 0 ? 0 : 1,
+          [createUserMessage(presetSelectionMessage(preset))])
+      } else agent.session.append('user/message', createUserMessage(presetSelectionMessage(preset)),
         { surfaceOp: previousSeq === undefined ? 'append' : { op: 'replace', startSeq: previousSeq, endSeq: previousSeq },
         ...(previousSeq === undefined ? {} : { sourceEventSeqs: [previousSeq] }) })
     } catch (error) {

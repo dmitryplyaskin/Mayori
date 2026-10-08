@@ -20,7 +20,7 @@ let sessionId, originalPrompt
 const checked = []
 try {
   for (let bits = 0; bits < 8; bits++) {
-    const plugins = { dice: !!(bits & 1), rules: !!(bits & 2), rollHistory: !!(bits & 4) }
+    const plugins = { dice: !!(bits & 1), rules: !!(bits & 2), rollHistory: !!(bits & 4), compaction: false }
     const state = await read()
     const saved = await request('/mayori/plugins', 'PUT', { plugins, revision: state.revision })
     assert.equal(saved.pending, false)

@@ -44,6 +44,8 @@ pnpm run bundle
 
 ## Проверка в локальном DSH
 
+Для сжатия истории выполните `node scripts/compaction-smoke.js <URL-test-Host>` в изолированном профиле с probe. Сценарий проверяет порог, инструмент compactHistory ниже порога, отсутствие служебного текста, точную сохранённую инструкцию, исходные события, изоляцию, обновление, отключение и native fork. `node scripts/browser-plugin-settings-smoke.js <URL-test-Host> <output-directory>` дополнительно проверяет форму, валидацию, черновик после ошибки и сохранение после перезагрузки. Настройки и устройство журнала описаны в [руководстве](compaction.md).
+
 Для разработки используйте отдельный Harness home, чтобы профиль, настройки,
 credentials и сессии Mayori не затрагивали обычный `~/.dsh`. В PowerShell:
 
@@ -100,7 +102,7 @@ pnpm dsh --profile mayori
 Отдельный путь credentials не даёт настройкам Mayori перезаписать общее
 `$DSH_HOME/.credentials.yaml`.
 
-В dump должны присутствовать слой `dsh-mayori`, пустой `system-prompt.personaPrefix`, один агентный `preset-mayori` с изолированным group и `dsh-mayori/optional-plugins`, корневой entry `mayori-plugin-settings`, default `mayori`, director и пути каталогов, включая `presetsPath`. Игровых инструкций в агентном пресете быть не должно. Browser module добавляет вкладку **Пресеты** и **Настройки → Mayori → Плагины**. Проверьте отключение всех tools и независимость трёх переключателей в существующем чате, перезапуск и чтение ранее сохранённого броска. [Руководства по пресетам](presets.md) и [плагинам](plugins.md).
+В dump должны присутствовать слой `dsh-mayori`, пустой `system-prompt.personaPrefix`, один агентный `preset-mayori` с изолированным group и `dsh-mayori/optional-plugins`, корневой entry `mayori-plugin-settings`, default `mayori`, director и пути каталогов, включая `presetsPath`. Игровых инструкций в агентном пресете быть не должно. Browser module добавляет вкладку **Пресеты** и **Настройки → Mayori → Плагины**. Проверьте отключение всех tools и независимость четырёх переключателей в существующем чате, перезапуск и чтение ранее сохранённого броска. [Руководства по пресетам](presets.md) и [плагинам](plugins.md).
 
 Для проверки опубликованного пакета вместо source launcher используйте `pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.1`. Все проверки делайте с отдельным `DSH_HOME`; реальный профиль игрока автоматически не переустанавливается.
 

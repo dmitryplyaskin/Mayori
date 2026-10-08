@@ -33,6 +33,7 @@ Mayori/
 │   │   ├── trajectory/           # реконструкция и отображение контекста
 │   │   ├── dice/                 # parser, настоящий provider и tool card
 │   │   ├── rules/                # числовые проверки, профили и последствия
+│   │   ├── compaction/           # игровое сжатие истории и настройки
 │   │   └── roll-history/         # чтение сохранённых бросков текущего чата
 │   └── shared/
 │       └── templates.js           # воспроизводимые ST substitutions
@@ -59,7 +60,7 @@ Host и browser могут потреблять свои feature-модули и
 
 Browser UI может импортировать публичный `@deepseek-ai/dsh-client-ui-primitives`, предоставляемый Web DSH как platform module. Это UI API, а не Host SDK. Все выпадающие поля Mayori используют общий consumer `Select` штатного `Menu`; библиотека DSH владеет keyboard/portal/focus поведением и стилями списка, Mayori — данными выбора и подписью поля. Импорт остаётся external в lazy browser artifact.
 
-`test/architecture.test.js` проверяет направление импортов, отсутствие циклов, существование локальных зависимостей и полноту Host import graph в `package.json.files`. Публичные entry points: `dsh-mayori`, `dsh-mayori/dice`, `dsh-mayori/rules`, `dsh-mayori/roll-history`, `dsh-mayori/client` и совместимый legacy `dsh-mayori/mechanics`; внутренние пути не являются API. Host source поставляется как ESM, browser source собирается в `lib/client.js`. Перенос каталогов не изменяет HTTP endpoints, Cordis service names, расположение пользовательских данных или формат session log.
+`test/architecture.test.js` проверяет направление импортов, отсутствие циклов, существование локальных зависимостей и полноту Host import graph в `package.json.files`. Публичные entry points: `dsh-mayori`, `dsh-mayori/dice`, `dsh-mayori/rules`, `dsh-mayori/roll-history`, `dsh-mayori/compaction`, `dsh-mayori/client` и совместимый legacy `dsh-mayori/mechanics`; внутренние пути не являются API. Host source поставляется как ESM, browser source собирается в `lib/client.js`. Перенос каталогов не изменяет HTTP endpoints, Cordis service names, расположение пользовательских данных или формат session log.
 
 ## Текущий вертикальный срез
 
@@ -69,7 +70,7 @@ dsh-mayori bundle
 │   ├── отключает deployment:persona через строку system-prompt
 │   ├── монтирует mayori-director
 │   └── объявляет единый mayori и persisted plugin preferences
-├── src/host/{dice,rules,roll-history}-plugin.js
+├── src/host/{dice,rules,roll-history,compaction}-plugin.js
 │   └── через application.js собирают независимые игровые возможности
 ├── index.js
 │   └── src/host/plugin.js
@@ -90,7 +91,7 @@ Bundle является слоем композиции, а не отдельн�
 
 Поддерживаемая версия DSH — `0.2.1-alpha.1`; пакет объявляет её peer dependency. Browser half объявлен через `dsh.client` и `exports["./client"]`. `MayoriSidebar` регистрируется в публичном root-scoped слоте `sidebar.workspaces` с приоритетом `-100`, поэтому штатный `WorkspaceBrowser` остаётся fallback. Брендинг занимает штатные `sidebar.brand.mark`, `sidebar.brand.name` и `conversation.hero.brand.mark`. `MayoriNavigationSidebar` занимает публичный `sidebar`, использует native store, locale, hooks и callbacks и зеркалит child slots с отдельным владельцем. Его renderer исключает кнопку New Session; бренд направляется в `ctx.layout.selectPanel('mayori-home')` без создания пустой сессии. Panel navigation, toggle, Settings и footer actions продолжают использовать публичные контракты DSH. В `shell.leading` для полностью скрытой desktop-панели остаётся только кнопка раскрытия. Обе регистрации ожидают stock entry и снимаются вместе с подписками при unload. DOM-подмен и скрытия stock chrome по CSS-селекторам нет. Стили и слоты удаляются вместе с Cordis fiber.
 
-Bundle использует единый агентный preset `mayori` для инструментов, без игровых инструкций. Инструкции принадлежат отдельному каталогу пресетов игры. Страница **Настройки → Mayori → Плагины** в публичном `settings.section` управляет независимыми Dice, Rules и RollHistory. Service Definition — `PluginSettingsService`, Provider — `PersistentPluginSettingsProvider` с валидируемыми volatile Config полями и штатным Settings persistence, Consumers — browser panel и scope mount в `application.js`. Изолированный Cordis group сохраняет границу инструментов Mayori. Выбранные инструкции не зависят от переключателей. Изменения применяются к существующим чатам после завершения текущих ответов; фактические схемы запросов и исходные броски сохраняются журналом DSH. [Руководство](plugins.md).
+Bundle использует единый агентный preset `mayori` для инструментов, без игровых инструкций. Инструкции принадлежат отдельному каталогу пресетов игры. Страница **Настройки → Mayori → Плагины** в публичном `settings.section` управляет независимыми Dice, Rules, RollHistory и Compaction. Service Definition — `PluginSettingsService`, Provider — `PersistentPluginSettingsProvider` с валидируемыми volatile Config полями и штатным Settings persistence, Consumers — browser panel и scope mount в `application.js`. Изолированный Cordis group сохраняет границу инструментов Mayori. Выбранные инструкции не зависят от переключателей. Изменения применяются к существующим чатам после завершения текущих ответов; фактические схемы запросов и исходные броски сохраняются журналом DSH. [Руководство](plugins.md).
 
 Модельная композиция отключает `system-prompt.includeHarnessIdentity` и `includeRuntimeContext`, а также `web-runtime.surfaceContext`. Поэтому в запросах нет идентичности DSH, пути к его исходникам, Web URL и порта, указаний по HMR, сборке и запуску серверов или технических runtime snapshots. Web runtime сохраняет штатные параметры запуска и продолжает обслуживать интерфейс. Отключённый `ui-deliverables` исключает file-reference guidance, инструкции `present` и карточки результатов coding-задач. `tools.mode: native` исключает инструкции JS-исполнителя даже при заданном `DSH_TOOLS_MODE`. `personaPrefix` пустой. Системная инструкция содержит выбранный игровой пресет и активную карточку с персоной игрока; правила последовательности опираются на установленные события без указаний читать или изменять campaign files. При добавлении игровых dynamic contexts их включение необходимо явно задать в композиции.
 
@@ -100,7 +101,7 @@ Bundle использует единый агентный preset `mayori` для
 - **Providers** — `FileSystemRoleplayPresetProvider` с атомарным каталогом `presetsPath/presets.json` и `LoggedSessionPresetProvider`, восстанавливающий выбор из точного журнала чата через публичный `sessionQuery.readSession()`.
 - **Consumers** — защищённые same-origin RPC endpoints `preset-*` / `session-preset*`, observable browser providers и `PresetPanel` в нативной вкладке `mayori-presets`.
 
-Начальный редактируемый пресет Mayori создаётся из прежнего director Config только при первой инициализации каталога. Выбор по умолчанию относится к новым чатам; применение к существующему чату требует idle Agent без очереди и выполняется через `runMaintenance`. В журнал сразу добавляется стандартный `user/message` с source `mayori-preset`: section metadata содержит полный версионированный снимок, content — короткое уведомление о настройке, отличённое от действия игрока. Предыдущее уведомление заменяется через surface replacement. Сама игровая инструкция регистрируется через scoped `ctx.systemPrompt.section()` с `interpolate: false`; DSH штатно сохраняет её в `system/message` при следующем запросе. Pre-step consumer начинает новую request series, чтобы прежние инструкции не оставались в активном префиксе.
+Начальный редактируемый пресет Mayori создаётся из прежнего director Config только при первой инициализации каталога. Выбор по умолчанию относится к новым чатам; применение к существующему чату требует idle Agent без сообщений игрока в очереди и выполняется через `runMaintenance`. В пустом чате снимок сразу сохраняется штатным inbox splice без запуска ответа и принимается после первого системного сообщения; далее добавляется стандартный `user/message` с source `mayori-preset`: section metadata содержит полный версионированный снимок, content пустой и пропускается штатным DeepSeek wire serializer. Предыдущее уведомление заменяется через surface replacement. Сама игровая инструкция регистрируется через scoped `ctx.systemPrompt.section()` с `interpolate: false`; DSH штатно сохраняет её в `system/message` при следующем запросе. Pre-step consumer начинает новую request series, чтобы прежние инструкции не оставались в активном префиксе.
 
 Resume и fork читают снимок из своего полного либо унаследованного префикса без обращения к текущему каталогу. Редактирование и удаление пресета не меняют прошлые запросы или копии в чатах. Явный выбор без пресета сохраняется как `null`; новый default не возвращает инструкции после отключения. Snapshot не является состоянием кампании. Services, sections, listeners, HTTP routes и browser slots удаляются вместе с Cordis fiber. [Руководство](presets.md).
 
@@ -223,6 +224,10 @@ Browser consumer DiceToolCard зарегистрирован в публично
 - **Consumers** — native `resolveCheck` и browser `CheckToolCard` в keyed `tool.call.toolview`.
 
 `src/host/rules-plugin.js` вызывает отдельную Rules composition в `src/host/application.js` и требует `mayoriDice`; отсутствие зависимости блокирует подключение, а её выгрузка снимает Rules consumer. Dice provider может работать с `exposeTool: false`. Формулы урона задаются до броска; fixed effects и random tables находятся в Config profiles. Полный snapshot профиля, вход и результат версии 1 записываются в tool/result metadata; natural face, modifier, total, target, outcome, damage и consequence входят и в compact content. Reader восстанавливает карточку из записи, проверяя согласованность snapshot и recorded dice, без текущего provider/Config. Изменение правил не меняет исторический исход. Неполный урон или таблица сохраняет успешную проверку и error trace; повторного броска нет. Provider не изменяет HP или campaign state. Детали — [rules guide](rules.md).
+
+### Сжатие истории
+
+Сжатие подключается отдельным `dsh-mayori/compaction`, либо persisted переключателем внутри единственного пресета Mayori. Service Definition принадлежит штатному DSH `CompactionEngine`, Provider — `RoleplayCompactionProvider` с документированным `summarize()` hook, Consumers — native pressure/overflow listeners, compactHistory, snapshot consumer и форма настроек. `isolate.compaction` сохраняет независимость других пресетов. Перед запросом записывается стандартный снимок настройки и редактируемой инструкции; суммаризатор читает её из журнала. DSH владеет выбором диапазона, транзакцией, заменой surface и replay. Исходная история не удаляется, Config не подменяет старые snapshots. [Руководство](compaction.md).
 
 ## Инварианты
 

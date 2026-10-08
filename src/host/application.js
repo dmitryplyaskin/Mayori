@@ -16,6 +16,8 @@ import { registerRulesTool } from '../features/rules/host/tool.js'
 import { resolveRulesConfig } from '../features/rules/domain/check.js'
 import { SessionRollHistoryProvider } from '../features/roll-history/host/provider.js'
 import { registerRollHistoryTool } from '../features/roll-history/host/tool.js'
+import { RoleplayCompactionProvider } from '../features/compaction/host/provider.js'
+import { registerCompactionTool } from '../features/compaction/host/tool.js'
 
 /** Compose Host services in dependency order within the plugin's Cordis lifetime. */
 export function registerHostCapabilities(ctx, config) {
@@ -65,13 +67,18 @@ export function registerRollHistoryCapabilities(ctx) {
   return ctx.inject(['mayoriRollHistory'], registerRollHistoryTool)
 }
 
+export function registerCompactionCapabilities(ctx, config = {}) {
+  new RoleplayCompactionProvider(ctx, config)
+  return ctx.inject(['compaction', 'tools'], registerCompactionTool)
+}
+
 /** The same Mayori scope changes tools without changing its instructions. */
 export async function registerOptionalPlugins(ctx, config = {}) {
   const preferences = ctx.mayoriPluginSettings
   let mounts = []
   let work = Promise.resolve()
   let closed = false
-  const reconcile = plugins => {
+  const reconcile = (plugins, compaction) => {
     const run = async () => {
       if (closed) return
       for (const fiber of mounts.reverse()) await fiber.dispose()
@@ -86,13 +93,15 @@ export async function registerOptionalPlugins(ctx, config = {}) {
       if (plugins.dice || plugins.rules) await mount('mayori-dice', child => registerDiceCapabilities(child, { ...config.dice, exposeTool: plugins.dice }))
       if (plugins.rules) await mount('mayori-rules', child => registerRulesCapabilities(child, config.rules), ['tools', 'mayoriDice'])
       if (plugins.rollHistory) await mount('mayori-roll-history', registerRollHistoryCapabilities)
+      if (plugins.compaction) await mount('mayori-compaction', child => registerCompactionCapabilities(child, compaction), ['llm', 'tokenMeter', 'sessions'])
     }
     work = work.then(run, run)
     return work
   }
   ctx.effect(() => preferences.subscribe(reconcile), 'mayori: optional plugin subscription')
   ctx.effect(() => () => { closed = true }, 'mayori: stop optional plugin updates')
-  await reconcile(preferences.read().active)
+  const initial = preferences.read()
+  await reconcile(initial.active, initial.activeCompaction)
 }
 
 /** Legacy public mechanics entry; new compositions select individual plugins. */

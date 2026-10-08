@@ -86,6 +86,31 @@ test('before the first request the saved context is shown and host reads are non
   assert.throws(() => provider.inspect('test', -1), /Некорректный/)
 })
 
+test('metadata-only settings snapshots remain in the log and are absent from request context', () => {
+  const session = Session.create('metadata', greetingSeed({ messageId: 'opening', text: 'Opening' }))
+  for (const kind of ['mayori-preset', 'mayori-compaction-settings']) session.append('user/message', {
+    id: kind, role: 'user', source: { kind, sections: [{ name: kind, text: 'Saved configuration' }] }, content: [],
+  }, { surfaceOp: 'append' })
+  session.append('user/message', text('player', 'Привет'), { surfaceOp: 'append' })
+  const events = session.snapshotEvents()
+  assert.deepEqual(reconstructTrajectoryContext(events, 'current').messages.map(item => item.message.content[0].text), ['Opening', 'Привет'])
+  assert.equal(events.filter(event => event.type === 'user/message' && event.data.content.length === 0).length, 2)
+})
+
+test('an empty tool result remains in context to answer its caller', () => {
+  const session = Session.create('empty-tool-result', greetingSeed({ messageId: 'opening', text: 'Opening' }))
+  session.append('assistant/message', { turn: 2, step: 1, stream: [], message: {
+    id: 'caller', role: 'assistant', source: { kind: 'model', provider: 'test', model: 'test' },
+    content: [{ type: 'tool-call', id: 'empty-call', name: 'inspect', arguments: '{}' }],
+  } }, { surfaceOp: 'append' })
+  const result = session.append('tool/result', { turn: 2, step: 1, message: {
+    id: 'empty-result', role: 'tool', toolCallId: 'empty-call', source: { kind: 'tool', callId: 'empty-call' }, content: [],
+  } }, { surfaceOp: 'append' })
+  const context = reconstructTrajectoryContext(session.snapshotEvents(), 'current')
+  assert.equal(context.messages.at(-1).seq, result.seq)
+  assert.equal(context.messages.at(-1).message.role, 'tool')
+})
+
 test('native trajectory snapshot contains only request input and uses the same row contracts as the journal', () => {
   const { session, first } = scenario()
   const reply = { kind: 'assistant', seq: first, turn: 2, step: 1, blocks: [{ kind: 'text', text: 'Reply' }] }

@@ -30,7 +30,9 @@ export function reconstructTrajectoryContext(events, selection, projections = []
   const folded = foldSurface(prefix, projections)
   const messages = folded.nodes.flatMap(seq => {
     const message = deriveEventMessage(prefix[seq], folded.projectedMessages)
-    return message ? [{ seq, message, ...positions.get(seq) }] : []
+    // DeepSeek's wire serializer omits empty user messages. Metadata snapshots
+    // remain in the full log, but contribute no content to the model input.
+    return message && !(message.role === 'user' && message.content.length === 0) ? [{ seq, message, ...positions.get(seq) }] : []
   })
   return { requests, selectedSeq: selected?.seq ?? 'current',
     boundarySeq: prefix.at(-1)?.seq ?? null, messages,
