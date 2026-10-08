@@ -19,6 +19,15 @@ export function presetContext(preset) {
   return `Follow the selected role-playing instructions below. A null preset means no additional role-playing instructions.\n${OPEN}\n${record}\n${CLOSE}`
 }
 
+/** The same logged snapshot is used for selection and authored opening branches. */
+export function presetSelectionMessage(preset, id) {
+  return {
+    ...(id === undefined ? {} : { id }), role: 'user',
+    source: { kind: PRESET_SOURCE, sections: [{ name: PRESET_SECTION, text: presetContext(preset) }] },
+    content: [{ type: 'text', text: 'The selected role-playing preset is provided in the current system prompt. This configuration notice is not a player action.' }],
+  }
+}
+
 export function readPresetSelection(events) {
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]

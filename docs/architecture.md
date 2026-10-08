@@ -104,6 +104,8 @@ Bundle использует единый агентный preset `mayori` для
 
 Resume и fork читают снимок из своего полного либо унаследованного префикса без обращения к текущему каталогу. Редактирование и удаление пресета не меняют прошлые запросы или копии в чатах. Явный выбор без пресета сохраняется как `null`; новый default не возвращает инструкции после отключения. Snapshot не является состоянием кампании. Services, sections, listeners, HTTP routes и browser slots удаляются вместе с Cordis fiber. [Руководство](presets.md).
 
+Ручная ветка приветствия не наследует старую переписку, поэтому переносит текущий preset snapshot исходного чата отдельным стандартным `user/message` в seed. `presetSelectionMessage` задаёт тот же формат, что и обычный выбор. Provider поддерживает proxy receivers Cordis без приватных brand checks. Browser provider каталога владеет observable `PresetEditor`: черновик, его сохранённая основа и состояние операции переживают unmount панели, остаются только presentation state и исчезают с экземпляром provider.
+
 ### Character Library
 
 Импортированные Character Card образуют отдельную Host-owned capability seam:
@@ -113,6 +115,8 @@ Resume и fork читают снимок из своего полного либ
 - **Consumers** — lifecycle-bound same-origin Host route `/mayori/characters`, browser `RemoteCharacterLibraryProvider` с observable snapshot и `CharacterGalleryPanel` в root-scoped `main`.
 
 Codec принимает JSON v2/v3 и стандартные PNG `tEXt` payloads `chara` / `ccv3`; при наличии обоих выбирает v3. Host валидирует байты до записи, сериализует карточку под content-derived id и публикует браузеру только снимок каталога. Контейнер и неизвестные поля не превращаются в prompt. Эта библиотека — пользовательский каталог ресурсов, а не campaign journal: пока карточка не выбрана для игры, модель её не видит.
+
+Browser `CharacterLibraryService.refresh()` повторяет чтение каталога. После ошибки initial load освобождает cached promise, чтобы новый mount мог повторить запрос; галерея также предоставляет явную кнопку повтора. Более ранние RPC-ответы не заменяют снимок новой загрузки, а ошибка сохраняет уже полученные карточки.
 
 ### Навигация и история чатов
 

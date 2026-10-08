@@ -1,20 +1,21 @@
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionPresetService } from './service.js'
-import { PRESET_SECTION, PRESET_SOURCE, presetContext, readPresetSelection } from '../shared/preset.js'
+import { PRESET_SECTION, PRESET_SOURCE, presetContext, presetSelectionMessage, readPresetSelection } from '../shared/preset.js'
 
 /** Restore from the exact inherited log prefix, never the parent's current catalog. */
 export class LoggedSessionPresetProvider extends SessionPresetService {
-  #bindings = new WeakMap()
-  #selections = new WeakMap()
-  #changing = new Set()
+  // Cordis service consumers use proxy receivers; state must work through them.
+  _bindings = new WeakMap()
+  _selections = new WeakMap()
+  _changing = new Set()
   constructor(ctx, presets) {
     super(ctx)
     this.presets = presets
     ctx.on('agent/created', ({ agent }) => this.restore(agent))
     ctx.on('agent/disposed', ({ agent }) => {
-      this.#bindings.get(agent)?.()
-      this.#bindings.delete(agent)
-      this.#selections.delete(agent)
+      this._bindings.get(agent)?.()
+      this._bindings.delete(agent)
+      this._selections.delete(agent)
     })
   }
   async restoreActiveAgents() {
@@ -24,11 +25,11 @@ export class LoggedSessionPresetProvider extends SessionPresetService {
     if (agent.session.header.origin === 'subagent') return
     const { events } = await this.ctx.sessionQuery.readSession(agent.id)
     const preset = readPresetSelection(events)
-    if (preset !== undefined) this.#bind(agent, preset)
-    else await this.#record(agent, await this.presets.resolve())
+    if (preset !== undefined) this._bind(agent, preset)
+    else await this._record(agent, await this.presets.resolve())
   }
-  #bind(agent, preset) {
-    this.#bindings.get(agent)?.()
+  _bind(agent, preset) {
+    this._bindings.get(agent)?.()
     const section = agent.ctx.systemPrompt.section({
       name: PRESET_SECTION, order: 10, interpolate: false, text: presetContext(preset),
     })
@@ -40,22 +41,22 @@ export class LoggedSessionPresetProvider extends SessionPresetService {
       })
     } catch (error) { section(); throw error }
     const dispose = this.ctx.effect(() => () => { prefix(); section() }, `mayori: session preset (${agent.id})`)
-    this.#bindings.set(agent, dispose)
-    this.#selections.set(agent, preset)
+    this._bindings.set(agent, dispose)
+    this._selections.set(agent, preset)
   }
-  #idle(agent) {
+  _idle(agent) {
     if (this.ctx.agents.get(agent.id) !== agent || agent.status !== 'idle'
       || agent.inbox?.nextTurn.length || agent.inbox?.nextStep.length) {
       throw new Error('Дождитесь завершения ответа и отправки сообщений из очереди.')
     }
   }
-  async #record(agent, preset, signal) {
-    const previous = this.#selections.get(agent)
+  async _record(agent, preset, signal) {
+    const previous = this._selections.get(agent)
     const { events } = await this.ctx.sessionQuery.readSession(agent.id)
     signal?.throwIfAborted()
-    if (signal) this.#idle(agent)
+    if (signal) this._idle(agent)
     try {
-      this.#bind(agent, preset)
+      this._bind(agent, preset)
       const previousSeq = agent.session.surface.nodes.findLast(seq => {
         const event = events[seq]
         return event?.type === 'user/message' && [PRESET_SOURCE, 'runtime-context'].includes(event.data.source?.kind)
@@ -64,19 +65,17 @@ export class LoggedSessionPresetProvider extends SessionPresetService {
       // A user-role configuration snapshot may be logged outside a model step.
       // Full instructions live in its source metadata; the loop records the actual
       // rendered system message at its own canonical admission boundary.
-      agent.session.append('user/message', createUserMessage({
-        source: { kind: PRESET_SOURCE, sections: [{ name: PRESET_SECTION, text: presetContext(preset) }] },
-        content: [{ type: 'text', text: 'The selected role-playing preset is provided in the current system prompt. This configuration notice is not a player action.' }],
-      }), { surfaceOp: previousSeq === undefined ? 'append' : { op: 'replace', startSeq: previousSeq, endSeq: previousSeq },
+      agent.session.append('user/message', createUserMessage(presetSelectionMessage(preset)),
+        { surfaceOp: previousSeq === undefined ? 'append' : { op: 'replace', startSeq: previousSeq, endSeq: previousSeq },
         ...(previousSeq === undefined ? {} : { sourceEventSeqs: [previousSeq] }) })
     } catch (error) {
-      if (previous !== undefined) this.#bind(agent, previous)
-      else { this.#bindings.get(agent)?.(); this.#selections.delete(agent); this.#bindings.delete(agent) }
+      if (previous !== undefined) this._bind(agent, previous)
+      else { this._bindings.get(agent)?.(); this._selections.delete(agent); this._bindings.delete(agent) }
       throw error
     }
     await this.ctx.sessions.flush(agent.session)
   }
-  async #agent(sessionId) {
+  async _agent(sessionId) {
     if (typeof sessionId !== 'string' || !sessionId.trim()) throw new TypeError('Некорректный идентификатор чата.')
     let agent = this.ctx.agents.get(sessionId)
     if (!agent) {
@@ -88,21 +87,21 @@ export class LoggedSessionPresetProvider extends SessionPresetService {
     return agent
   }
   async state(sessionId) {
-    const agent = await this.#agent(sessionId)
-    return { preset: this.#selections.get(agent) ?? null }
+    const agent = await this._agent(sessionId)
+    return { preset: this._selections.get(agent) ?? null }
   }
   async select(sessionId, presetId) {
-    const agent = await this.#agent(sessionId)
-    if (this.#changing.has(sessionId)) throw new Error('Дождитесь сохранения текущего пресета.')
-    this.#idle(agent)
-    this.#changing.add(sessionId)
+    const agent = await this._agent(sessionId)
+    if (this._changing.has(sessionId)) throw new Error('Дождитесь сохранения текущего пресета.')
+    this._idle(agent)
+    this._changing.add(sessionId)
     try {
       return await agent.runMaintenance(async signal => {
-        this.#idle(agent)
+        this._idle(agent)
         const preset = await this.presets.resolve(presetId)
-        await this.#record(agent, preset, signal)
+        await this._record(agent, preset, signal)
         return { preset }
       })
-    } finally { this.#changing.delete(sessionId) }
+    } finally { this._changing.delete(sessionId) }
   }
 }

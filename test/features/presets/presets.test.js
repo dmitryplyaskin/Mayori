@@ -97,6 +97,22 @@ test('selection records a configuration snapshot, treats macros literally and pr
   assert.equal(agent.session.seq, before, 'Reading selection must not change the journal')
 })
 
+test('the session preset service supports state, selection and restoration through traced Cordis consumers', async t => {
+  const h = await runtime(t)
+  const agent = await h.create('chat')
+  const custom = await h.presets.save({ name: 'Consumer preset', instructions: 'Instructions from a Cordis consumer.' })
+  const service = h.ctx.mayoriSessionPresets
+  assert.equal((await service.state('chat')).preset.id, 'mayori')
+  await service.select('chat', custom.id)
+  await service.restoreActiveAgents()
+  assert.deepEqual((await service.state('chat')).preset, custom)
+  await service.select('chat', null)
+  assert.equal((await service.state('chat')).preset, null)
+  assert.equal(readPresetSelection(agent.session.snapshotEvents()), null)
+  const prompt = renderPrompt(await agent.ctx.systemPrompt.assemble({ scope: scopeOf(agent.ctx) }))
+  assert.ok(!prompt.includes(custom.instructions))
+})
+
 test('restart and fork restore the exact recorded selection after editing and deleting the catalog', async t => {
   const h = await runtime(t)
   const agent = await h.create('chat')

@@ -329,7 +329,7 @@ export function CharacterGalleryPanel({ library, personas, startCharacter }) {
           <header className="mayori-gallery-header">
             <div className="mayori-gallery-title">
               <h2 id="mayori-gallery-title">Персонажи</h2>
-              <p>{snapshot.status === 'ready' ? `${snapshot.cards.length} в галерее` : 'Загрузка…'}</p>
+              <p>{snapshot.status === 'ready' ? `${snapshot.cards.length} в галерее` : snapshot.status === 'error' ? 'Не удалось загрузить галерею' : 'Загрузка…'}</p>
             </div>
             <div className="mayori-gallery-header-actions">
               <button type="button" className="mayori-filter-toggle" aria-controls="mayori-filter-panel" aria-expanded={filtersOpen} onClick={() => { setFiltersOpen(value => !value) }}>{icon('filter')}<span>Фильтры</span></button>
@@ -350,8 +350,8 @@ export function CharacterGalleryPanel({ library, personas, startCharacter }) {
               </div>
               <div className="mayori-gallery-notice" role="status" aria-live="polite">
                 {notice !== null && <p className={notice.kind === 'error' ? 'mayori-error' : 'mayori-success'}>{notice.text}</p>}
-                {snapshot.status === 'error' && <p className="mayori-error">{snapshot.error}</p>}
               </div>
+              {snapshot.status === 'error' && <div role="alert" className="mayori-error">{snapshot.error} <button type="button" className="mayori-secondary-button" disabled={busy} onClick={() => { void library.refresh().catch(() => {}) }}>Повторить загрузку</button></div>}
               {snapshot.status === 'loading' && <p className="mayori-empty">Загружаем галерею…</p>}
               {snapshot.status === 'ready' && cards.length === 0 && (
                 <div className="mayori-empty">

@@ -6,6 +6,7 @@ import { greetingSeed } from '../../../src/features/character-session/host/greet
 import { SessionMessageRevisionProvider } from '../../../src/features/message-revisions/host/provider.js'
 import { editedContent, authoredReply, branchRows, MANUAL_PROVIDER } from '../../../src/features/message-revisions/domain/revisions.js'
 import { reconstructTrajectoryContext } from '../../../src/features/trajectory/host/context.js'
+import { presetSelectionMessage, readPresetSelection } from '../../../src/features/presets/shared/preset.js'
 
 function harness() {
   const source = Session.create('source', greetingSeed({ messageId: 'greeting', text: 'Original greeting' }))
@@ -142,6 +143,24 @@ test('author greetings use the selected text; regeneration requires an actual pl
   assert.equal((await h.provider.inspect(child.id, opening.seq)).canRegenerate, false)
   const reedited = await h.provider.edit(child.id, opening.seq, 'My second opening.')
   assert.equal(h.agents.get(reedited.sessionId).session.snapshotEvents().find(event => event.type === 'assistant/message').data.turn, 1)
+})
+
+test('editing and re-editing an opening preserve its logged preset, including explicit no-preset mode', async () => {
+  for (const preset of [{ id: 'deleted-preset', name: 'Deleted preset', instructions: 'Retain these exact instructions.' }, null]) {
+    const h = harness()
+    h.source.append('user/message', presetSelectionMessage(preset, 'preset-selection'), { surfaceOp: 'append' })
+    const before = h.source.snapshotEvents()
+    const result = await h.provider.edit('source', 3, 'My revised opening.')
+    const child = h.agents.get(result.sessionId)
+    assert.deepEqual(readPresetSelection(child.session.snapshotEvents()), preset)
+    assert.deepEqual(h.source.snapshotEvents(), before)
+    const reopened = Session.create(child.id, child.session.snapshotEvents(), child.session.header, child.session.inheritedEventCount)
+    assert.deepEqual(readPresetSelection(reopened.snapshotEvents()), preset)
+    const opening = child.session.snapshotEvents().find(event => event.type === 'assistant/message')
+    const second = await h.provider.edit(child.id, opening.seq, 'My second revision.')
+    assert.deepEqual(readPresetSelection(h.agents.get(second.sessionId).session.snapshotEvents()), preset)
+    assert.equal(child.session.snapshotEvents().find(event => event.type === 'turn/start').data.turn, 1)
+  }
 })
 
 test('a lost source, missing character and concurrent maintenance refuse mutations', async () => {

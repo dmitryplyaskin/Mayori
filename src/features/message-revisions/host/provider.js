@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { buildForkSeed } from '@deepseek-ai/dsh-session/fork'
 import { MessageRevisionService } from './service.js'
 import { authoredReply, editedContent, humanMessage, regenerationInput, textContent, MANUAL_PROVIDER } from '../domain/revisions.js'
+import { presetSelectionMessage, readPresetSelection } from '../../presets/shared/preset.js'
 
 /** Use native forks and logged authored settlements; the source session is never rewritten. */
 export class SessionMessageRevisionProvider extends MessageRevisionService {
@@ -116,6 +117,13 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
     // Seed the completed authored turn before constructing Agent. Its loop must
     // initialize its next turn from the same durable history as cold replay.
     seed.push(...authoredReply(seed, randomUUID(), content, Date.now()))
+    if (opening) {
+      // This branch has no inherited prefix. Carry the chat's exact instructions,
+      // including null, so restoration cannot substitute the catalog default.
+      const roleplayPreset = readPresetSelection(events)
+      if (roleplayPreset !== undefined) seed.push({ type: 'user/message', seq: seed.length, time: Date.now(),
+        surfaceOp: 'append', data: presetSelectionMessage(roleplayPreset, randomUUID()) })
+    }
     const selection = this._selection(events, agent)
     seed.push({ type: 'model/selection', data: selection, seq: seed.length, time: Date.now() })
     const presetId = events.findLast(event => event.type === 'agent-preset/selected')?.data.agentPreset

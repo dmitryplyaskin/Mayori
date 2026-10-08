@@ -1,4 +1,5 @@
 import { call } from '../../../client/infrastructure/rpc.js'
+import { PresetEditor } from './editor.js'
 
 export class RoleplayPresetService {
   getSnapshot() { throw new Error('RoleplayPresetService.getSnapshot() is not implemented') }
@@ -10,6 +11,7 @@ export class RoleplayPresetService {
 }
 
 export class RemoteRoleplayPresetProvider extends RoleplayPresetService {
+  editor = new PresetEditor()
   #snapshot = { status: 'loading', presets: [], defaultId: null, error: null }
   #listeners = new Set()
   #loading

@@ -40,8 +40,35 @@ for (const card of cards.filter(card => card.name.startsWith('Catalog')).slice(0
 const browser = await chromium.launch({ headless: true,
   ...(process.env.MAYORI_CHROMIUM_PATH ? { executablePath: process.env.MAYORI_CHROMIUM_PATH } : {}) })
 try {
-  const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
   const errors = []
+  const retryPage = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+  retryPage.on('pageerror', error => errors.push(error.message))
+  let failCatalog = true
+  await retryPage.route('**/mayori/characters/list', route => failCatalog
+    ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'Временный сбой загрузки галереи.' }) })
+    : route.continue())
+  await retryPage.goto(url.href)
+  await retryPage.getByRole('button', { name: 'Персонажи', exact: true }).waitFor()
+  try { await retryPage.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 2000 }) } catch {}
+  await retryPage.getByRole('button', { name: 'Персонажи', exact: true }).click()
+  const retry = retryPage.getByRole('button', { name: 'Повторить загрузку', exact: true })
+  await retry.waitFor()
+  failCatalog = false
+  await retry.focus()
+  await retryPage.keyboard.press('Enter')
+  await retryPage.locator('.mayori-card').first().waitFor()
+  assert.equal(await retryPage.getByRole('alert').filter({ hasText: 'Временный сбой загрузки галереи.' }).count(), 0)
+  failCatalog = true
+  await retryPage.reload()
+  await retryPage.getByRole('button', { name: 'Персонажи', exact: true }).click()
+  await retry.waitFor()
+  await retryPage.getByRole('button', { name: 'Персоны', exact: true }).click()
+  failCatalog = false
+  await retryPage.getByRole('button', { name: 'Персонажи', exact: true }).click()
+  await retryPage.locator('.mayori-card').first().waitFor()
+  assert.equal(await retry.count(), 0, 'Remounting the gallery retries a failed initial load')
+  await retryPage.close()
+  const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } })
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(url.href)
   await page.getByRole('button', { name: 'Главная', exact: true }).waitFor()

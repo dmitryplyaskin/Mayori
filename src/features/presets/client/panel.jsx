@@ -19,18 +19,13 @@ export function PresetPanel({ presets, sessions, presetFor }) {
   const snapshot = useSyncExternalStore(presets.subscribe, presets.getSnapshot, presets.getSnapshot)
   const catalog = useSyncExternalStore(sessions.list.subscribe, sessions.list.getSnapshot, sessions.list.getSnapshot)
   const currentId = catalog.ids.find(id => catalog.byId[id]?.retainedBy?.mainView > 0)
-  const [draft, setDraft] = useState(blank)
-  const [saved, setSaved] = useState(blank)
+  const editor = presets.editor
+  const { draft, saved, busy, error, notice } = useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot)
   const [query, setQuery] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [current, setCurrent] = useState(null)
-  const initialized = useRef(false)
   const nameRef = useRef(null)
   const formRef = useRef(null)
   const menuRef = useRef(null)
-  const pending = useRef(false)
   const dirty = presetChanged(draft, saved)
   const disabled = busy || snapshot.status === 'loading'
   const currentReady = currentId && current?.status === 'ready'
@@ -39,11 +34,8 @@ export function PresetPanel({ presets, sessions, presetFor }) {
   const matches = filterPresets(snapshot.presets, query)
 
   useEffect(() => {
-    if (initialized.current || snapshot.status !== 'ready') return
-    initialized.current = true
-    const first = snapshot.presets.find(preset => preset.id === snapshot.defaultId) ?? snapshot.presets[0] ?? blank()
-    setDraft({ ...first }); setSaved({ ...first })
-  }, [snapshot])
+    editor.initialize(snapshot)
+  }, [editor, snapshot])
   useEffect(() => {
     let active = true
     setCurrent(null)
@@ -70,24 +62,22 @@ export function PresetPanel({ presets, sessions, presetFor }) {
   }, [])
 
   const run = async (operation, success) => {
-    if (pending.current) return
-    pending.current = true
-    setBusy(true); setError(''); setNotice('')
-    try { await operation(); setNotice(success) }
-    catch (failure) { setError(failure.message || 'Не удалось выполнить действие. Попробуйте ещё раз.') }
-    finally { pending.current = false; setBusy(false) }
+    if (editor.getSnapshot().busy) return
+    editor.update({ busy: true, error: '', notice: '' })
+    try { await operation(); editor.update({ notice: success }) }
+    catch (failure) { editor.update({ error: failure.message || 'Не удалось выполнить действие. Попробуйте ещё раз.' }) }
+    finally { editor.update({ busy: false }) }
   }
   const choose = preset => {
     if (dirty && !window.confirm('Перейти к другому пресету? Несохранённые изменения будут потеряны.')) return
-    initialized.current = true
-    setDraft({ ...preset }); setSaved(preset.id ? { ...preset } : blank()); setError(''); setNotice('')
+    editor.choose(preset)
     if (menuRef.current) menuRef.current.open = false
     nameRef.current?.focus()
   }
-  const field = (key, value) => { setDraft(previous => ({ ...previous, [key]: value })); setNotice('') }
+  const field = (key, value) => { editor.change(key, value) }
   const save = async () => {
     const value = await presets.save(draft)
-    setDraft(value); setSaved(value)
+    editor.accept(value)
     return value
   }
   const apply = () => {
@@ -103,7 +93,7 @@ export function PresetPanel({ presets, sessions, presetFor }) {
     void run(async () => {
       await presets.remove(draft.id)
       const next = presets.getSnapshot().presets[0] ?? blank()
-      setDraft({ ...next }); setSaved({ ...next })
+      editor.choose(next)
     }, 'Пресет удалён из библиотеки.')
   }
 
@@ -175,7 +165,7 @@ export function PresetPanel({ presets, sessions, presetFor }) {
           <footer className="mayori-preset-editor-footer">
             <div className="mayori-preset-feedback"><p role="status">{busy ? 'Подождите…' : notice}</p>{!notice && !busy && <p>Сохранение не меняет инструкции в открытых чатах.</p>}</div>
             <div className="mayori-preset-editor-actions">
-              {dirty && draft.id && <button type="button" className="mayori-preset-text-button" disabled={disabled} onClick={() => { setDraft({ ...saved }); setError(''); setNotice('') }}>Отменить изменения</button>}
+              {dirty && draft.id && <button type="button" className="mayori-preset-text-button" disabled={disabled} onClick={() => { editor.reset() }}>Отменить изменения</button>}
               {currentId && <button type="button" className="mayori-preset-button" disabled={disabled || !currentReady} onClick={apply}>{dirty || !draft.id ? 'Сохранить и применить' : 'Применить к чату'}</button>}
               <button className="mayori-preset-button mayori-preset-primary" type="submit" disabled={disabled} aria-busy={busy}>Сохранить пресет</button>
             </div>

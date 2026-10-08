@@ -8,6 +8,7 @@ const EMPTY_SNAPSHOT = Object.freeze({ status: 'loading', cards: Object.freeze([
 export class CharacterLibraryService {
   getSnapshot() { throw new Error('CharacterLibraryService.getSnapshot() is not implemented') }
   subscribe() { throw new Error('CharacterLibraryService.subscribe() is not implemented') }
+  refresh() { throw new Error('CharacterLibraryService.refresh() is not implemented') }
   importFiles() { throw new Error('CharacterLibraryService.importFiles() is not implemented') }
   remove() { throw new Error('CharacterLibraryService.remove() is not implemented') }
   prepareCampaign() { throw new Error('CharacterLibraryService.prepareCampaign() is not implemented') }
@@ -29,6 +30,7 @@ export class RemoteCharacterLibraryProvider extends CharacterLibraryService {
   #snapshot = EMPTY_SNAPSHOT
   #listeners = new Set()
   #loading
+  #revision = 0
 
   getSnapshot = () => this.#snapshot
 
@@ -51,13 +53,13 @@ export class RemoteCharacterLibraryProvider extends CharacterLibraryService {
       result.imported += partial.imported
       result.rejected.push(...partial.rejected)
     }
-    await this.#reload()
+    await this.refresh()
     return result
   }
 
   async remove(id) {
     await call('remove', { id })
-    await this.#reload()
+    await this.refresh()
   }
 
   async start(characterId, workspaceId, greetingIndex = 0) {
@@ -73,15 +75,23 @@ export class RemoteCharacterLibraryProvider extends CharacterLibraryService {
   }
 
   async #ensureLoaded() {
-    this.#loading ??= this.#reload().catch((error) => {
-      this.#publish('error', [], error instanceof Error ? error.message : String(error))
-    })
+    this.#loading ??= this.refresh().catch(() => {})
     return this.#loading
   }
 
-  async #reload() {
-    const result = await call('list', {})
-    this.#publish('ready', Array.isArray(result.cards) ? result.cards : [], null)
+  async refresh() {
+    const revision = ++this.#revision
+    this.#publish('loading', this.#snapshot.cards, null)
+    try {
+      const result = await call('list', {})
+      if (revision === this.#revision) this.#publish('ready', Array.isArray(result.cards) ? result.cards : [], null)
+    } catch (error) {
+      if (revision === this.#revision) {
+        this.#loading = undefined
+        this.#publish('error', this.#snapshot.cards, error instanceof Error ? error.message : String(error))
+      }
+      throw error
+    }
   }
 
   #publish(status, cards, error) {
