@@ -27,7 +27,7 @@
 
 ## Config и последствия
 
-Профили находятся в валидируемом `Config.rules.profiles` entry `dsh-mayori/optional-plugins` или `Config.profiles` самостоятельного `dsh-mayori/rules`. В **Настройки → Mayori → Плагины** переключатель «Проверки» включает `resolveCheck` и его Dice provider автоматически. Свободные броски и чтение подробностей управляются отдельно. [Руководство по плагинам](plugins.md).
+Профили находятся в валидируемом `Config.rules.profiles` entry `dsh-mayori/optional-plugins` или `Config.profiles` самостоятельного `dsh-mayori/rules`. В **Настройки Mayori → Плагины** настройка «Проверки по правилам» раздела «Кости и проверки» включает `resolveCheck` и его Dice provider автоматически. Свободные броски и чтение подробностей управляются отдельно. [Руководство по плагинам](plugins.md).
 
 Каждый профиль содержит:
 

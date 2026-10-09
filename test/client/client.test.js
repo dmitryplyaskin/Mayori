@@ -104,12 +104,16 @@ test('registers reversible Mayori client contributions', async () => {
 
     assert.equal(typeof provided.mayoriCharacters.importFiles, 'function')
     assert.deepEqual(slotInjections.map(item => item.name), [
-      'settings.section',
+      'sidebar.footer.action',
       'tool.call.toolview', 'tool.call.toolview',
       'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark', 'sidebar.workspaces', 'sidebar', 'shell.leading',
       'main', 'sidebar.panellist', 'main.conversation', 'main', 'main', 'main', 'main', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'conversation.chat.node', 'conversation.view', 'conversation.session.header',
     ])
     for (const slot of slotInjections) slot.callback()
+    assert.equal(registrations.some(item => item.options.name === 'settings.section'), false)
+    const settings = registrations.find(item => item.options.id === 'mayori-settings')
+    assert.equal(settings.options.name, 'sidebar.footer.action')
+    assert.equal(typeof settings.options.inject().preferences.update, 'function')
     assert.equal(registrations.find(item => item.options.name === 'tool.call.toolview').options.key, 'rollDice')
     assert.deepEqual(registrations.filter(item => item.options.name === 'tool.call.toolview').map(item => item.options.key), ['rollDice', 'resolveCheck'])
     const slotRegistration = registrations.find(item => item.options.name === 'sidebar.workspaces')

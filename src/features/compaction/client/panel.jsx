@@ -34,14 +34,13 @@ export function CompactionSettings({ settings, busy, onSave }) {
   return <form ref={form} className="mayori-compaction-form" onSubmit={submit} aria-labelledby="mayori-compaction-title">
     <fieldset disabled={busy}>
       <legend id="mayori-compaction-title">Настройки сжатия</legend>
-      <p>Настройте сжатие перед включением или измените его для следующих ходов. Все поля обязательны.</p>
       <div className="mayori-compaction-numbers">
         {number('thresholdPercent', 'Порог заполнения контекста, %', 1, 99, 'Сжатие начинается у этого порога или раньше, если нужен запас для ответа.')}
         {number('retainPercent', 'Оставлять последние сообщения, %', 0, 98, 'Доля доступного контекста, которую сохраняем дословно. Должна быть меньше порога сжатия.')}
       </div>
       <div className="mayori-compaction-field">
         <label htmlFor="mayori-compaction-instructions">Инструкция сжатия</label>
-        <p id="mayori-compaction-instructions-help">Опишите, какие сведения сохранить, язык и структуру изложения. Эта инструкция используется только при сжатии.</p>
+        <p id="mayori-compaction-instructions-help">Укажите, что сохранять в изложении: обещания, отношения, незавершённые задачи, предметы и ограничения персонажей.</p>
         <textarea id="mayori-compaction-instructions" rows="12" maxLength={32768} required value={draft.instructions}
           aria-invalid={invalid === 'instructions' || undefined} aria-describedby={`mayori-compaction-instructions-help${invalid === 'instructions' ? ' mayori-compaction-error' : ''}`} onChange={event => change('instructions', event.target.value)} />
         <button type="button" onClick={() => change('instructions', DEFAULT_COMPACTION_INSTRUCTIONS)}>Вернуть игровую инструкцию</button>

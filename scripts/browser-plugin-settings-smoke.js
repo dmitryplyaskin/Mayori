@@ -1,4 +1,4 @@
-/** Native settings page QA against an isolated DSH profile. */
+/** Mayori modal QA against an isolated DSH profile. */
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { mkdir } from 'node:fs/promises'
@@ -15,28 +15,66 @@ try {
   page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   page.setDefaultTimeout(15000)
   page.on('pageerror', error => errors.push(error.message))
-  const openSettings = async () => {
+  const dismissOnboarding = async () => {
     const previewNotice = page.getByRole('button', { name: 'Continue', exact: true })
     if (await previewNotice.isVisible()) await previewNotice.click()
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await page.getByRole('button', { name: /^(Settings|设置|Настройки)(\s|$)/ }).click()
-      try { await page.getByRole('dialog').waitFor({ timeout: 2000 }); break } catch {}
+    const later = page.getByRole('button', { name: 'Configure later', exact: true })
+    try { await later.waitFor({ timeout: 2000 }); await later.click() } catch {}
+  }
+  const openSettings = async () => {
+    await dismissOnboarding()
+    await page.getByRole('button', { name: 'Настройки Mayori', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Настройки Mayori', exact: true })
+    await dialog.waitFor()
+    assert.equal(Math.round((await dialog.boundingBox()).width), Math.min(1200, page.viewportSize().width - 48))
+    assert.equal(await dialog.getByRole('tab', { name: 'Основные' }).getAttribute('aria-selected'), 'true')
+    assert.equal(await dialog.getByRole('tabpanel').innerText(), '')
+    await dialog.getByRole('tab', { name: 'Основные' }).focus()
+    await page.keyboard.press(page.viewportSize().width > 600 ? 'ArrowDown' : 'ArrowRight')
+    assert.equal(await dialog.getByRole('tab', { name: 'Плагины' }).getAttribute('aria-selected'), 'true')
+    await dialog.locator('.mayori-plugin').first().waitFor()
+    assert.equal(await dialog.locator('.mayori-plugin').count(), 2)
+    assert.equal(await dialog.locator('.mayori-plugin[open]').count(), 0)
+    for (const summary of await dialog.locator('.mayori-plugin > summary').all()) {
+      await summary.focus(); await page.keyboard.press('Enter')
     }
-    await page.getByRole('dialog').getByRole('button', { name: 'Mayori', exact: true }).click()
   }
   await page.goto(url.href)
   await page.getByRole('button', { name: 'Главная', exact: true }).waitFor()
   // Wait for the stock shell's initial Remote/store hydration.
   await page.waitForTimeout(2000)
+  await dismissOnboarding()
+  await page.getByRole('button', { name: /^(Settings|设置|Настройки)$/, exact: true }).click()
+  await page.getByRole('dialog').waitFor()
+  assert.equal(await page.getByRole('dialog').getByRole('button', { name: 'Mayori', exact: true }).count(), 0)
+  await page.keyboard.press('Escape')
   await openSettings()
   const panel = page.locator('.mayori-settings')
-  const dice = panel.getByRole('switch', { name: 'Кости', exact: true })
+  assert.equal(await panel.getByText('Включайте возможности для своих игр.', { exact: false }).count(), 0)
+  const search = panel.getByRole('searchbox', { name: 'Поиск по плагинам' })
+  await search.fill('  ПЕРЕБРОСЫ  ')
+  assert.equal(await panel.locator('.mayori-plugin:visible').count(), 1)
+  assert.match(await panel.locator('.mayori-plugin:visible summary').innerText(), /Кости/)
+  await search.fill('несуществующий плагин')
+  await panel.getByRole('status').filter({ hasText: 'Плагины не найдены' }).waitFor()
+  assert.equal(await panel.locator('.mayori-plugin:visible').count(), 0)
+  await search.fill('')
+  const dice = panel.getByRole('switch', { name: 'Свободные броски', exact: true })
+  const rules = panel.getByRole('switch', { name: 'Проверки по правилам', exact: true })
+  const history = panel.getByRole('switch', { name: 'Разбор прошлых бросков', exact: true })
+  const initialRules = await rules.isChecked(), initialHistory = await history.isChecked()
+  await search.fill('модификаторы')
+  assert.equal(await panel.locator('.mayori-plugin:visible').count(), 1)
+  assert.equal(await panel.getByRole('switch').count(), 3, 'Setting search exposes the complete dice plugin')
+  await search.fill('')
   await dice.waitFor()
   const initial = await dice.isChecked()
   await dice.focus(); await page.keyboard.press('Space')
   await page.waitForFunction(expected => document.querySelector('.mayori-plugin-row input').checked === expected
     && !document.querySelector('.mayori-plugin-row input').disabled, !initial)
   assert.equal(await dice.isChecked(), !initial)
+  assert.equal(await rules.isChecked(), initialRules)
+  assert.equal(await history.isChecked(), initialHistory)
   await page.reload()
   await page.waitForTimeout(2000)
   await openSettings()
@@ -67,6 +105,14 @@ try {
   assert.equal(await retain.getAttribute('aria-invalid'), 'true')
   assert.equal(await retain.evaluate(node => node === document.activeElement), true)
   await retain.fill('10'); await instructions.fill(custom)
+  await search.fill('Кости'); await search.fill('')
+  assert.equal(await instructions.inputValue(), custom, 'Filtering preserves the compaction draft')
+  await page.getByRole('tab', { name: 'Основные' }).click()
+  await page.getByRole('tab', { name: 'Плагины' }).click()
+  assert.equal(await instructions.inputValue(), custom, 'Changing tabs preserves the compaction draft')
+  await panel.locator('.mayori-plugin > summary').filter({ hasText: 'Сжатие истории' }).click()
+  await panel.locator('.mayori-plugin > summary').filter({ hasText: 'Сжатие истории' }).click()
+  assert.equal(await instructions.inputValue(), custom, 'Collapsing preserves the compaction draft')
   await dice.click()
   await page.waitForFunction(() => !document.querySelector('.mayori-plugin-row input').disabled)
   assert.equal(await instructions.inputValue(), custom, 'Switch changes preserve the unsaved instruction')
@@ -94,6 +140,7 @@ try {
       await page.setViewportSize({ width, height: 900 })
       await panel.scrollIntoViewIfNeeded()
       assert.ok(await panel.evaluate(node => node.scrollWidth <= node.clientWidth + 1), `Settings fit ${width}`)
+      assert.ok(await page.locator('.mayori-settings-modal').evaluate(node => node.scrollWidth <= node.clientWidth + 1), `Modal fits ${width}`)
       assert.equal(await panel.getByRole('switch').count(), 4)
       await page.screenshot({ path: resolve(output, `settings-${theme}-${width}.png`) })
       await instructions.scrollIntoViewIfNeeded()
@@ -103,6 +150,13 @@ try {
   await threshold.fill(originalThreshold); await retain.fill(originalRetain); await instructions.fill(originalInstruction)
   await panel.getByRole('button', { name: 'Сохранить настройки сжатия', exact: true }).click()
   await page.waitForFunction(() => !document.querySelector('.mayori-plugin-row input').disabled)
+  await page.keyboard.press('Escape')
+  await page.getByRole('dialog').waitFor({ state: 'hidden' })
+  assert.equal(await page.getByRole('button', { name: 'Настройки Mayori', exact: true }).evaluate(node => node === document.activeElement), true)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await openSettings()
+  await page.getByRole('button', { name: 'Закрыть настройки Mayori', exact: true }).click()
+  await page.getByRole('dialog').waitFor({ state: 'hidden' })
   assert.deepEqual(errors, [])
   console.log(JSON.stringify({ ok: true, output }))
 } catch (error) {

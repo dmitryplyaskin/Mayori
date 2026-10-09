@@ -23,7 +23,8 @@ import { DiceToolCard } from '../features/dice/client/card.jsx'
 import { CheckToolCard } from '../features/rules/client/card.jsx'
 import { BRAND_STYLE } from './styles.js'
 import { PluginSettingsClient } from '../features/plugins/client/settings.js'
-import { MayoriSettings, PLUGIN_SETTINGS_STYLE } from '../features/plugins/client/panel.jsx'
+import { PLUGIN_SETTINGS_STYLE } from '../features/plugins/client/panel.jsx'
+import { MayoriSettingsLauncher, SETTINGS_MODAL_STYLE } from '../features/settings/client/modal.jsx'
 
 export { DiceToolCard } from '../features/dice/client/card.jsx'
 export { CheckToolCard } from '../features/rules/client/card.jsx'
@@ -34,9 +35,9 @@ export const inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout
 /** Register reversible browser contributions through Cordis. */
 export function apply(ctx) {
   const preferences = new PluginSettingsClient()
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section', id: 'mayori', order: 35, label: 'Mayori', inject: () => ({ preferences }),
-  }, MayoriSettings))
+  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+    name: 'sidebar.footer.action', id: 'mayori-settings', order: 35, inject: () => ({ preferences }),
+  }, MayoriSettingsLauncher))
   const library = new RemoteCharacterLibraryProvider()
   ctx.provide('mayoriCharacters', library)
   const personas = new RemotePersonaProvider()
@@ -73,7 +74,7 @@ export function apply(ctx) {
     const style = document.createElement('style')
     style.dataset.plugin = 'dsh-mayori'
     style.dataset.mayori = 'client'
-    style.textContent = BRAND_STYLE + PLUGIN_SETTINGS_STYLE
+    style.textContent = BRAND_STYLE + SETTINGS_MODAL_STYLE + PLUGIN_SETTINGS_STYLE
     document.head.appendChild(style)
     return () => { style.remove() }
   }, 'mayori: client styles')
