@@ -87,6 +87,7 @@ try {
     await page.locator('.mayori-message-avatar img').first().waitFor()
   }
   await openChat()
+  const sessionsBeforeAvatars = await rpc('/_mayori-smoke', { action: 'active-sessions' })
   const assertPortraits = async () => {
     assert.equal(await page.locator('.mayori-message-character > .mayori-message-avatar').count(), 2,
       'One portrait for the greeting and one for the response, including split reasoning/tool steps')
@@ -177,5 +178,7 @@ try {
   await page.mouse.click(1, 1)
   await page.getByRole('dialog').waitFor({ state: 'detached' })
   assert.deepEqual(errors, [])
+  assert.deepEqual(await rpc('/_mayori-smoke', { action: 'active-sessions' }), sessionsBeforeAvatars,
+    'Avatar keyboard controls must not submit messages or create a new chat')
   console.log(JSON.stringify({ ok: true, sessionId: session.sessionId, output, screenshots: 18 }))
 } finally { await browser.close() }

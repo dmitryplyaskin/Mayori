@@ -91,9 +91,15 @@ test('metadata-only settings snapshots remain in the log and are absent from req
   for (const kind of ['mayori-preset', 'mayori-compaction-settings']) session.append('user/message', {
     id: kind, role: 'user', source: { kind, sections: [{ name: kind, text: 'Saved configuration' }] }, content: [],
   }, { surfaceOp: 'append' })
+  session.append('user/message', {
+    id: 'directory', role: 'user', source: { kind: 'runtime-context', form: 'snapshot',
+      sections: [{ name: 'working-directory:current', text: 'Current working directory: "C:\\campaign".' }] },
+    content: [{ type: 'text', text: 'Current working directory: "C:\\campaign".' }],
+  }, { surfaceOp: 'append' })
   session.append('user/message', text('player', 'Привет'), { surfaceOp: 'append' })
   const events = session.snapshotEvents()
-  assert.deepEqual(reconstructTrajectoryContext(events, 'current').messages.map(item => item.message.content[0].text), ['Opening', 'Привет'])
+  assert.deepEqual(reconstructTrajectoryContext(events, 'current').messages.map(item => item.message.content[0].text),
+    ['Opening', 'Current working directory: "C:\\campaign".', 'Привет'])
   assert.equal(events.filter(event => event.type === 'user/message' && event.data.content.length === 0).length, 2)
 })
 

@@ -13,15 +13,18 @@ function Avatar({ name, image }) {
   useEffect(() => { setFailed(false) }, [image])
   useEffect(() => { if (opened) dialog.current?.showModal() }, [opened])
   const portrait = image && !failed
-  const close = () => { dialog.current?.close() }
+  const close = () => { dialog.current?.close(); setOpened(false); trigger.current?.focus() }
   return <>
     <button ref={trigger} type="button" className="mayori-message-avatar" aria-label={`Открыть аватар: ${name}`}
-      aria-haspopup="dialog" onClick={() => { setOpened(true) }}>
+      aria-haspopup="dialog" onClick={() => { setOpened(true) }} onKeyDown={event => {
+        if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
+      }}>
       {portrait ? <img src={image} alt="" onError={() => { setFailed(true) }} />
         : <span aria-hidden="true">{Array.from(name.trim())[0]?.toLocaleUpperCase() || '?'}</span>}
     </button>
     {opened && createPortal(<dialog ref={dialog} className="mayori-avatar-dialog" aria-labelledby={titleId}
-      onClose={() => { setOpened(false); trigger.current?.focus() }} onClick={event => {
+      onClose={() => { setOpened(false); trigger.current?.focus() }}
+      onCancel={event => { event.preventDefault(); close() }} onKeyDown={event => { event.stopPropagation() }} onClick={event => {
         if (event.target !== event.currentTarget) return
         const bounds = event.currentTarget.getBoundingClientRect()
         if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) close()

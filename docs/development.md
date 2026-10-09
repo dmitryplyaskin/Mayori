@@ -4,7 +4,7 @@
 
 - Node.js `^22.19.0` или `>=24.0.0`;
 - pnpm 11;
-- DeepSeek Harness `0.2.1-alpha.1` для интеграционного smoke test; полный форк не нужен.
+- DeepSeek Harness `0.2.1-alpha.2` для интеграционного smoke test; полный форк не нужен.
 
 ## Быстрый цикл
 
@@ -104,9 +104,9 @@ pnpm dsh --profile mayori
 
 В dump должны присутствовать слой `dsh-mayori`, пустой `system-prompt.personaPrefix`, один агентный `preset-mayori` с изолированным group и `dsh-mayori/optional-plugins`, корневой entry `mayori-plugin-settings`, default `mayori`, director и пути каталогов, включая `presetsPath`. Игровых инструкций в агентном пресете быть не должно. Browser module добавляет вкладку **Пресеты** и **Настройки → Mayori → Плагины**. Проверьте отключение всех tools и независимость четырёх переключателей в существующем чате, перезапуск и чтение ранее сохранённого броска. [Руководства по пресетам](presets.md) и [плагинам](plugins.md).
 
-Для проверки опубликованного пакета вместо source launcher используйте `pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.1`. Все проверки делайте с отдельным `DSH_HOME`; реальный профиль игрока автоматически не переустанавливается.
+Для проверки опубликованного пакета вместо source launcher используйте `pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2`. Все проверки делайте с отдельным `DSH_HOME`; реальный профиль игрока автоматически не переустанавливается.
 
-При проверке системной инструкции убедитесь, что в `--dump-config` у `system-prompt` выставлены `includeHarnessIdentity: false` и `includeRuntimeContext: false`, у `web-runtime` — `surfaceContext: false`, у `tools` — `mode: native`, а `ui-deliverables` отключён. Web runtime должен сохранить `openBrowser`, `printUrl`, `publicUrl` и `trustedHosts`: config строки заменяется целиком, поэтому все параметры запуска повторены в bundle. Для проверки независимости от coding presentation задайте `DSH_TOOLS_MODE=ptc` в тестовом процессе. Keyless smoke должен подтвердить, что фактический system message содержит роль ведущего, agency и карточку, а технические Web/source инструкции, file-reference и `present` guidance, runtime snapshots, coding tools и `run_code` отсутствуют.
+При проверке системной инструкции убедитесь, что в `--dump-config` у `system-prompt` выставлены `includeHarnessIdentity: false` и `includeRuntimeContext: false`, у `web-runtime` — `surfaceContext: false`, у `tools` — `mode: native`, а `ui-deliverables` отключён. Web runtime должен сохранить `openBrowser`, `printUrl`, `publicUrl` и `trustedHosts`: config строки заменяется целиком, поэтому все параметры запуска повторены в bundle. Для проверки независимости от coding presentation задайте `DSH_TOOLS_MODE=ptc` в тестовом процессе. Keyless smoke должен подтвердить, что фактический system message содержит роль ведущего, agency и карточку, а технические Web/source инструкции, file-reference и `present` guidance, необязательные runtime snapshots, coding tools, `working_directory` и `run_code` отсутствуют. Единственный обязательный runtime snapshot — `working-directory:current`; его фактический текст должен сохраняться в session log и восстанавливаться в Trajectory.
 
 ### Keyless smoke
 
@@ -122,7 +122,7 @@ pnpm dsh --profile mayori
       name: C:/pet_projects/Mayori/scripts/dsh-smoke-probe.js
 ```
 
-После установки checkout и сборки browser half запустите `pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.1 --patch <absolute-smoke-overlay.yml> --profile mayori --no-open --port 3090`. Launcher-параметры, включая `--patch`, должны находиться перед app-параметрами `--no-open` / `--port`.
+После установки checkout и сборки browser half запустите `pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2 --patch <absolute-smoke-overlay.yml> --profile mayori --no-open --port 3090`. Launcher-параметры, включая `--patch`, должны находиться перед app-параметрами `--no-open` / `--port`.
 
 `node scripts/plugin-settings-smoke.js http://127.0.0.1:3090` проверяет все восемь сочетаний переключателей в одном уже начатом чате реального тестового Host: фактические schemas игровых запросов, одинаковые системные инструкции, изоляцию от root и чтение старого результата без повторного броска. Выбор восстанавливается в finally. `browser-plugin-settings-smoke.js` проверяет страницу, клавиатуру, размеры и сохранение через UI. Используйте только временный профиль с probe.
 

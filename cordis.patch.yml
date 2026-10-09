@@ -20,6 +20,9 @@
   config:
     mode: native
 
+- id: tool-working-directory
+  disabled: true
+
 - id: agent-preset-registry
   config:
     default: mayori

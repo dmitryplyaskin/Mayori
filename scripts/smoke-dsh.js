@@ -70,17 +70,24 @@ assert.equal(modelInput.messages[0].role, 'system')
 const systemText = modelInput.messages[0].content.map(block => block.text ?? '').join('')
 assert.match(systemText, /You are Mayori, an AI game master/)
 assert.doesNotMatch(systemText, /DeepSeek Harness|coding assistant|implementation checkout|working directory|Web GUI|DSH_WEB_URL|dev:web|Vite|window\.__DSH_BOOT__|replacement server|campaign files|tools SDK|run_code|Do not call present|existing file|Office documents/)
-assert.ok(!modelInput.messages.some(message => message.source?.kind === 'runtime-context'),
-  'RPG requests must not include technical runtime-context snapshots')
+const runtimeContexts = modelInput.messages.filter(message => message.source?.kind === 'runtime-context')
+assert.equal(runtimeContexts.length, 1, 'DSH records its required working-directory snapshot')
+assert.deepEqual(runtimeContexts[0].source.sections.map(section => section.name), ['working-directory:current'],
+  'RPG requests must not include optional technical runtime contexts')
+assert.match(runtimeContexts[0].source.sections[0].text, /^Current working directory: ".+"\.$/)
+assert.ok(!(modelInput.tools ?? []).some(tool => tool.name === 'working_directory'),
+  'RPG requests must not expose the coding working-directory tool')
 assert.ok(systemText.indexOf('Protect player agency.') < systemText.indexOf('<mayori-character-card>'))
 assert.ok(systemText.includes('A patient archivist under the moon.'))
 assert.equal(modelInput.messages.filter(message => JSON.stringify(message).includes('<mayori-character-card>')).length, 1,
   'The character context must occur once in the instruction prefix, ahead of the conversation')
 const trajectoryContext = await call('/mayori/characters/trajectory-context', { sessionId })
-assert.deepEqual(trajectoryContext.messages.map(item => item.message), modelInput.messages,
-  'Trajectory request input must match the exact DSH messages received by the adapter')
+// The mock receives metadata-only messages that the DeepSeek serializer omits.
+const visibleMessages = messages => messages.filter(message => message.role !== 'user' || message.content.length > 0)
+assert.deepEqual(trajectoryContext.messages.map(item => item.message), visibleMessages(modelInput.messages),
+  'Trajectory request input must match the DSH messages admitted by the DeepSeek serializer')
 const savedContext = await call('/mayori/characters/trajectory-context', { sessionId, selection: 'current' })
-assert.deepEqual(savedContext.messages.map(item => item.message), turn.messages)
+assert.deepEqual(savedContext.messages.map(item => item.message), visibleMessages(turn.messages))
 assert.ok(modelInput.messages.some(message => JSON.stringify(message).includes('A patient archivist under the moon.')))
 assert.ok(turn.messages.some(message => JSON.stringify(message).includes('A patient archivist under the moon.')))
 const modelText = JSON.stringify(modelInput.messages)
