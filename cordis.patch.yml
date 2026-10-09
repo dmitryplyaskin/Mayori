@@ -1,6 +1,46 @@
 # Mayori is a model-experience layer. Install it after the surface bundle whose
 # UI you want to use (for example, the stock `web` profile).
 
+- insert:
+    - id: mayori-storage
+      name: dsh-mayori/storage
+
+# Configure each data owner before it mounts; do not mutate process.env after boot.
+- id: session-persistence-jsonl
+  inject: [mayoriStorage]
+  config:
+    root: !!js ctx.mayoriStorage.path('sessions')
+
+- id: storage-json
+  inject: [mayoriStorage]
+  config:
+    root: !!js ctx.mayoriStorage.path('storages')
+
+- id: attachment-local
+  inject: [mayoriStorage]
+  config:
+    dshHome: !!js ctx.mayoriStorage.root
+
+- id: credentials
+  inject: [mayoriStorage]
+  config:
+    dshHome: !!js ctx.mayoriStorage.root
+
+- id: session-query-sqlite
+  inject: [mayoriStorage]
+  config:
+    path: !!js ctx.mayoriStorage.path('cache', 'session-search.sqlite')
+    openAt: never
+
+- id: webserver
+  config:
+    host: !!js ctx.webStartup.host ?? '127.0.0.1'
+    port: !!js ctx.webStartup.port ?? 3081
+    tls: !!js ctx.webStartup.tls
+    compression: gzip
+    compressionLevel: 1
+    compressionThresholdBytes: 1024
+
 - id: system-prompt
   config:
     includeHarnessIdentity: false
@@ -57,8 +97,9 @@
                 name: dsh-mayori/optional-plugins
     - id: mayori-director
       name: dsh-mayori
+      inject: [mayoriStorage]
       config:
-        charactersPath: !!js dshHomePath('mayori', 'characters')
-        campaignsPath: !!js dshHomePath('mayori', 'campaigns')
-        personasPath: !!js dshHomePath('mayori', 'personas')
-        presetsPath: !!js dshHomePath('mayori', 'presets')
+        charactersPath: !!js ctx.mayoriStorage.path('mayori', 'characters')
+        campaignsPath: !!js ctx.mayoriStorage.path('mayori', 'campaigns')
+        personasPath: !!js ctx.mayoriStorage.path('mayori', 'personas')
+        presetsPath: !!js ctx.mayoriStorage.path('mayori', 'presets')

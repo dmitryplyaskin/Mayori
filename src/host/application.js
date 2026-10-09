@@ -1,4 +1,6 @@
 import { FileSystemCharacterLibraryProvider } from '../features/characters/host/provider.js'
+import { UserHomeMayoriStorageProvider } from '../features/storage/host/provider.js'
+import { resolveStorageConfig } from '../features/storage/host/config.js'
 import { FileSystemPersonaProvider } from '../features/personas/host/provider.js'
 import { FileSystemRoleplayPresetProvider } from '../features/presets/host/provider.js'
 import { LoggedSessionPresetProvider } from '../features/presets/host/session.js'
@@ -20,6 +22,11 @@ import { RoleplayCompactionProvider } from '../features/compaction/host/provider
 import { registerCompactionTool } from '../features/compaction/host/tool.js'
 
 /** Compose Host services in dependency order within the plugin's Cordis lifetime. */
+export function registerStorageCapabilities(ctx, config) {
+  return new UserHomeMayoriStorageProvider(ctx, resolveStorageConfig(config).root)
+}
+
+/** Compose the session and catalog consumers after native DSH services. */
 export function registerHostCapabilities(ctx, config) {
   const { charactersPath, campaignsPath, personasPath, presetsPath } = config
   const library = new FileSystemCharacterLibraryProvider(ctx, { root: charactersPath })

@@ -1,14 +1,11 @@
 import z from '@deepseek-ai/schemastery'
-import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { defaultMayoriRoot } from '../features/storage/host/config.js'
 
-const configuredDshHome = typeof process.env.DSH_HOME === 'string' && process.env.DSH_HOME.trim() !== ''
-  ? process.env.DSH_HOME
-  : join(homedir(), '.dsh')
-const DEFAULT_CHARACTERS_PATH = join(resolve(configuredDshHome), 'mayori', 'characters')
-const DEFAULT_CAMPAIGNS_PATH = join(resolve(configuredDshHome), 'mayori', 'campaigns')
-const DEFAULT_PERSONAS_PATH = join(resolve(configuredDshHome), 'mayori', 'personas')
-const DEFAULT_PRESETS_PATH = join(resolve(configuredDshHome), 'mayori', 'presets')
+const DEFAULT_CHARACTERS_PATH = join(defaultMayoriRoot(), 'mayori', 'characters')
+const DEFAULT_CAMPAIGNS_PATH = join(defaultMayoriRoot(), 'mayori', 'campaigns')
+const DEFAULT_PERSONAS_PATH = join(defaultMayoriRoot(), 'mayori', 'personas')
+const DEFAULT_PRESETS_PATH = join(defaultMayoriRoot(), 'mayori', 'presets')
 
 /** Host paths and legacy defaults for first-time preset catalog initialization. */
 export const Config = z.object({

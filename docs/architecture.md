@@ -30,6 +30,7 @@ Mayori/
 │   │   ├── personas/             # каталог и редактор персон игрока
 │   │   ├── presets/              # каталог игровых инструкций и выбор из session log
 │   │   ├── history/              # каталог DSH, архив и cold previews
+│   │   ├── storage/              # deployment root и пути native DSH providers
 │   │   ├── trajectory/           # реконструкция и отображение контекста
 │   │   ├── dice/                 # parser, настоящий provider и tool card
 │   │   ├── rules/                # числовые проверки, профили и последствия
@@ -85,7 +86,32 @@ dsh-mayori bundle
 
 Bundle является слоем композиции, а не отдельным приложением. Поддерживаемая deployment-композиция монтирует его в отдельный именованный профиль `mayori` поверх встроенного Web bundle; штатный профиль `web` не содержит Mayori. Это граница всего browser plugin: branding, Character Library и gallery action существуют на уровне профиля, а не переключаемого session mode. Регистрация prompt-section является обратимым Cordis effect и удаляется вместе с plugin fiber.
 
-Профиль Mayori использует отдельный Web origin (рекомендуемый порт `3081`) для
+Обычный запуск — `pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2 --profile mayori`.
+Bundle автоматически отделяет игровые данные от coding DSH, без launcher
+Mayori и изменения `process.env.DSH_HOME`. Профиль и пакет устанавливаются
+штатным `dsh plugin` под `$DSH_HOME/profiles/mayori`, а отдельный корень данных
+по умолчанию — `~/.dsh-mayori`, вычисленный через `node:os.homedir()`.
+
+- **Service Definition** — Host `MayoriStorageService` (`mayoriStorage`),
+  предоставляющий `root` и `path(...segments)` для deployment-композиции.
+- **Provider** — `UserHomeMayoriStorageProvider`, собранный в `application.js`
+  через публичный entry `dsh-mayori/storage`. Валидируемый `Config.root` допускает
+  другой абсолютный каталог или путь с `~/` для тестов и развёртываний.
+- **Consumers** — native DSH session persistence, storage-json (Workspace registry
+  и projection cache), attachment-local, credentials-local, session-query-sqlite
+  и Mayori director. Строки bundle явно inject `mayoriStorage` и получают пути
+  до активации своих providers. Cordis владеет зависимостями и unload.
+
+Никакой новый формат истории или фильтрация чужих чатов в browser не вводится:
+каждый профиль читает собственный corpus из настроенных native хранилищ.
+Session search выключен по умолчанию; при включении его отдельный индекс
+находится под корнем Mayori. Настройки плагинов сохраняются штатно в профиле;
+служебные данные установки, анонимная идентичность и технический индекс загрузок
+DSH сохраняют прежних владельцев. Корень данных не является модельным контекстом
+и не содержит скрытого campaign state. Старые данные автоматически не мигрируют.
+
+Профиль Mayori использует отдельный Web origin (порт по умолчанию `3081`,
+явный `--port` сохраняется) для
 изоляции интерфейса и настроек от обычного `web`. Идентичность каталога от origin
 не зависит: карточки принадлежат Host и переживают смену порта или браузера.
 
@@ -112,7 +138,7 @@ Resume и fork читают снимок из своего полного либ
 Импортированные Character Card образуют отдельную Host-owned capability seam:
 
 - **Service Definition** — Host `CharacterLibraryService`: список, пакетный импорт и удаление;
-- **Provider** — `FileSystemCharacterLibraryProvider`: полные JSON-записи и исходные PNG в валидируемом `charactersPath` (по умолчанию `$DSH_HOME/mayori/characters`);
+- **Provider** — `FileSystemCharacterLibraryProvider`: полные JSON-записи и исходные PNG в валидируемом `charactersPath` (по умолчанию `~/.dsh-mayori/mayori/characters`);
 - **Consumers** — lifecycle-bound same-origin Host route `/mayori/characters`, browser `RemoteCharacterLibraryProvider` с observable snapshot и `CharacterGalleryPanel` в root-scoped `main`.
 
 Codec принимает JSON v2/v3 и стандартные PNG `tEXt` payloads `chara` / `ccv3`; при наличии обоих выбирает v3. Host валидирует байты до записи, сериализует карточку под content-derived id и публикует браузеру только снимок каталога. Контейнер и неизвестные поля не превращаются в prompt. Эта библиотека — пользовательский каталог ресурсов, а не campaign journal: пока карточка не выбрана для игры, модель её не видит.
@@ -138,7 +164,7 @@ Browser `CharacterLibraryService.refresh()` повторяет чтение ка
 Запуск игры образует отдельный capability seam:
 
 - **Service Definition** — Host `CharacterSessionService.prepareCampaign()`, `create(characterId, workspaceId, greetingIndex)`, `state(sessionId)`, `swipe(sessionId, index)`, `setPersona(sessionId, personaId)` и legacy `select(sessionId, characterId)`;
-- **Provider** — `PersistentCharacterSessionProvider`, который идемпотентно создаёт `$DSH_HOME/mayori/campaigns/default` (корень задаётся валидируемым `campaignsPath`), разрешает карточку через Character Library и хранит неизменяемую связь Session → snapshot в файловом `FileSystemCharacterSessionStore` под `campaignsPath/selections`;
+- **Provider** — `PersistentCharacterSessionProvider`, который идемпотентно создаёт `~/.dsh-mayori/mayori/campaigns/default` (корень задаётся валидируемым `campaignsPath`), разрешает карточку через Character Library и хранит неизменяемую связь Session → snapshot в файловом `FileSystemCharacterSessionStore` под `campaignsPath/selections`;
 - **Consumer** — browser gallery, которая при отсутствии кампаний регистрирует подготовленный каталог через `workspaces.create`, получает подготовленный sessionId через Host `start`, принимает сохранённую Session через `sessions.create({ workspaceId, sessionId })`, удерживает её через `sessions.using`, ожидает `reference.ready`, задаёт имя и открывает чат через `uiWorkspace.openSession`. Временный reference освобождается как при успехе, так и при ошибке; навигация получает собственный mainView reference до освобождения временного.
 
 Хранилище выбора содержит стандартные поля Character Card, PNG-аватар и сохранённое выбранное приветствие (индекс, итоговый текст и стабильный messageId); неизвестные поля и `extensions` остаются ресурсами каталога. Аватар относится только к представлению и исключён из модельной проекции. Старый snapshot без поля image один раз дополняется картинкой из доступного каталога при restore, либо null, если карточка удалена. Запись версионирована, имя файла — SHA-256 идентификатора сессии. Snapshot готовится во временном файле с flush, затем публикуется без перезаписи существующей записи. Выбор выполняется через `agent.runMaintenance`, чтобы ввод не начал ход посреди записи. Повтор того же выбора идемпотентен; другой персонаж требует нового чата.
@@ -192,7 +218,7 @@ Character Session Provider регистрирует scoped waterfall `agent/pre-
 ### Персона игрока
 
 - **Service Definition** — Host `PersonaService` (`list`, `save`, `remove`, `setDefault`, `resolve`) и observable browser `PersonaService`;
-- **Provider** — `FileSystemPersonaProvider` с сериализованными атомарными записями `personas.json` в валидируемом `personasPath`, по умолчанию `$DSH_HOME/mayori/personas`;
+- **Provider** — `FileSystemPersonaProvider` с сериализованными атомарными записями `personas.json` в валидируемом `personasPath`, по умолчанию `~/.dsh-mayori/mayori/personas`;
 - **Consumers** — same-origin route, `RemotePersonaProvider`, `PersonaPanel`, preview в окне информации персонажа и Character Session Provider.
 
 Персона содержит имя, необязательные описание, подпись и PNG/JPEG/WebP avatar. Подпись и avatar не входят в модельный контекст. Default применяется только при создании чата; без него используется имя `Игрок` и пустое описание. Snapshot персоны сохраняется рядом с выбранной карточкой и наследуется при форке. Изменение или удаление записи каталога не меняет созданные чаты. Явное «Играть в этом чате» атомарно обновляет persona snapshot под maintenance, перевязывает logged prompt context и, только до первого хода, заменяет приветствие. Исторические действия игрока не переписываются. Доменное описание не даёт модели права выбирать за игрока.

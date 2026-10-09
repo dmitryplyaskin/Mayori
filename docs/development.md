@@ -44,69 +44,76 @@ pnpm run bundle
 
 ## Проверка в локальном DSH
 
+`node scripts/storage-isolation-smoke.js <dsh-cli-bin.js>` устанавливает checkout
+через публичный CLI в временный профиль, проверяет `--dump-config` и запускает
+Mayori рядом с обычной Web-композицией. Оба профиля создают настоящие чаты в
+одной рабочей папке; native persistence и Session Controller должны видеть
+только собственные ID, включая повторный запуск после остановки. Probe также
+проверяет разрешённые Config paths журналов, registry, attachments, credentials
+и поискового индекса. Для опубликованного CLI используйте
+`node scripts/storage-isolation-smoke.js <pnpm.js> --published`: этот режим
+выполняет реальные команды `pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2`.
+Сценарий не вызывает модель и печатает путь к временным данным для инспекции.
+
 Для сжатия истории выполните `node scripts/compaction-smoke.js <URL-test-Host>` в изолированном профиле с probe. Сценарий проверяет порог, инструмент compactHistory ниже порога, отсутствие служебного текста, точную сохранённую инструкцию, исходные события, изоляцию, обновление, отключение и native fork. `node scripts/browser-plugin-settings-smoke.js <URL-test-Host> <output-directory>` дополнительно проверяет форму, валидацию, черновик после ошибки и сохранение после перезагрузки. Настройки и устройство журнала описаны в [руководстве](compaction.md).
 
-Для разработки используйте отдельный Harness home, чтобы профиль, настройки,
-credentials и сессии Mayori не затрагивали обычный `~/.dsh`. В PowerShell:
+Обычный пользователь устанавливает bundle с GitHub и запускает
+`pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2 --profile mayori`; ручной выбор
+хранилища не нужен. Bundle направляет игровые данные в `~/.dsh-mayori`
+через отдельный `mayoriStorage` service и Config native DSH providers.
+`DSH_HOME` по-прежнему выбирает место установки профиля; сам по себе он
+больше не перенаправляет игровые каталоги Mayori.
+
+Для локальных проверок из checkout DSH используйте отдельный временный
+Harness home и установите соседний checkout Mayori:
 
 ```powershell
-$env:DSH_HOME = 'C:\pet_projects\Mayori\.dsh-dev'
+$env:DSH_HOME = Join-Path $HOME '.dsh-mayori-dev'
+pnpm dsh --profile mayori --from-default-profile web --dump-config
+pnpm dsh plugin --profile mayori add (Join-Path (Split-Path (Get-Location) -Parent) 'Mayori')
 ```
 
-В source checkout DeepSeek Harness сначала установите Mayori. Эта команда
-создаст отсутствующий профиль и добавит bundle:
+Инициализация из Web-шаблона требуется один раз. Для повторной проверки
+установки повторяйте только `plugin add`. Затем в тестовом
+`$DSH_HOME/profiles/mayori/cordis.patch.yml` обязательно переопределите
+корень Mayori, чтобы smoke не затрагивал пользовательский `~/.dsh-mayori`:
 
-```powershell
-pnpm dsh plugin --profile mayori add C:\pet_projects\Mayori
+```yaml
+- id: mayori-storage
+  config:
+    root: !!js dshHomePath('mayori-data')
 ```
 
-Новый профиль с произвольным именем DSH инициализирует только с
-`@deepseek-ai/dsh-base`. Поэтому после первой установки добавьте встроенный Web
-bundle перед Mayori в `$DSH_HOME/profiles/mayori/package.json`, сохранив
-созданные поля `dependencies`:
-
-```json
-{
-  "dsh": {
-    "profile": {
-      "bundles": [
-        "@deepseek-ai/dsh-base",
-        "@deepseek-ai/dsh-web-app",
-        "dsh-mayori"
-      ]
-    }
-  }
-}
-```
-
-После этого проверьте и запустите именованный профиль штатной формой CLI:
+Пути session persistence, storage-json, credentials, attachments и игровых
+каталогов должны разрешиться в этот тестовый root. Bundle по умолчанию
+использует порт `3081`, сохраняя явный `--port`; для smoke задавайте свободный
+порт в команде. Проверьте dump и запустите Host:
 
 ```powershell
 pnpm dsh --profile mayori --dump-config
-pnpm dsh --profile mayori
+pnpm dsh --profile mayori --no-open --port 3094
 ```
 
-Для проверки рядом с обычным `web` задайте профилю Mayori отдельный origin в
-`$DSH_HOME/profiles/mayori/cordis.patch.yml`:
+В dump должны присутствовать `mayori-storage`, required inject `mayoriStorage`
+у потребителей хранилища, пустой `system-prompt.personaPrefix`, один агентный
+`preset-mayori` с изолированным group, `dsh-mayori/optional-plugins`,
+`mayori-plugin-settings`, director и пути каталогов, включая `presetsPath`.
+Игровых инструкций в агентном пресете быть не должно. Проверьте переключатели
+существующего чата, перезапуск и чтение сохранённого броска.
+[Руководства по пресетам](presets.md) и [плагинам](plugins.md).
 
-```yaml
-- id: credentials
-  config:
-    path: !!js dshHomePath('profiles/mayori/.credentials.yaml')
-- id: webserver
-  config:
-    host: !!js ctx.webStartup.host ?? '127.0.0.1'
-    port: 3081
-```
+Для проверки опубликованного DSH вместо source launcher используйте
+`pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2`. Каждая проверка использует отдельный
+`DSH_HOME` **и** тестовый `mayori-storage.root`. Реальный профиль игрока
+для smoke не переустанавливается.
 
-Отдельный путь credentials не даёт настройкам Mayori перезаписать общее
-`$DSH_HOME/.credentials.yaml`.
-
-В dump должны присутствовать слой `dsh-mayori`, пустой `system-prompt.personaPrefix`, один агентный `preset-mayori` с изолированным group и `dsh-mayori/optional-plugins`, корневой entry `mayori-plugin-settings`, default `mayori`, director и пути каталогов, включая `presetsPath`. Игровых инструкций в агентном пресете быть не должно. Browser module добавляет вкладку **Пресеты** и **Настройки → Mayori → Плагины**. Проверьте отключение всех tools и независимость четырёх переключателей в существующем чате, перезапуск и чтение ранее сохранённого броска. [Руководства по пресетам](presets.md) и [плагинам](plugins.md).
-
-Для проверки опубликованного пакета вместо source launcher используйте `pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2`. Все проверки делайте с отдельным `DSH_HOME`; реальный профиль игрока автоматически не переустанавливается.
-
-При проверке системной инструкции убедитесь, что в `--dump-config` у `system-prompt` выставлены `includeHarnessIdentity: false` и `includeRuntimeContext: false`, у `web-runtime` — `surfaceContext: false`, у `tools` — `mode: native`, а `ui-deliverables` отключён. Web runtime должен сохранить `openBrowser`, `printUrl`, `publicUrl` и `trustedHosts`: config строки заменяется целиком, поэтому все параметры запуска повторены в bundle. Для проверки независимости от coding presentation задайте `DSH_TOOLS_MODE=ptc` в тестовом процессе. Keyless smoke должен подтвердить, что фактический system message содержит роль ведущего, agency и карточку, а технические Web/source инструкции, file-reference и `present` guidance, необязательные runtime snapshots, coding tools, `working_directory` и `run_code` отсутствуют. Единственный обязательный runtime snapshot — `working-directory:current`; его фактический текст должен сохраняться в session log и восстанавливаться в Trajectory.
+При проверке системной инструкции убедитесь, что `system-prompt` отключает
+`includeHarnessIdentity` и `includeRuntimeContext`, `web-runtime` отключает
+`surfaceContext`, `tools` использует `mode: native`, а `ui-deliverables`
+отключён. Web runtime сохраняет `openBrowser`, `printUrl`, `publicUrl` и
+`trustedHosts`. Keyless smoke подтверждает agency, карточку, отсутствие
+coding tools и необязательных технических snapshots. Обязательный
+`working-directory:current` сохраняется в session log.
 
 ### Keyless smoke
 
@@ -196,7 +203,7 @@ Deployment-варианты объявляются в экспортируемо
 
 В чате с PNG-карточкой и персоной с аватаром проверьте каждое сообщение: изображение персонажа слева, игрока справа. Проверьте приветствие, обычные ответы, streaming, steering и вложения штатных сообщений. Клик и Enter/Space открывают изображение целиком; Escape, кнопка закрытия и backdrop закрывают окно и возвращают фокус на аватар. Проверьте Tab внутри dialog, светлую/тёмную тему, 320/390 px и 200% zoom. Карточка JSON без картинки и персона без аватара показывают начальную букву имени. Ошибка загрузки картинки также даёт этот fallback. Аватар PNG сохраняется в snapshot чата и наследуется при форке; удалите исходную карточку и перезапустите Host. Старые snapshots получают картинку из ещё доступного каталога при первом восстановлении; если карточка уже удалена, используется буква имени. Изображения не должны попадать в модельный prompt.
 
-После установки checkout в новый временный профиль проверьте `--dump-config`: `mayori-director.config.personasPath` должен указывать на его собственный `$DSH_HOME/mayori/personas`. Вкладка `Персоны` работает без активного чата. Создайте имя и описание с `{{user}}`, загрузите аватар, сохраните и выберите default. В preview окна информации персонажа и новом чате должны отображаться подставленные имена. В редакторе сохраняется исходный текст шаблонов.
+После установки checkout в новый временный профиль проверьте `--dump-config`: `mayori-director.config.personasPath` должен указывать на его собственный `~/.dsh-mayori/mayori/personas`. Вкладка `Персоны` работает без активного чата. Создайте имя и описание с `{{user}}`, загрузите аватар, сохраните и выберите default. В preview окна информации персонажа и новом чате должны отображаться подставленные имена. В редакторе сохраняется исходный текст шаблонов.
 
 В чате до ввода проверьте переход вперёд/назад, циклический переход с последнего варианта на первый, пустую альтернативу, Copy и reload. Затем закрепите другую персону через её вкладку и вернитесь в чат: приветствие должно обновиться. После первого хода свайпы исчезают; прямой Host вызов `swipe` должен отказать. Проверьте неизменность прошлых сообщений при последующей смене персоны, restart, удаление записи каталога и создание ветки после свайпа. Новая ветка должна сохранять выбранное начало. Компактация модельного контекста не должна менять отображаемое приветствие.
 
