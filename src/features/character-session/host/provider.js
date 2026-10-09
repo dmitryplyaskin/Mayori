@@ -9,6 +9,7 @@ import { CharacterSessionService } from './service.js'
 import { FileSystemCharacterSessionStore } from './store.js'
 import { greetingSeed } from './greeting.js'
 import { PRESET_SOURCE } from '../../presets/shared/preset.js'
+import { imageSource } from '../../media/shared/image.js'
 
 const CHARACTER_CONTEXT_NAME = 'mayori:active-character'
 const CHARACTER_CONTEXT_VARIABLE = 'mayori_active_character_text'
@@ -31,6 +32,7 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
     this._defaultCampaignPath = resolve(config.campaignsRoot.trim(), 'default')
     this._store = new FileSystemCharacterSessionStore(config.campaignsRoot)
     this._personas = config.personas
+    this._media = config.media
     ctx.on('agent/created', async ({ agent }) => { await this._restore(agent) })
     ctx.on('agent/disposed', ({ agent }) => {
       this._bindings.get(agent)?.()
@@ -58,7 +60,15 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
     if (character !== null) {
       this._assertLive(agent)
       if (character.image === undefined) {
-        character.image = (await this._library.list()).find(card => card.id === character.id)?.image ?? null
+        character.image = (this._library.get ? await this._library.get(character.id).catch(error => {
+          if (error.code === 'ENOENT') return null
+          throw error
+        }) : (await this._library.list()).find(card => card.id === character.id))?.image ?? null
+        await this._store.update(agent.id, character, () => this._assertLive(agent))
+      }
+      if (this._media && [character.image, character.persona?.avatar].some(value => value?.startsWith('data:image/'))) {
+        character.image = await this._media.put(character.image)
+        if (character.persona?.avatar) character.persona.avatar = await this._media.put(character.persona.avatar)
         await this._store.update(agent.id, character, () => this._assertLive(agent))
       }
       this._bind(agent, character)
@@ -114,8 +124,7 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
       return { sessionId: safeSessionId, character: { id: current.id, name: current.name } }
     }
 
-    const cards = await this._library.list()
-    const card = cards.find(item => item.id === safeCharacterId)
+    const card = this._library.get ? await this._library.get(safeCharacterId) : (await this._library.list()).find(item => item.id === safeCharacterId)
     if (card === undefined) throw new Error('Персонаж больше не найден в галерее.')
     const character = characterSnapshot(card)
     character.image ??= null
@@ -136,7 +145,7 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
     if (!Number.isSafeInteger(greetingIndex) || greetingIndex < 0) throw new TypeError('Некорректный вариант приветствия.')
     const workspace = this.ctx.workspaceRegistry.get(workspaceId)
     if (!workspace) throw new Error('Кампания не найдена. Обновите страницу.')
-    const card = (await this._library.list()).find(card => card.id === characterId)
+    const card = this._library.get ? await this._library.get(characterId) : (await this._library.list()).find(card => card.id === characterId)
     if (!card) throw new Error('Персонаж больше не найден в галерее.')
     const character = characterSnapshot(card)
     character.image ??= null
@@ -194,7 +203,9 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
     const message = opening?.type === 'user/message' ? opening.data : opening?.data.message
     const match = message?.id.match(/:swipe:(\d+):/)
     const content = message?.content.map(block => block.type === 'text' ? block.text : '').join('') ?? ''
-    return { character: { id: character.id, name: character.name, image: character.image ?? null }, persona: character.persona ?? DEFAULT_PERSONA,
+    const persona = character.persona ?? DEFAULT_PERSONA
+    return { character: { id: character.id, name: character.name, image: imageSource(character.image), originalImage: imageSource(character.image, 'original') },
+      persona: { ...persona, avatar: imageSource(persona.avatar) ?? '', originalAvatar: imageSource(persona.avatar, 'original') },
       greeting: character.greeting ? { messageId: character.greeting.messageId,
         eventSeq: opening?.seq ?? null,
         index: match ? Number(match[1]) : character.greeting.index,
@@ -212,7 +223,14 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
       agent = result.agent
     }
     if (!agent) throw new Error('Чат закрыт. Откройте его снова.')
-    return this._state(agent, await this._store.read(sessionId))
+    let character = await this._store.read(sessionId)
+    if (character && this._media && [character.image, character.persona?.avatar].some(value => value?.startsWith('data:image/'))) {
+      // The normal restore boundary persists legacy presentation references.
+      // A read of an externally replaced snapshot must not delay a running reply.
+      character.image = await this._media.put(character.image)
+      if (character.persona?.avatar) character.persona.avatar = await this._media.put(character.persona.avatar)
+    }
+    return this._state(agent, character)
   }
 
   _replaceGreeting(agent, character, index) {

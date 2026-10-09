@@ -28,18 +28,23 @@ export class RemoteTrajectoryContextProvider extends TrajectoryContextService {
   #snapshot = { status: 'loading', value: null, error: null }
   #listeners = new Set()
   #revision = 0
+  #controller
   constructor(sessionId) { super(); this.sessionId = sessionId }
   getSnapshot = () => this.#snapshot
   subscribe = listener => { this.#listeners.add(listener); return () => { this.#listeners.delete(listener) } }
   #publish(value) { this.#snapshot = value; for (const listener of this.#listeners) listener() }
   async refresh(selection) {
     const revision = ++this.#revision
+    this.#controller?.abort()
+    const controller = this.#controller = new AbortController()
     this.#publish({ status: 'loading', value: this.#snapshot.value, error: null })
     try {
-      const value = await call('trajectory-context', { sessionId: this.sessionId, selection })
+      const value = await call('trajectory-context', { sessionId: this.sessionId, selection }, { signal: controller.signal })
       if (revision === this.#revision) this.#publish({ status: 'ready', value, error: null })
     } catch (error) {
       if (revision === this.#revision) this.#publish({ status: 'error', value: null, error: error.message })
     }
   }
+  release() { if (!this.#listeners.size) this.dispose() }
+  dispose() { ++this.#revision; this.#controller?.abort(); this.#snapshot = { status: 'loading', value: null, error: null } }
 }

@@ -1,6 +1,8 @@
 import z from '@deepseek-ai/schemastery'
 import { join, resolve } from 'node:path'
 import { defaultMayoriRoot } from '../features/storage/host/config.js'
+import { MediaConfig, mediaConfig } from '../features/media/host/config.js'
+import { HistoryConfig, historyConfig } from '../features/history/host/config.js'
 
 const DEFAULT_CHARACTERS_PATH = join(defaultMayoriRoot(), 'mayori', 'characters')
 const DEFAULT_CAMPAIGNS_PATH = join(defaultMayoriRoot(), 'mayori', 'campaigns')
@@ -17,6 +19,8 @@ export const Config = z.object({
   campaignsPath: z.string().default(DEFAULT_CAMPAIGNS_PATH),
   personasPath: z.string().default(DEFAULT_PERSONAS_PATH),
   presetsPath: z.string().default(DEFAULT_PRESETS_PATH),
+  media: MediaConfig,
+  history: HistoryConfig,
 })
 
 const DEFAULTS = Object.freeze({
@@ -56,5 +60,7 @@ export function resolveConfig(config = {}) {
   resolved.personasPath = resolve(resolved.personasPath.trim())
   if (typeof resolved.presetsPath !== 'string' || !resolved.presetsPath.trim()) throw new TypeError('presetsPath must be a non-empty string')
   resolved.presetsPath = resolve(resolved.presetsPath.trim())
+  resolved.media = mediaConfig(resolved.media)
+  resolved.history = historyConfig(resolved.history)
   return resolved
 }

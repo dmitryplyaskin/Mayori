@@ -76,6 +76,8 @@ const browser = await chromium.launch({ headless: true,
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   const errors = []
+  const originalRequests = new Set()
+  page.on('request', request => { if (/\/mayori\/characters\/(?:media|card-image)\/[a-f0-9]{64}\/original$/.test(request.url())) originalRequests.add(request.url()) })
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(url.href)
   await page.getByRole('button', { name: 'История чатов', exact: true }).waitFor()
@@ -97,6 +99,10 @@ try {
       'Portraits are siblings of message content, outside its box')
   }
   await assertPortraits()
+  await page.waitForFunction(() => [...document.querySelectorAll('.mayori-message-avatar img')].every(image => image.complete && image.naturalWidth > 0))
+  assert.equal(originalRequests.size, 0, 'Message rows must not download full-size originals')
+  const thumbnails = await page.locator('.mayori-message-avatar img').evaluateAll(images => images.map(image => ({ src: image.getAttribute('src'), width: image.naturalWidth, height: image.naturalHeight })))
+  assert.ok(thumbnails.every(image => /\/avatar$/.test(image.src) && Math.max(image.width, image.height) <= 96))
   await page.reload()
   await openChat()
   await assertPortraits()
@@ -134,6 +140,7 @@ try {
         }
         const trigger = row.locator('.mayori-message-avatar')
         await trigger.click()
+        assert.match(await page.locator('.mayori-avatar-dialog img').getAttribute('src'), /\/original$/)
         const dialog = page.getByRole('dialog', { name: role === 'character' ? 'Browser Character' : 'Browser Player', exact: true })
         await dialog.waitFor({ state: 'visible' })
         await dialog.locator('img').evaluate(image => image.decode())
@@ -180,5 +187,6 @@ try {
   assert.deepEqual(errors, [])
   assert.deepEqual(await rpc('/_mayori-smoke', { action: 'active-sessions' }), sessionsBeforeAvatars,
     'Avatar keyboard controls must not submit messages or create a new chat')
-  console.log(JSON.stringify({ ok: true, sessionId: session.sessionId, output, screenshots: 18 }))
+  assert.ok(originalRequests.size >= 2, 'Explicit portrait expansion requests the preserved character and persona originals')
+  console.log(JSON.stringify({ ok: true, sessionId: session.sessionId, output, screenshots: 18, lazyOriginals: true, avatarMaxSize: 96 }))
 } finally { await browser.close() }

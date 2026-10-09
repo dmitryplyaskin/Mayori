@@ -87,7 +87,7 @@ test('registers reversible Mayori client contributions', async () => {
       },
       effect(factory, label) {
         if (label === 'mayori: client styles') dispose = factory()
-        else { assert.ok(['mayori: greeting renderer', 'mayori: trajectory context', 'mayori: trajectory header', 'mayori: home conversation', 'mayori: home navigation'].includes(label)); return factory() }
+        else { assert.ok(['mayori: greeting renderer', 'mayori: trajectory context', 'mayori: trajectory header', 'mayori: home conversation', 'mayori: home navigation', 'mayori: catalog requests', 'mayori: session provider caches', 'mayori: history cache'].includes(label)); return factory() }
       },
       slots: {
         subscribe() { return () => {} },

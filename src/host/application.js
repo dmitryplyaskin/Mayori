@@ -20,6 +20,8 @@ import { SessionRollHistoryProvider } from '../features/roll-history/host/provid
 import { registerRollHistoryTool } from '../features/roll-history/host/tool.js'
 import { RoleplayCompactionProvider } from '../features/compaction/host/provider.js'
 import { registerCompactionTool } from '../features/compaction/host/tool.js'
+import { FileSystemMediaProvider } from '../features/media/host/provider.js'
+import { join } from 'node:path'
 
 /** Compose Host services in dependency order within the plugin's Cordis lifetime. */
 export function registerStorageCapabilities(ctx, config) {
@@ -29,20 +31,21 @@ export function registerStorageCapabilities(ctx, config) {
 /** Compose the session and catalog consumers after native DSH services. */
 export function registerHostCapabilities(ctx, config) {
   const { charactersPath, campaignsPath, personasPath, presetsPath } = config
-  const library = new FileSystemCharacterLibraryProvider(ctx, { root: charactersPath })
-  const personas = new FileSystemPersonaProvider(ctx, personasPath)
+  const media = new FileSystemMediaProvider(ctx, join(charactersPath, 'media'), config.media)
+  const library = new FileSystemCharacterLibraryProvider(ctx, { root: charactersPath, media })
+  const personas = new FileSystemPersonaProvider(ctx, personasPath, media)
   const presets = new FileSystemRoleplayPresetProvider(ctx, presetsPath, {
     name: 'Mayori', instructions: `You are Mayori, an AI game master for persistent, collaborative role-playing games.\n\n${buildDirectorPrompt(config)}`,
   })
-  ctx.inject(['webServer', 'agents', 'sessions', 'workspaceRegistry', 'agentPresets', 'sessionQuery', 'sessionController'], async consumerCtx => {
-    const characterSessions = new PersistentCharacterSessionProvider(consumerCtx, library, { campaignsRoot: campaignsPath, personas })
+  ctx.inject(['webServer', 'agents', 'sessions', 'workspaceRegistry', 'agentPresets', 'sessionQuery', 'sessionController', 'sessionPersistence'], async consumerCtx => {
+    const characterSessions = new PersistentCharacterSessionProvider(consumerCtx, library, { campaignsRoot: campaignsPath, personas, media })
     const sessionPresets = new LoggedSessionPresetProvider(consumerCtx, presets)
     const trajectoryContext = new SessionTrajectoryContextProvider(consumerCtx)
-    const historyDetails = new SessionHistoryDetailsProvider(consumerCtx, campaignsPath)
+    const historyDetails = new SessionHistoryDetailsProvider(consumerCtx, campaignsPath, media, config.history)
     const messageRevisions = new SessionMessageRevisionProvider(consumerCtx, characterSessions)
     await characterSessions.restoreActiveAgents()
     await sessionPresets.restoreActiveAgents()
-    const route = createMayoriRoute({ library, personas, presets, sessionPresets, characterSessions, trajectoryContext, historyDetails, messageRevisions })
+    const route = createMayoriRoute({ library, personas, presets, sessionPresets, characterSessions, trajectoryContext, historyDetails, messageRevisions, media })
     consumerCtx.effect(() => consumerCtx.webServer.register(route), 'mayori: character library route')
   })
   return library

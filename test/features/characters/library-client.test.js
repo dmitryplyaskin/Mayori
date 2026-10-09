@@ -9,6 +9,26 @@ function transport(t, handler) {
   t.after(() => { globalThis.fetch = previous })
 }
 
+test('index polling resumes after leaving and reopening a partially indexed catalog', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  let calls = 0
+  transport(t, () => ({ ok: true, value: { cards: [], indexing: ++calls === 1 } }))
+  const library = new RemoteCharacterLibraryProvider()
+  const first = library.subscribe(() => {})
+  await settle()
+  assert.equal(library.getSnapshot().indexing, true)
+  first()
+  t.mock.timers.tick(1000)
+  await settle()
+  assert.equal(calls, 1)
+  const second = library.subscribe(() => {})
+  t.mock.timers.tick(400)
+  await settle()
+  assert.equal(calls, 2)
+  assert.equal(library.getSnapshot().indexing, false)
+  second(); library.dispose()
+})
+
 test('reopening the gallery retries a failed load and shares one request across subscribers', async t => {
   let calls = 0
   const cards = [{ id: 'saved', name: 'Saved character' }]
@@ -47,4 +67,20 @@ test('explicit gallery retries expose errors and ignore stale responses', async 
   await old
   assert.equal(library.getSnapshot().status, 'ready')
   assert.deepEqual(library.getSnapshot().cards, [{ id: 'new' }])
+})
+
+test('imports read only the current small batch before uploading it', async t => {
+  const events = [], previous = globalThis.fetch
+  globalThis.fetch = async (_url, request) => {
+    const endpoint = _url.split('/').at(-1)
+    events.push(endpoint)
+    return { ok: true, json: async () => ({ ok: true, value: endpoint === 'import' ? { imported: JSON.parse(request.body).files.length, rejected: [] } : { cards: [] } }) }
+  }
+  t.after(() => { globalThis.fetch = previous })
+  const files = Array.from({ length: 5 }, (_, index) => ({ name: `${index}.json`, type: 'application/json', size: 2,
+    arrayBuffer: async () => { events.push(`read${index}`); return new Uint8Array([123, 125]).buffer } }))
+  const provider = new RemoteCharacterLibraryProvider()
+  assert.equal((await provider.importFiles(files)).imported, 5)
+  assert.deepEqual(events.slice(0, 10), ['list', 'read0', 'read1', 'import', 'read2', 'read3', 'import', 'read4', 'import', 'list'])
+  provider.dispose()
 })

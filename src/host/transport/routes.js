@@ -1,21 +1,42 @@
-import { isLoopbackRequest, readJsonBody, sendJson } from './http.js'
+import { isLoopbackRequest, isLoopbackAssetRequest, readJsonBody, sendJson } from './http.js'
+import { createReadStream } from 'node:fs'
+import { stat } from 'node:fs/promises'
+import { pipeline } from 'node:stream/promises'
 
 const ROUTE_PATH = '/mayori/characters'
 const message = error => error instanceof Error ? error.message : String(error)
 
 /** Adapt HTTP requests to already constructed capability services. */
-export function createMayoriRoute({ library, personas, presets, sessionPresets, characterSessions, trajectoryContext, historyDetails, messageRevisions }) {
+export function createMayoriRoute({ library, personas, presets, sessionPresets, characterSessions, trajectoryContext, historyDetails, messageRevisions, media }) {
   const route = {
     kind: 'prefix',
     path: ROUTE_PATH,
     handler: async (req, res) => {
+      const pathname = new URL(req.url, 'http://dsh.internal').pathname
+      const asset = pathname.match(/^\/mayori\/characters\/(media|card-image)\/([a-f0-9]{64})\/(avatar|gallery|preview|original)$/)
+      if (req.method === 'GET' && asset) {
+        if (!isLoopbackAssetRequest(req)) { res.writeHead(403); res.end('forbidden'); return }
+        let file
+        try {
+          file = asset[1] === 'media' ? await media.read(asset[2], asset[3]) : await library.image(asset[2], asset[3])
+          const info = await stat(file.path)
+          const headers = { 'content-type': file.type, 'cache-control': asset[1] === 'media' ? 'private, max-age=3600' : 'private, no-cache', etag: file.etag, 'x-content-type-options': 'nosniff' }
+          if (req.headers['if-none-match'] === file.etag) { res.writeHead(304, headers); res.end(); return }
+          res.writeHead(200, { ...headers, 'content-length': info.size })
+          await pipeline(createReadStream(file.path), res)
+        } catch {
+          if (!res.headersSent) { res.writeHead(404); res.end() }
+          else res.destroy()
+        } finally { file?.release?.() }
+        return
+      }
       if (!isLoopbackRequest(req)) {
         res.writeHead(403); res.end('forbidden'); return
       }
       if (req.method !== 'POST') {
         res.writeHead(405, { allow: 'POST' }); res.end(); return
       }
-      const endpoint = new URL(req.url, 'http://dsh.internal').pathname.slice(ROUTE_PATH.length + 1)
+      const endpoint = pathname.slice(ROUTE_PATH.length + 1)
       let payload
       try {
         payload = await readJsonBody(req)
@@ -24,7 +45,8 @@ export function createMayoriRoute({ library, personas, presets, sessionPresets, 
         return
       }
       try {
-        if (endpoint === 'list') sendJson(res, 200, { ok: true, value: { cards: await library.list() } })
+        if (endpoint === 'list') sendJson(res, 200, { ok: true, value: await library.query(payload ?? {}) })
+        else if (endpoint === 'get') sendJson(res, 200, { ok: true, value: await library.get(payload?.id) })
         else if (endpoint === 'history-details') sendJson(res, 200, { ok: true, value: await historyDetails.read(payload?.ids) })
         else if (endpoint === 'persona-list') sendJson(res, 200, { ok: true, value: await personas.list() })
         else if (endpoint === 'persona-save') sendJson(res, 200, { ok: true, value: await personas.save(payload) })

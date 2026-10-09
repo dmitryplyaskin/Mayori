@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Mayori is a DeepSeek Harness RPG bundle. Read `docs/architecture.md` before changing runtime behavior.
+Mayori is an engine for role-playing, creative writing, collaborative storytelling, and other creative text workflows, delivered as a DeepSeek Harness bundle. RPG mechanics are optional capabilities, not the product's defining scope. Read `docs/architecture.md` before changing runtime behavior.
 
 ## Rules
 
@@ -8,10 +8,10 @@ Mayori is a DeepSeek Harness RPG bundle. Read `docs/architecture.md` before chan
 - Register contributions through `ctx` so unloading the plugin reverses them.
 - A new capability includes Service Definition, Provider, and Consumer roles.
 - Anything model-visible must be reconstructible from the session log.
-- Never represent hidden campaign state only in a prompt or process memory.
+- Never represent hidden story or campaign state only in a prompt or process memory.
 - Never fabricate random outcomes; use a real rules or dice provider.
 - Deployment-varying choices belong in validated `Config` fields.
-- Use ESM, keep files newline-terminated, and preserve player agency in user-facing behavior.
+- Use ESM, keep files newline-terminated, and preserve the user's creative control. In role-playing, preserve player agency unless the user explicitly delegates it.
 - Update tests and the affected guide with every behavior change.
 
 ## Source layout

@@ -6,6 +6,7 @@ import { paginate } from '../../../client/components/pagination-model.js'
 import { Pagination } from '../../../client/components/pagination.jsx'
 import { Select } from '../../../client/components/select.jsx'
 import { DEFAULT_PERSONA, renderTemplate } from '../../../shared/templates.js'
+import { imageSource, originalImage } from '../../media/shared/image.js'
 
 const EMPTY_ARRAY = Object.freeze([])
 
@@ -43,9 +44,8 @@ function cardTags(card) {
 }
 
 function safeAssetUri(card) {
-  if (typeof card.image === 'string' && /^data:image\/(?:png|jpe?g|webp|gif);base64,/i.test(card.image)) {
-    return card.image
-  }
+  const image = imageSource(card.image, 'gallery')
+  if (image) return image
   const assets = Array.isArray(card.data.assets) ? card.data.assets : EMPTY_ARRAY
   const main = assets.find(asset => asset?.type === 'icon' && asset?.name === 'main')
     ?? assets.find(asset => asset?.type === 'icon')
@@ -67,11 +67,11 @@ function useCardImage(card) {
   return source
 }
 
-function CardPortrait({ card, className = '' }) {
+function CardPortrait({ card, className = '', large = false }) {
   const source = useCardImage(card)
   return source === null
     ? <span className={`mayori-card-fallback ${className}`} aria-hidden="true">{card.name.slice(0, 1).toUpperCase()}</span>
-    : <img className={className} src={source} alt={`Портрет: ${card.name}`} />
+    : <img className={className} src={large ? originalImage(source) ?? source : source} alt={`Портрет: ${card.name}`} loading="lazy" decoding="async" />
 }
 
 function ImportControl({ busy, inputRef, onFiles, compact = false }) {
@@ -167,10 +167,10 @@ export function CharacterInfoDialog({ card, onClose, onRemove, triggerRef, onPla
           </button>
         </header>
         <div className="mayori-character-content">
-          <div className="mayori-character-portrait"><CardPortrait card={card} /></div>
+          <div className="mayori-character-portrait"><CardPortrait card={card} large /></div>
           <div className="mayori-character-details">
             {tags.length > 0 && <ul className="mayori-tags" aria-label="Теги">{tags.map((tag, index) => <li key={`${tag}-${index}`}>{tag}</li>)}</ul>}
-            {card.warnings.length > 0 && <p className="mayori-card-warning">{card.warnings.join(' ')}</p>}
+            {card.warnings?.length > 0 && <p className="mayori-card-warning">{card.warnings.join(' ')}</p>}
             {onPlay && greetings.length > 1 && <div className="mayori-character-opening">
               <div className="mayori-filter-control"><span>Начало истории</span><Select aria-label="Начало истории" value={greetingIndex} disabled={playDisabled} portal={false} onChange={value => setGreetingIndex(Number(value))}
                 options={greetings.map((greeting, index) => ({ value: index, label: index === 0 ? (greeting.trim() ? 'Основное приветствие' : 'Без приветствия') : `Альтернатива ${index}` }))} /></div>
@@ -201,14 +201,9 @@ export function CharacterInfoDialog({ card, onClose, onRemove, triggerRef, onPla
   )
 }
 
-function Filters({ cards, query, setQuery, sort, setSort, creator, setCreator, portrait, setPortrait, selectedTags, setSelectedTags, onReset }) {
-  const creators = useMemo(() => [...new Set(cards.map(card => text(card.data.creator)).filter(Boolean))]
-    .sort((left, right) => left.localeCompare(right, 'ru')), [cards])
-  const tags = useMemo(() => {
-    const counts = new Map()
-    for (const card of cards) for (const tag of cardTags(card)) counts.set(tag, (counts.get(tag) ?? 0) + 1)
-    return [...counts].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], 'ru'))
-  }, [cards])
+function Filters({ facets, query, setQuery, sort, setSort, creator, setCreator, portrait, setPortrait, selectedTags, setSelectedTags, onReset }) {
+  const creators = facets?.creators ?? EMPTY_ARRAY
+  const tags = facets?.tags ?? EMPTY_ARRAY
   const toggleTag = (tag) => {
     setSelectedTags(selectedTags.includes(tag) ? selectedTags.filter(value => value !== tag) : [...selectedTags, tag])
   }
@@ -240,7 +235,8 @@ export function CharacterGalleryPanel({ library, personas, startCharacter }) {
   const persona = personaSnapshot.personas.find(item => item.id === personaSnapshot.defaultId) ?? DEFAULT_PERSONA
   const inputRef = useRef(null)
   const detailTriggerRef = useRef(null)
-  const snapshot = useSyncExternalStore(library.subscribe, library.getSnapshot, library.getSnapshot)
+  const catalog = useMemo(() => library.gallery(), [library])
+  const snapshot = useSyncExternalStore(catalog.subscribe, catalog.getSnapshot, catalog.getSnapshot)
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('newest')
   const [creator, setCreator] = useState('all')
@@ -257,27 +253,15 @@ export function CharacterGalleryPanel({ library, personas, startCharacter }) {
   useEffect(() => { saveCatalogPreferences(preferences) }, [preferences])
   useEffect(() => { setPage(1) }, [query, sort, creator, portrait, selectedTags, preferences.pageSize])
 
-  const normalizedQuery = query.trim().toLocaleLowerCase('ru')
-  const cards = useMemo(() => {
-    const filtered = snapshot.cards.filter((card) => {
-      if (creator !== 'all' && text(card.data.creator) !== creator) return false
-      const source = safeAssetUri(card)
-      if (portrait === 'with' && source === null) return false
-      if (portrait === 'without' && source !== null) return false
-      const tags = cardTags(card)
-      if (!selectedTags.every(tag => tags.includes(tag))) return false
-      if (normalizedQuery === '') return true
-      const haystack = [card.name, card.data.creator, card.data.description, card.data.personality, ...tags]
-        .filter(value => typeof value === 'string').join('\n').toLocaleLowerCase('ru')
-      return haystack.includes(normalizedQuery)
-    })
-    return [...filtered].sort((left, right) => {
-      if (sort === 'name') return left.name.localeCompare(right.name, 'ru')
-      if (sort === 'creator') return (text(left.data.creator) ?? '').localeCompare(text(right.data.creator) ?? '', 'ru') || left.name.localeCompare(right.name, 'ru')
-      return right.importedAt - left.importedAt || left.name.localeCompare(right.name, 'ru')
-    })
-  }, [creator, normalizedQuery, portrait, selectedTags, snapshot.cards, sort])
-  const pagination = paginate(cards, page, preferences.pageSize)
+  useEffect(() => {
+    const timeout = setTimeout(() => catalog.setQuery({ query, sort, creator, portrait, tags: selectedTags, page, pageSize: preferences.pageSize }), query ? 150 : 0)
+    return () => clearTimeout(timeout)
+  }, [catalog, query, sort, creator, portrait, selectedTags, page, preferences.pageSize])
+  const cards = snapshot.cards
+  const pagination = { ...paginate([], snapshot.page, preferences.pageSize), items: cards,
+    page: snapshot.page, pages: Math.max(1, Math.ceil(snapshot.filteredTotal / preferences.pageSize)),
+    start: cards.length ? (snapshot.page - 1) * preferences.pageSize : 0,
+    end: Math.min(snapshot.filteredTotal, snapshot.page * preferences.pageSize) }
   useEffect(() => { mainRef.current?.scrollTo({ top: 0 }) }, [pagination.page])
 
   const importFiles = async (fileList) => {
@@ -319,6 +303,14 @@ export function CharacterGalleryPanel({ library, personas, startCharacter }) {
   const resetFilters = () => {
     setQuery(''); setSort('newest'); setCreator('all'); setPortrait('all'); setSelectedTags([])
   }
+  const detailRevision = useRef(0)
+  useEffect(() => () => { ++detailRevision.current }, [])
+  const showDetails = async (item, trigger) => {
+    detailTriggerRef.current = trigger
+    const revision = ++detailRevision.current
+    try { const card = await library.get(item.id); if (revision === detailRevision.current) setSelectedCard(card) }
+    catch (error) { if (revision === detailRevision.current) setNotice({ kind: 'error', text: error.message }) }
+  }
   return (
     <>
       <section
@@ -329,7 +321,7 @@ export function CharacterGalleryPanel({ library, personas, startCharacter }) {
           <header className="mayori-gallery-header">
             <div className="mayori-gallery-title">
               <h2 id="mayori-gallery-title">Персонажи</h2>
-              <p>{snapshot.status === 'ready' ? `${snapshot.cards.length} в галерее` : snapshot.status === 'error' ? 'Не удалось загрузить галерею' : 'Загрузка…'}</p>
+              <p>{snapshot.status === 'ready' ? `${snapshot.total} в галерее${snapshot.indexing ? ' · Обновляем каталог…' : ''}` : snapshot.status === 'error' ? 'Не удалось загрузить галерею' : 'Загрузка…'}</p>
             </div>
             <div className="mayori-gallery-header-actions">
               <button type="button" className="mayori-filter-toggle" aria-controls="mayori-filter-panel" aria-expanded={filtersOpen} onClick={() => { setFiltersOpen(value => !value) }}>{icon('filter')}<span>Фильтры</span></button>
@@ -341,28 +333,28 @@ export function CharacterGalleryPanel({ library, personas, startCharacter }) {
             <aside id="mayori-filter-panel" className={`mayori-filter-panel${filtersOpen ? ' is-open' : ''}`} aria-label="Фильтры персонажей">
               <div className="mayori-filter-panel-header"><h3>Фильтры</h3><button type="button" className="mayori-icon-action" aria-label="Закрыть фильтры" onClick={() => { setFiltersOpen(false) }}>{icon('close')}</button></div>
               <ImportControl busy={busy} inputRef={inputRef} onFiles={importFiles} />
-              <Filters cards={snapshot.cards} query={query} setQuery={setQuery} sort={sort} setSort={setSort} creator={creator} setCreator={setCreator} portrait={portrait} setPortrait={setPortrait} selectedTags={selectedTags} setSelectedTags={setSelectedTags} onReset={resetFilters} />
+              <Filters facets={snapshot.facets} query={query} setQuery={setQuery} sort={sort} setSort={setSort} creator={creator} setCreator={setCreator} portrait={portrait} setPortrait={setPortrait} selectedTags={selectedTags} setSelectedTags={setSelectedTags} onReset={resetFilters} />
             </aside>
             <main ref={mainRef} className="mayori-gallery-main" id="mayori-gallery-content">
               <div className="mayori-gallery-results">
-                <p role="status" aria-live="polite">{snapshot.status === 'ready' ? `Найдено ${cards.length} из ${snapshot.cards.length}` : ''}</p>
+                <p role="status" aria-live="polite">{snapshot.status === 'ready' ? `Найдено ${snapshot.filteredTotal} из ${snapshot.total}` : ''}</p>
                 <div className="mayori-column-control mayori-filter-control"><span>Карточек в ряд</span><Select aria-label="Карточек в ряд" value={preferences.columns} onChange={columns => setPreferences(previous => ({ ...previous, columns: Number(columns) }))} options={COLUMN_OPTIONS.map(columns => ({ value: columns, label: columns }))} /></div>
               </div>
               <div className="mayori-gallery-notice" role="status" aria-live="polite">
                 {notice !== null && <p className={notice.kind === 'error' ? 'mayori-error' : 'mayori-success'}>{notice.text}</p>}
               </div>
-              {snapshot.status === 'error' && <div role="alert" className="mayori-error">{snapshot.error} <button type="button" className="mayori-secondary-button" disabled={busy} onClick={() => { void library.refresh().catch(() => {}) }}>Повторить загрузку</button></div>}
+              {snapshot.status === 'error' && <div role="alert" className="mayori-error">{snapshot.error} <button type="button" className="mayori-secondary-button" disabled={busy} onClick={() => { void catalog.refresh().catch(() => {}) }}>Повторить загрузку</button></div>}
               {snapshot.status === 'loading' && <p className="mayori-empty">Загружаем галерею…</p>}
               {snapshot.status === 'ready' && cards.length === 0 && (
                 <div className="mayori-empty">
                   <span className="mayori-empty-icon">{icon('gallery')}</span>
-                  <h3>{snapshot.cards.length === 0 ? 'Персонажей пока нет' : 'Ничего не найдено'}</h3>
-                  <p>{snapshot.cards.length === 0 ? 'Импортируйте PNG или JSON, чтобы добавить первого персонажа.' : 'Измените запрос или сбросьте фильтры.'}</p>
+                  <h3>{snapshot.total === 0 ? 'Персонажей пока нет' : 'Ничего не найдено'}</h3>
+                  <p>{snapshot.total === 0 ? 'Импортируйте PNG или JSON, чтобы добавить первого персонажа.' : 'Измените запрос или сбросьте фильтры.'}</p>
                 </div>
               )}
               {cards.length > 0 && <>
-                <ul className="mayori-card-grid" style={{ '--mayori-columns': preferences.columns }}>{pagination.items.map(card => <CharacterCard key={card.id} card={card} onPlay={play} playBusy={playingId === card.id} playDisabled={playingId !== null} onEdit={(item, trigger) => { detailTriggerRef.current = trigger; setSelectedCard(item) }} />)}</ul>
-                <Pagination pagination={pagination} total={cards.length} pageSize={preferences.pageSize} onPage={setPage} onPageSize={pageSize => { setPreferences(value => ({ ...value, pageSize })) }} />
+                <ul className="mayori-card-grid" style={{ '--mayori-columns': preferences.columns }}>{pagination.items.map(card => <CharacterCard key={card.id} card={card} onPlay={play} playBusy={playingId === card.id} playDisabled={playingId !== null} onEdit={showDetails} />)}</ul>
+                <Pagination pagination={pagination} total={snapshot.filteredTotal} pageSize={preferences.pageSize} onPage={setPage} onPageSize={pageSize => { setPreferences(value => ({ ...value, pageSize })) }} />
               </>}
             </main>
           </div>

@@ -1,7 +1,7 @@
 {
   "name": "dsh-mayori",
   "version": "0.1.0",
-  "description": "A DeepSeek Harness bundle for persistent, collaborative role-playing games",
+  "description": "An engine for role-playing, creative writing, and collaborative storytelling, delivered as a DeepSeek Harness bundle",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -41,6 +41,8 @@
     "src/features/compaction/host",
     "src/features/compaction/shared",
     "src/features/storage/host",
+    "src/features/media/host",
+    "src/features/media/shared",
     "src/features/character-session/domain",
     "src/features/characters/shared",
     "src/features/dice/shared",
@@ -74,7 +76,10 @@
     "cordis",
     "role-playing-game",
     "rpg",
-    "game-master"
+    "game-master",
+    "creative-writing",
+    "collaborative-storytelling",
+    "roleplay"
   ],
   "dsh": {
     "bundle": {
@@ -91,13 +96,14 @@
     }
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "^3.18.5-alpha.1"
+    "@deepseek-ai/schemastery": "^3.18.5-alpha.1",
+    "sharp": "^0.34.5"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.5-alpha.1",
     "@deepseek-ai/dsh": "0.2.1-alpha.2",
-    "@deepseek-ai/dsh-compaction-basic": "0.2.1-alpha.2",
     "@deepseek-ai/dsh-compaction": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-compaction-basic": "0.2.1-alpha.2",
     "@deepseek-ai/dsh-llm": "0.2.1-alpha.2",
     "@deepseek-ai/dsh-session": "0.2.1-alpha.2",
     "@deepseek-ai/dsh-system-prompt": "0.2.1-alpha.2",

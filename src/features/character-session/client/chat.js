@@ -15,6 +15,7 @@ export class RemoteCharacterChatProvider extends CharacterChatService {
   #loading
   #revision = 0
   #changing = false
+  #controller
   constructor(sessionId) { super(); this.sessionId = sessionId }
   getSnapshot = () => this.#snapshot
   subscribe = listener => {
@@ -26,8 +27,10 @@ export class RemoteCharacterChatProvider extends CharacterChatService {
   async refresh() {
     if (this.#changing) return
     const revision = ++this.#revision
+    this.#controller?.abort()
+    const controller = this.#controller = new AbortController()
     try {
-      const value = await call('session-state', { sessionId: this.sessionId })
+      const value = await call('session-state', { sessionId: this.sessionId }, { signal: controller.signal })
       if (revision === this.#revision) this.#publish({ status: 'ready', value, error: null })
     } catch (error) {
       if (revision === this.#revision) this.#publish({ ...this.#snapshot, status: 'error', error: error.message })
@@ -52,4 +55,5 @@ export class RemoteCharacterChatProvider extends CharacterChatService {
   }
   swipe(index) { return this.#change('swipe', { index }) }
   setPersona(personaId) { return this.#change('session-persona', { personaId }) }
+  dispose() { ++this.#revision; this.#controller?.abort(); this.#snapshot = { status: 'loading', value: null, error: null }; this.#loading = undefined }
 }

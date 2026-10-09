@@ -50,7 +50,7 @@ test('registers a user-owned preset catalog without global role-playing instruct
       provide(name, service) { provided.push({ name, service }) },
     },
     inject(services, callback) {
-      assert.deepEqual(services, ['webServer', 'agents', 'sessions', 'workspaceRegistry', 'agentPresets', 'sessionQuery', 'sessionController'])
+      assert.deepEqual(services, ['webServer', 'agents', 'sessions', 'workspaceRegistry', 'agentPresets', 'sessionQuery', 'sessionController', 'sessionPersistence'])
       registrationReady = callback({
         reflect: {
           provide(name, service) { provided.push({ name, service }) },
@@ -62,7 +62,7 @@ test('registers a user-owned preset catalog without global role-playing instruct
         },
         effect(factory, label) {
           if (label === 'mayori: character library route') factory()
-          else if (label.startsWith('mayori: active character context')) return factory()
+          else if (label.startsWith('mayori: active character context') || label === 'mayori: preview readers') return factory()
           else assert.fail(`unexpected effect: ${label}`)
         },
         webServer: {
@@ -80,6 +80,7 @@ test('registers a user-owned preset catalog without global role-playing instruct
   await registrationReady
 
   assert.equal(sections.length, 0)
+  assert.equal(provided.shift().name, 'mayoriMedia')
   assert.equal(provided[0].name, 'mayoriCharacters')
   assert.equal(provided[0].service.constructor.name, 'FileSystemCharacterLibraryProvider')
   assert.match(provided[0].service.root, /test-characters$/)

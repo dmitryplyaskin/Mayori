@@ -49,9 +49,9 @@ test('persists character records in the configured Host directory', async (t) =>
   assert.deepEqual(imported, { imported: 1, rejected: [] })
 
   const files = await readdir(root)
-  assert.equal(files.length, 1)
-  assert.match(files[0], /^[a-f0-9]{64}\.json$/)
-  const stored = JSON.parse(await readFile(join(root, files[0]), 'utf8'))
+  const records = files.filter(name => /^[a-f0-9]{64}\.json$/.test(name))
+  assert.equal(records.length, 1)
+  const stored = JSON.parse(await readFile(join(root, records[0]), 'utf8'))
   assert.equal(stored.card.data.extensions.preserved, true)
   assert.equal(stored.hasImage, false)
 

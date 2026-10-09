@@ -1,8 +1,9 @@
-import { mkdir, readFile, writeFile, rm } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises'
 import { linkSync, renameSync } from 'node:fs'
 import { createHash, randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import { validateSessionId, characterSnapshot } from '../domain/character.js'
+import { mediaId } from '../../media/shared/image.js'
 
 /** Selection store; source cards stay fixed, persona changes are explicit. */
 export class FileSystemCharacterSessionStore {
@@ -11,6 +12,11 @@ export class FileSystemCharacterSessionStore {
   path(sessionId) {
     validateSessionId(sessionId)
     return resolve(this.root, `${createHash('sha256').update(sessionId).digest('hex')}.json`)
+  }
+
+  async fingerprint(sessionId) {
+    try { const value = await stat(this.path(sessionId)); return `${value.size}:${value.mtimeMs}:${value.ctimeMs}` }
+    catch (error) { if (error.code === 'ENOENT') return 'missing'; throw error }
   }
 
   async read(sessionId) {
@@ -26,7 +32,7 @@ export class FileSystemCharacterSessionStore {
     }
     const snapshot = characterSnapshot(record.character)
     if (snapshot.image !== undefined && snapshot.image !== null
-      && (typeof snapshot.image !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(snapshot.image))) {
+      && !mediaId(snapshot.image) && (typeof snapshot.image !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(snapshot.image))) {
       throw new Error('Snapshot аватара персонажа повреждён.')
     }
     for (const [field, value] of Object.entries(snapshot.data)) {

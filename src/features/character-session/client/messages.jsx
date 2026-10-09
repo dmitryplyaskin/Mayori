@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { remapChildProps } from '../../../client/infrastructure/slot-mirror.js'
 import { GreetingMessage } from './greeting.jsx'
 import { MessageRevisionControls, UserRevisionToolbar } from '../../message-revisions/client/controls.jsx'
+import { originalImage } from '../../media/shared/image.js'
 
 function Avatar({ name, image }) {
   const dialog = useRef(null)
@@ -19,7 +20,7 @@ function Avatar({ name, image }) {
       aria-haspopup="dialog" onClick={() => { setOpened(true) }} onKeyDown={event => {
         if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
       }}>
-      {portrait ? <img src={image} alt="" onError={() => { setFailed(true) }} />
+      {portrait ? <img src={image} alt="" loading="lazy" decoding="async" onError={() => { setFailed(true) }} />
         : <span aria-hidden="true">{Array.from(name.trim())[0]?.toLocaleUpperCase() || '?'}</span>}
     </button>
     {opened && createPortal(<dialog ref={dialog} className="mayori-avatar-dialog" aria-labelledby={titleId}
@@ -34,7 +35,7 @@ function Avatar({ name, image }) {
         <button type="button" autoFocus onClick={close} aria-label="Закрыть аватар">×</button>
       </div>
       <div className="mayori-avatar-dialog-media">
-        {portrait ? <img src={image} alt={`Аватар: ${name}`} onError={() => { setFailed(true) }} />
+        {portrait ? <img src={originalImage(image)} alt={`Аватар: ${name}`} decoding="async" onError={() => { setFailed(true) }} />
           : <p>Аватар пока не добавлен.</p>}
       </div>
     </dialog>, document.body)}

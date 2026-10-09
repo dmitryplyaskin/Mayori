@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { historyRows } from '../../features/history/client/history.js'
 import { recentCharacters } from '../../features/characters/client/catalog-view.js'
 import { HistoryRow, useHistoryDetails } from '../../features/history/client/panel.jsx'
@@ -29,7 +29,7 @@ export function HomePanel({ history, library, personas, startCharacter, selectPa
   const snapshot = useSyncExternalStore(history.subscribe, history.getSnapshot, history.getSnapshot)
   const archive = useSyncExternalStore(history.subscribeArchive, history.getArchiveSnapshot, history.getArchiveSnapshot)
   const catalog = useSyncExternalStore(library.subscribe, library.getSnapshot, library.getSnapshot)
-  const rows = archive.phase === 'ready' && archive.state !== 'error' ? historyRows(snapshot, '', archive.archivedSessionIds).slice(0, 5) : []
+  const rows = useMemo(() => archive.phase === 'ready' && archive.state !== 'error' ? historyRows(snapshot, '', archive.archivedSessionIds, false, 5) : [], [snapshot, archive])
   const cards = recentCharacters(catalog.cards)
   const details = useHistoryDetails(history, rows)
   const [error, setError] = useState('')
@@ -37,11 +37,19 @@ export function HomePanel({ history, library, personas, startCharacter, selectPa
   const [playingId, setPlayingId] = useState(null)
   const [selectedCard, setSelectedCard] = useState(null)
   const triggerRef = useRef(null)
+  const detailRevision = useRef(0)
+  useEffect(() => () => { ++detailRevision.current }, [])
+  const showDetails = async (item, trigger) => {
+    triggerRef.current = trigger
+    const revision = ++detailRevision.current
+    try { const card = await library.get(item.id); if (revision === detailRevision.current) setSelectedCard(card) }
+    catch (failure) { if (revision === detailRevision.current) setError(failure.message) }
+  }
   const playingRef = useRef(false)
   useEffect(() => {
     let active = true
     setRefreshing(true)
-    Promise.resolve().then(() => history.refresh()).catch(() => {
+    Promise.resolve().then(() => history.ensureLoaded()).catch(() => {
       if (active) setError('Не удалось загрузить последние чаты. Попробуйте открыть историю и обновить список.')
     }).finally(() => { if (active) setRefreshing(false) })
     return () => { active = false }
@@ -83,7 +91,7 @@ export function HomePanel({ history, library, personas, startCharacter, selectPa
         {catalog.status === 'loading' && <p role="status">Загружаем персонажей…</p>}
         {catalog.status === 'error' && <p role="alert" className="mayori-error">{catalog.error}</p>}
         {catalog.status === 'ready' && cards.length === 0 && <p className="mayori-home-empty">В галерее пока нет персонажей. Перейдите в персонажи и импортируйте карточку PNG или JSON.</p>}
-        <ul className="mayori-card-grid">{cards.map(card => <CharacterCard key={card.id} card={card} onPlay={play} playBusy={playingId === card.id} playDisabled={playingId !== null} onEdit={(item, trigger) => { triggerRef.current = trigger; setSelectedCard(item) }} />)}</ul>
+        <ul className="mayori-card-grid">{cards.map(card => <CharacterCard key={card.id} card={card} onPlay={play} playBusy={playingId === card.id} playDisabled={playingId !== null} onEdit={showDetails} />)}</ul>
         <button type="button" className="mayori-secondary-button" onClick={() => { selectPanel('mayori-characters') }}>Перейти к персонажам <span aria-hidden="true">→</span></button>
       </section>
     </div>

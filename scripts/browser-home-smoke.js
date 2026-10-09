@@ -30,7 +30,7 @@ const files = Array.from({ length: 45 }, (_, index) => ({ name: `catalog-${index
     system_prompt: '', post_history_instructions: '',
   } })).toString('base64') }))
 await rpc('/mayori/characters/import', { files })
-const cards = (await rpc('/mayori/characters/list', {})).cards
+const cards = (await rpc('/mayori/characters/list', { pageSize: 60 })).cards
 const recent = [...cards].sort((a, b) => b.importedAt - a.importedAt || a.id.localeCompare(b.id)).slice(0, 5)
 for (const card of cards.filter(card => card.name.startsWith('Catalog')).slice(0, 6)) {
   const session = await rpc('/mayori/characters/start', { characterId: card.id, workspaceId: campaign.workspaceId })

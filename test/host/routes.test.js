@@ -1,7 +1,43 @@
 import assert from 'node:assert/strict'
-import { Readable } from 'node:stream'
+import { Readable, Writable } from 'node:stream'
+import { mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import test from 'node:test'
 import { createMayoriRoute } from '../../src/host/transport/routes.js'
+
+test('image routes stream bytes, revalidate ETags and release cache leases on every outcome', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'mayori-route-images-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const path = join(root, 'image.webp'), bytes = Buffer.from('original image bytes')
+  await writeFile(path, bytes)
+  let calls = 0, releases = 0
+  const media = { read: async () => { calls++; return { path, type: 'image/webp', etag: '"same"', release: () => releases++ } } }
+  const route = createMayoriRoute({ media, library: { image: media.read } })
+  async function asset(kind, headers = {}) {
+    const req = { url: `/mayori/characters/${kind}/${'a'.repeat(64)}/avatar`, method: 'GET',
+      headers: { host: '127.0.0.1:3081', 'sec-fetch-site': 'same-origin', ...headers } }
+    const chunks = []
+    const res = new Writable({ write(chunk, _encoding, next) { chunks.push(chunk); next() } })
+    res.writeHead = (status, values) => { res.status = status; res.headers = values; res.headersSent = true }
+    await route.handler(req, res)
+    return { ...res, body: Buffer.concat(chunks) }
+  }
+  const response = await asset('media')
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.body, bytes)
+  assert.equal(response.headers['content-length'], bytes.length)
+  assert.equal(response.headers['x-content-type-options'], 'nosniff')
+  assert.equal((await asset('card-image', { 'if-none-match': '"same"' })).status, 304)
+  assert.equal(releases, 2)
+  for (const headers of [{ 'sec-fetch-site': 'cross-site' }, { origin: 'http://other.localhost:3081' }, { 'sec-fetch-site': undefined }, { host: 'example.com' }]) {
+    assert.equal((await asset('media', headers)).status, 403)
+  }
+  assert.equal(calls, 2)
+  await rm(path)
+  assert.equal((await asset('media')).status, 404)
+  assert.equal(releases, 3)
+})
 
 async function request(route, endpoint, payload, options = {}) {
   const req = Readable.from([Buffer.from(options.body ?? JSON.stringify(payload))])
@@ -24,7 +60,8 @@ test('HTTP adapter dispatches each existing endpoint to its owning capability wi
   const route = createMayoriRoute(Object.fromEntries(['library', 'personas', 'presets', 'sessionPresets', 'characterSessions', 'trajectoryContext', 'historyDetails', 'messageRevisions'].map(name => [name, service(name)])))
   const input = { id: 'resource', ids: ['session'], sessionId: 'session', characterId: 'character', workspaceId: 'workspace', greetingIndex: 1, index: 2, personaId: 'persona', presetId: 'preset', selection: 'current', seq: 9, text: 'Changed' }
   const cases = [
-    ['list', 'library', 'list', [], { cards: 'library.list' }],
+    ['list', 'library', 'query', [input], 'library.query'],
+    ['get', 'library', 'get', [input.id], 'library.get'],
     ['import', 'library', 'import', [input], 'library.import'],
     ['remove', 'library', 'remove', [input.id], { removed: true }],
     ['history-details', 'historyDetails', 'read', [input.ids], 'historyDetails.read'],
@@ -61,7 +98,7 @@ test('HTTP adapter dispatches each existing endpoint to its owning capability wi
 
 test('HTTP adapter preserves same-origin checks, method restrictions and error envelopes', async () => {
   let calls = 0
-  const route = createMayoriRoute({ library: { list() { calls++; throw new Error('catalog unavailable') } } })
+  const route = createMayoriRoute({ library: { query() { calls++; throw new Error('catalog unavailable') } } })
   for (const headers of [
     { origin: 'http://other.localhost:3081' },
     { host: 'example.com', origin: 'http://example.com' },

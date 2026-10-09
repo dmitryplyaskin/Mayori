@@ -23,6 +23,14 @@ export function isLoopbackRequest(req) {
   return origin === `http://${rawHost}` || origin === `https://${rawHost}`
 }
 
+/** Browser image loads have Fetch Metadata but normally omit Origin. */
+export function isLoopbackAssetRequest(req) {
+  if (req.headers.origin) return isLoopbackRequest(req)
+  return req.headers['sec-fetch-site'] === 'same-origin' && isLoopbackRequest({ headers: {
+    ...req.headers, origin: `http://${req.headers.host}`,
+  } })
+}
+
 export async function readJsonBody(req) {
   const chunks = []
   let size = 0

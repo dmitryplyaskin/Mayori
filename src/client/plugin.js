@@ -25,6 +25,7 @@ import { BRAND_STYLE } from './styles.js'
 import { PluginSettingsClient } from '../features/plugins/client/settings.js'
 import { PLUGIN_SETTINGS_STYLE } from '../features/plugins/client/panel.jsx'
 import { MayoriSettingsLauncher, SETTINGS_MODAL_STYLE } from '../features/settings/client/modal.jsx'
+import { SessionProviders } from './infrastructure/session-providers.js'
 
 export { DiceToolCard } from '../features/dice/client/card.jsx'
 export { CheckToolCard } from '../features/rules/client/card.jsx'
@@ -39,35 +40,25 @@ export function apply(ctx) {
     name: 'sidebar.footer.action', id: 'mayori-settings', order: 35, inject: () => ({ preferences }),
   }, MayoriSettingsLauncher))
   const library = new RemoteCharacterLibraryProvider()
+  ctx.effect(() => () => library.dispose(), 'mayori: catalog requests')
   ctx.provide('mayoriCharacters', library)
   const personas = new RemotePersonaProvider()
   ctx.provide('mayoriPersonas', personas)
   const presets = new RemoteRoleplayPresetProvider()
   ctx.provide('mayoriPresets', presets)
-  const sessionPresets = new Map()
-  const presetFor = sessionId => {
-    if (!sessionPresets.has(sessionId)) sessionPresets.set(sessionId, new RemoteSessionPresetProvider(sessionId))
-    return sessionPresets.get(sessionId)
-  }
+  const sessionPresets = new SessionProviders(id => new RemoteSessionPresetProvider(id))
+  const presetFor = sessionId => sessionPresets.get(sessionId)
   ctx.provide('mayoriSessionPresets', { forSession: presetFor })
-  const chats = new Map()
-  const chatFor = sessionId => {
-    if (!chats.has(sessionId)) chats.set(sessionId, new RemoteCharacterChatProvider(sessionId))
-    return chats.get(sessionId)
-  }
-  const contexts = new Map()
-  const contextFor = sessionId => {
-    if (!contexts.has(sessionId)) contexts.set(sessionId, new RemoteTrajectoryContextProvider(sessionId))
-    return contexts.get(sessionId)
-  }
+  const chats = new SessionProviders(id => new RemoteCharacterChatProvider(id))
+  const chatFor = sessionId => chats.get(sessionId)
+  const contexts = new SessionProviders(id => new RemoteTrajectoryContextProvider(id), 4)
+  const contextFor = sessionId => contexts.get(sessionId)
   ctx.provide('mayoriTrajectoryContext', { forSession: contextFor })
-  const revisions = new Map()
-  const revisionFor = sessionId => {
-    if (!revisions.has(sessionId)) revisions.set(sessionId, new RemoteMessageRevisionProvider(sessionId, async id => {
+  const revisions = new SessionProviders(sessionId => new RemoteMessageRevisionProvider(sessionId, async id => {
       try { await ctx.sessions.refresh() } finally { ctx.uiWorkspace.openSession(id) }
     }))
-    return revisions.get(sessionId)
-  }
+  const revisionFor = sessionId => revisions.get(sessionId)
+  ctx.effect(() => () => { sessionPresets.dispose(); chats.dispose(); contexts.dispose(); revisions.dispose() }, 'mayori: session provider caches')
   ctx.provide('mayoriMessageRevisions', { forSession: revisionFor })
 
   ctx.effect(() => {
@@ -121,6 +112,7 @@ export function apply(ctx) {
     }, 'mayori: home navigation'))
   }
   const history = new SessionChatHistoryProvider(ctx.sessions, ctx.uiWorkspace, ctx.workspaces)
+  ctx.effect(() => () => history.dispose(), 'mayori: history cache')
   ctx.provide('mayoriHistory', history)
   const homeProps = () => ({ history, library, personas, selectPanel: id => ctx.layout.selectPanel(id),
     startCharacter: (card, greetingIndex) => startCharacterSession({ sessions: ctx.sessions,

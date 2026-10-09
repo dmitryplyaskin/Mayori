@@ -6,6 +6,28 @@ function catalog(...rows) {
   return { phase: 'ready', ids: rows.map(row => row.id), byId: Object.fromEntries(rows.map(row => [row.id, row])) }
 }
 
+test('preview browser cache shares requests and explicit refresh rejects old cache writes', async t => {
+  const previous = globalThis.fetch
+  t.after(() => { globalThis.fetch = previous })
+  let calls = 0, finishOld
+  globalThis.fetch = async () => ({ ok: true, json: async () => {
+    if (++calls === 1) return new Promise(resolve => { finishOld = resolve })
+    return { ok: true, value: { chat: { preview: 'Fresh' } } }
+  } })
+  const provider = new SessionChatHistoryProvider({ list: { getSnapshot: () => catalog({ id: 'chat', updatedAt: 1 }) }, refresh: async () => {} })
+  const old = provider.details(['chat']), duplicate = provider.details(['chat'])
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(calls, 1)
+  await provider.refresh()
+  assert.equal((await provider.details(['chat'])).chat.preview, 'Fresh')
+  finishOld({ ok: true, value: { chat: { preview: 'Old' } } })
+  await Promise.all([old, duplicate])
+  assert.equal((await provider.details(['chat'])).chat.preview, 'Fresh')
+  assert.equal(calls, 2)
+  provider.dispose()
+  assert.equal(provider.cache.bytes, 0)
+})
+
 test('history spans directories, preserves forks and excludes provisional blanks and agent children', () => {
   const snapshot = catalog(
     { id: 'old', title: 'Лес', updatedAt: 1, cwd: '/one' },
@@ -26,6 +48,11 @@ test('history searches titles and ids without exposing project path fallback', (
   assert.equal(historyRows(snapshot, '42')[0].title, 'Чат без названия')
   assert.deepEqual(historyRows(snapshot, 'secret-project'), [])
   assert.deepEqual(historyRows(snapshot, 'missing'), [])
+})
+
+test('home top-five selection matches complete history ordering without retaining every row', () => {
+  const snapshot = catalog(...Array.from({ length: 1000 }, (_, index) => ({ id: `row-${index}`, title: `Chat ${index}`, updatedAt: index % 37 })))
+  assert.deepEqual(historyRows(snapshot, '', [], false, 5), historyRows(snapshot).slice(0, 5))
 })
 
 test('provider observes DSH updates, refreshes persisted catalog and opens the same id', async () => {

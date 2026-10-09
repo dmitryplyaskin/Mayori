@@ -3,8 +3,9 @@ import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { DEFAULT_PERSONA } from '../../../shared/templates.js'
+import { mediaId } from '../../media/shared/image.js'
 
-function validatePersona(input) {
+export function validatePersona(input) {
   if (!input || typeof input.name !== 'string' || !input.name.trim() || input.name.length > 120) {
     throw new TypeError('Укажите имя персоны длиной до 120 символов.')
   }
@@ -13,7 +14,7 @@ function validatePersona(input) {
   }
   if ((input.description?.length ?? 0) > 32000 || (input.title?.length ?? 0) > 200) throw new TypeError('Описание или подпись персоны слишком длинные.')
   const avatar = input.avatar ?? ''
-  if (avatar && (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar) || avatar.length > 2_800_000)) {
+  if (avatar && !mediaId(avatar) && (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar) || avatar.length > 2_800_000)) {
     throw new TypeError('Выберите PNG, JPEG или WebP размером до 2 МБ.')
   }
   return { name: input.name.trim(), title: input.title ?? '', description: input.description ?? '', avatar }
@@ -49,7 +50,7 @@ export class FileSystemPersonaStore {
   #change(operation) {
     const result = this.#writes.then(async () => {
       const record = await this.#read()
-      const value = operation(record)
+      const value = await operation(record)
       await mkdir(this.root, { recursive: true })
       const temporary = resolve(this.root, `${randomUUID()}.tmp`)
       try {
@@ -60,6 +61,11 @@ export class FileSystemPersonaStore {
     })
     this.#writes = result.catch(() => {})
     return result
+  }
+  migrateAvatars(convert) {
+    return this.#change(async record => {
+      for (const persona of record.personas) if (persona.avatar?.startsWith('data:image/')) persona.avatar = await convert(persona.avatar)
+    })
   }
   save(input) {
     const data = validatePersona(input)

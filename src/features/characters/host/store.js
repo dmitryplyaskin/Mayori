@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { Buffer } from 'node:buffer'
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, rm, writeFile, stat, link, copyFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { importCharacterCardBytes } from '../shared/card.js'
+import { CharacterCatalog } from './catalog.js'
 
 const RECORD_FORMAT = 1
 const CARD_ID = /^[a-f0-9]{64}$/
@@ -38,7 +39,7 @@ function validateImportPayload(payload) {
     return {
       name: typeof file.name === 'string' && file.name.trim() !== '' ? file.name : 'character-card',
       type: typeof file.type === 'string' ? file.type : '',
-      bytes: decodeBase64(file.base64),
+      base64: file.base64,
     }
   })
 }
@@ -47,15 +48,79 @@ function validateImportPayload(payload) {
 export class FileSystemCharacterLibraryStore {
   #root
   #writes = Promise.resolve()
+  #ready
+  #scan
+  #closed = false
+  #errors = 0
 
-  constructor(root) {
+  constructor(root, media) {
     if (typeof root !== 'string' || root.trim() === '') {
       throw new TypeError('charactersPath must be a non-empty string')
     }
     this.#root = resolve(root)
+    this.media = media
+    this.catalog = new CharacterCatalog(this.#root)
   }
 
   get root() { return this.#root }
+
+  async query(input) {
+    await this.#writes
+    await this.#ensureIndex()
+    return { ...this.catalog.query(input), indexing: Boolean(this.#scan), unavailable: this.#errors }
+  }
+
+  #ensureIndex() {
+    if (this.#ready) return this.#ready
+    let release, reject
+    this.#ready = new Promise((accept, refuse) => { release = accept; reject = refuse })
+    this.#scan = (async () => {
+      await mkdir(this.#root, { recursive: true })
+      await this.catalog.open()
+      const names = (await readdir(this.#root)).filter(name => /^[a-f0-9]{64}\.json$/.test(name))
+      const generation = randomUUID()
+      this.catalog.startScan()
+      for (let index = 0; index < names.length && !this.#closed; index++) {
+        const name = names[index], id = name.slice(0, -5)
+        try {
+          const meta = await stat(this.#recordPath(id)), fingerprint = `${meta.size}:${meta.mtimeMs}:${meta.ctimeMs}`
+          if (this.catalog.fingerprint(id) === fingerprint) this.catalog.mark(id, generation)
+          else this.catalog.upsert(await this.#serialized(id), fingerprint, generation)
+        } catch { this.#errors++; this.catalog.remove(id) }
+        if (index === 59) release()
+        if (index % 20 === 0) { this.catalog.checkpoint(); await new Promise(resolve => setImmediate(resolve)) }
+      }
+      if (!this.#closed) this.catalog.finish(generation)
+      release()
+    })().catch(error => { this.#ready = undefined; reject(error); throw error }).finally(() => { this.catalog.stopScan(); this.#scan = undefined })
+    void this.#scan.catch(() => {})
+    return this.#ready
+  }
+
+  async close() { this.#closed = true; await this.#scan?.catch(() => {}); await this.#writes.catch(() => {}) }
+  async get(id) { await this.#writes; return this.#readRecord(`${validateId(id)}.json`) }
+  async image(id, variant) {
+    validateId(id)
+    await this.#writes
+    await stat(this.#recordPath(id))
+    const cachePath = resolve(this.#root, 'cache', `${id}.media.json`)
+    let source
+    try { source = JSON.parse(await readFile(cachePath, 'utf8')).reference } catch (error) { if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error }
+    if (source?.match(/^mayori-media:[a-f0-9]{64}$/) && this.media) return this.media.read(source.slice('mayori-media:'.length), variant)
+    const serialized = await this.#serialized(id)
+    source = serialized.imageReference
+    if (!source) {
+      if (serialized.hasImage) source = `data:image/png;base64,${(await readFile(this.#imagePath(id))).toString('base64')}`
+      else {
+        const assets = Array.isArray(serialized.card.data.assets) ? serialized.card.data.assets : []
+        source = (assets.find(a => a?.type === 'icon' && a.name === 'main') ?? assets.find(a => a?.type === 'icon'))?.uri
+      }
+    }
+    if (!source || !this.media) { const error = new Error('Портрет не найден.'); error.code = 'ENOENT'; throw error }
+    const reference = await this.media.put(source)
+    await this.#cacheImage(id, reference)
+    return this.media.read(reference.slice('mayori-media:'.length), variant)
+  }
 
   async list() {
     await this.#writes
@@ -72,20 +137,18 @@ export class FileSystemCharacterLibraryStore {
     const files = validateImportPayload(payload)
     return this.#enqueue(async () => {
       await mkdir(this.#root, { recursive: true })
-      const settled = await Promise.allSettled(files.map(file => importCharacterCardBytes(file.bytes, {
-        mediaType: file.type,
-        fileName: file.name,
-      })))
+      await this.#ensureIndex()
+      await this.#scan
       const rejected = []
       let imported = 0
-      for (let index = 0; index < settled.length; index += 1) {
-        const result = settled[index]
-        if (result.status === 'rejected') {
-          rejected.push({ name: files[index].name, error: message(result.reason) })
-          continue
-        }
-        await this.#writeRecord(result.value)
-        imported += 1
+      for (const file of files) {
+        try {
+          const record = await importCharacterCardBytes(decodeBase64(file.base64), { mediaType: file.type, fileName: file.name })
+          const imageReference = await this.#writeRecord(record)
+          const meta = await stat(this.#recordPath(record.id))
+          this.catalog.upsert({ ...record, imageReference, hasImage: record.imageBytes !== null }, `${meta.size}:${meta.mtimeMs}:${meta.ctimeMs}`, 'import')
+          imported++
+        } catch (error) { rejected.push({ name: file.name, error: message(error) }) }
       }
       return { imported, rejected }
     })
@@ -94,10 +157,14 @@ export class FileSystemCharacterLibraryStore {
   remove(id) {
     const safeId = validateId(id)
     return this.#enqueue(async () => {
+      await this.#ensureIndex()
+      await this.#scan
       await Promise.all([
         rm(this.#recordPath(safeId), { force: true }),
         rm(this.#imagePath(safeId), { force: true }),
       ])
+      this.catalog.remove(safeId)
+      await rm(resolve(this.#root, 'cache', `${safeId}.media.json`), { force: true })
     })
   }
 
@@ -109,14 +176,12 @@ export class FileSystemCharacterLibraryStore {
 
   async #readRecord(name) {
     const id = validateId(name.slice(0, -5))
-    const serialized = JSON.parse(await readFile(this.#recordPath(id), 'utf8'))
-    if (serialized?.format !== RECORD_FORMAT || serialized.id !== id || serialized.card?.data?.name === undefined) {
-      throw new Error(`Файл ${name} не является карточкой Mayori.`)
-    }
-    let image = null
-    if (serialized.hasImage === true) {
+    const serialized = await this.#serialized(id)
+    let image = serialized.imageReference ?? null
+    if (serialized.hasImage === true && (!image || !this.media)) {
       try {
         image = `data:image/png;base64,${(await readFile(this.#imagePath(id))).toString('base64')}`
+        if (this.media) image = await this.media.put(image)
       } catch (error) {
         if (error?.code !== 'ENOENT') throw error
       }
@@ -135,10 +200,30 @@ export class FileSystemCharacterLibraryStore {
     })
   }
 
+  async #serialized(id) {
+    const record = JSON.parse(await readFile(this.#recordPath(id), 'utf8'))
+    if (record?.format !== RECORD_FORMAT || record.id !== id || typeof record.name !== 'string' || !record.name.trim()
+      || typeof record.card?.data?.name !== 'string' || !Number.isFinite(record.importedAt)) throw new Error(`Файл ${id}.json не является карточкой Mayori.`)
+    return record
+  }
+
   async #writeRecord(record) {
     const id = validateId(record.id)
     const hasImage = record.imageBytes !== null
-    if (hasImage) await writeFile(this.#imagePath(id), record.imageBytes)
+    const imageReference = hasImage && this.media ? await this.media.put(`data:image/png;base64,${Buffer.from(record.imageBytes).toString('base64')}`) : undefined
+    if (imageReference) {
+      const file = await this.media.read(imageReference.slice('mayori-media:'.length), 'original')
+      const temporaryImage = resolve(this.#root, `${id}.${randomUUID()}.png.tmp`)
+      try {
+        try { await link(file.path, temporaryImage) } catch (error) {
+          if (!['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'EXDEV'].includes(error.code)) throw error
+          await copyFile(file.path, temporaryImage)
+        }
+        await rename(temporaryImage, this.#imagePath(id))
+      }
+      finally { await rm(temporaryImage, { force: true }) }
+      await this.#cacheImage(id, imageReference)
+    } else if (hasImage) await writeFile(this.#imagePath(id), record.imageBytes)
     else await rm(this.#imagePath(id), { force: true })
     const serialized = JSON.stringify({
       format: RECORD_FORMAT,
@@ -151,6 +236,7 @@ export class FileSystemCharacterLibraryStore {
       importedAt: record.importedAt,
       sourceName: record.sourceName,
       hasImage,
+      ...(imageReference ? { imageReference } : {}),
     }, null, 2)
     const temporary = resolve(this.#root, `${id}.${randomUUID()}.tmp`)
     await writeFile(temporary, `${serialized}\n`, { encoding: 'utf8', flag: 'wx' })
@@ -163,6 +249,18 @@ export class FileSystemCharacterLibraryStore {
     } finally {
       await rm(temporary, { force: true })
     }
+    if (!imageReference) await rm(resolve(this.#root, 'cache', `${id}.media.json`), { force: true })
+    return imageReference
+  }
+
+  async #cacheImage(id, reference) {
+    const directory = resolve(this.#root, 'cache')
+    await mkdir(directory, { recursive: true })
+    const temporary = resolve(directory, `${id}.${randomUUID()}.tmp`)
+    try {
+      await writeFile(temporary, JSON.stringify({ reference }), { flag: 'wx' })
+      await rename(temporary, resolve(directory, `${id}.media.json`))
+    } finally { await rm(temporary, { force: true }) }
   }
 
   #recordPath(id) { return resolve(this.#root, `${id}.json`) }

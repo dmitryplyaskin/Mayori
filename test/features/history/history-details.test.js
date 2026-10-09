@@ -1,10 +1,17 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { Session } from '@deepseek-ai/dsh-session'
-import { messagePreview, SessionHistoryDetailsProvider } from '../../../src/features/history/host/details.js'
+import { messagePreview, previewText, SessionHistoryDetailsProvider } from '../../../src/features/history/host/details.js'
 import { greetingSeed } from '../../../src/features/character-session/host/greeting.js'
 
 const user = (id, text, kind = 'user') => ({ id, role: 'user', source: { kind }, content: [{ type: 'text', text }] })
+
+test('preview truncation preserves Unicode and whitespace without expanding huge text into an array', () => {
+  assert.equal(previewText([' \nFirst\t', ' second  ', '', 'third  ']), 'First second third')
+  assert.equal(previewText(['🐉'.repeat(200000)]), '🐉'.repeat(180) + '…')
+  assert.equal(previewText(['a'.repeat(180) + '  ']), 'a'.repeat(180))
+  assert.equal(previewText(['a'.repeat(180), 'b']), 'a'.repeat(180) + '…')
+})
 
 test('preview selects visible dialogue, ignores context and reconstructs greeting replacements', () => {
   const session = Session.create('test', greetingSeed({ messageId: 'opening', text: 'Old opening' }))

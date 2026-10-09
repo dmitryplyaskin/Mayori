@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { historyRows } from './history.js'
 import { paginate } from '../../../client/components/pagination-model.js'
 import { Pagination } from '../../../client/components/pagination.jsx'
+import { imageSource } from '../../media/shared/image.js'
 
 export function ChatHistoryIcon({ size }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2.6 7M3 4v7h7M12 7v5l3 2"/></svg>
@@ -27,7 +28,7 @@ export function useHistoryDetails(history, rows, refreshKey = 0) {
 }
 
 export function HistoryRow({ row, detail, loading, disabled, onOpen }) {
-  const avatar = typeof detail?.avatar === 'string' && /^data:image\/png;base64,/i.test(detail.avatar) ? detail.avatar : null
+  const avatar = imageSource(detail?.avatar)
   const [failedImage, setFailedImage] = useState(null)
   const name = detail?.characterName || row.title
   return <button type="button" className="mayori-history-row" disabled={disabled} onClick={() => { void onOpen(row.id) }}>
@@ -64,7 +65,7 @@ export function ChatHistoryPanel({ history }) {
   useEffect(() => {
     let active = true
     setRefreshing(true)
-    Promise.resolve().then(() => history.refresh()).catch(() => {
+    Promise.resolve().then(() => history.ensureLoaded()).catch(() => {
       if (active) setError('Не удалось загрузить историю. Попробуйте обновить список.')
     }).finally(() => { if (active) setRefreshing(false) })
     return () => { active = false }
@@ -102,8 +103,8 @@ export function ChatHistoryPanel({ history }) {
     }
   }
   const loading = refreshing || snapshot.phase === 'pending' || archiveSnapshot.phase === 'pending'
-  const rows = archiveSnapshot.phase === 'ready'
-    ? historyRows(snapshot, query, archiveSnapshot.archivedSessionIds, archivedOnly) : []
+  const rows = useMemo(() => archiveSnapshot.phase === 'ready'
+    ? historyRows(snapshot, query, archiveSnapshot.archivedSessionIds, archivedOnly) : [], [snapshot, query, archiveSnapshot, archivedOnly])
   const pagination = paginate(rows, page, pageSize)
   const details = useHistoryDetails(history, pagination.items, detailsRevision)
   return <section className="mayori-history-panel" aria-labelledby="mayori-history-title">
