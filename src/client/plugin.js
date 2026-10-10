@@ -29,6 +29,7 @@ import { SessionProviders } from './infrastructure/session-providers.js'
 import { presetCommand } from '../features/presets/client/command.js'
 import { personaCommand } from '../features/personas/client/command.js'
 import { newChatCommand } from '../features/character-session/client/command.js'
+import { registerComposerPresentation } from './shell/composer.js'
 
 export { DiceToolCard } from '../features/dice/client/card.jsx'
 export { CheckToolCard } from '../features/rules/client/card.jsx'
@@ -38,6 +39,7 @@ export const inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout
 
 /** Register reversible browser contributions through Cordis. */
 export function apply(ctx) {
+  registerComposerPresentation(ctx)
   const preferences = new PluginSettingsClient()
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action', id: 'mayori-settings', order: 35, inject: () => ({ preferences }),

@@ -93,7 +93,7 @@ test('registers reversible Mayori client contributions', async () => {
       effect(factory, label) {
         if (label === 'mayori: client styles') dispose = factory()
         else if (label === 'mayori: chat command') commandDisposers.push(factory())
-        else { assert.ok(['mayori: greeting renderer', 'mayori: trajectory context', 'mayori: trajectory header', 'mayori: home conversation', 'mayori: home navigation', 'mayori: catalog requests', 'mayori: session provider caches', 'mayori: history cache'].includes(label)); return factory() }
+        else { assert.ok(['mayori: composer presentation', 'mayori: greeting renderer', 'mayori: trajectory context', 'mayori: trajectory header', 'mayori: home conversation', 'mayori: home navigation', 'mayori: catalog requests', 'mayori: session provider caches', 'mayori: history cache'].includes(label)); return factory() }
       },
       slots: {
         subscribe() { return () => {} },
@@ -117,6 +117,7 @@ test('registers reversible Mayori client contributions', async () => {
     assert.deepEqual(dismissed, ['preset', 'persona', 'new'])
     assert.deepEqual(unregistered, ['preset', 'persona', 'new'])
     assert.deepEqual(slotInjections.map(item => item.name), [
+      'conversation.chat.assistant-actions', 'conversation.input.permission', 'conversation.composer.bar',
       'sidebar.footer.action',
       'tool.call.toolview', 'tool.call.toolview',
       'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark', 'sidebar.workspaces', 'sidebar', 'shell.leading',
