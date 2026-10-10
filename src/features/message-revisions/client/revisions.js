@@ -9,22 +9,49 @@ export class MessageRevisionClient {
 }
 
 export class RemoteMessageRevisionProvider extends MessageRevisionClient {
-  #snapshot = { busy: false }
+  #snapshot = { busy: false, edits: {} }
   #listeners = new Set()
+  #loading
+  #revision = 0
   constructor(sessionId, open) { super(); this.sessionId = sessionId; this.open = open }
   getSnapshot = () => this.#snapshot
   subscribe = listener => { this.#listeners.add(listener); return () => { this.#listeners.delete(listener) } }
-  #publish(busy) { this.#snapshot = { busy }; for (const listener of this.#listeners) listener() }
+  #publish(update) { this.#snapshot = { ...this.#snapshot, ...update }; for (const listener of this.#listeners) listener() }
+  refresh() {
+    if (this.#loading) return this.#loading
+    const revision = this.#revision
+    this.#loading = call('message-revisions', { sessionId: this.sessionId }).then(edits => {
+      if (revision === this.#revision) this.#publish({ edits, error: null })
+      return edits
+    }).catch(error => {
+      if (revision === this.#revision) this.#publish({ error: error.message })
+      return null
+    }).finally(() => { this.#loading = undefined })
+    return this.#loading
+  }
   inspect(seq) { return call('message-inspect', { sessionId: this.sessionId, seq }) }
   async #change(endpoint, input) {
     if (this.#snapshot.busy) throw new Error('Дождитесь сохранения текущей реплики.')
-    this.#publish(true)
+    this.#publish({ busy: true, error: null })
     try {
       const value = await call(endpoint, { sessionId: this.sessionId, ...input })
-      if (value.changed) await this.open(value.sessionId)
+      if (value.changed && value.sessionId !== this.sessionId) await this.open(value.sessionId)
+      if (value.changed && value.sessionId === this.sessionId) {
+        ++this.#revision
+        if (value.edits) this.#publish({ edits: value.edits })
+        else { await this.#loading; await this.refresh() }
+      }
       return value
-    } finally { this.#publish(false) }
+    } catch (error) {
+      if (endpoint === 'message-edit' && input.mode === 'current') {
+        ++this.#revision
+        await this.#loading
+        await this.refresh()
+      }
+      throw error
+    } finally { this.#publish({ busy: false }) }
   }
-  edit(seq, text) { return this.#change('message-edit', { seq, text }) }
+  edit(seq, text, mode = 'current') { return this.#change('message-edit', { seq, text, mode }) }
   regenerate(seq) { return this.#change('message-regenerate', { seq }) }
+  dispose() { ++this.#revision; this.#listeners.clear() }
 }

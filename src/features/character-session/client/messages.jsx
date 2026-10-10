@@ -4,6 +4,8 @@ import { remapChildProps } from '../../../client/infrastructure/slot-mirror.js'
 import { GreetingMessage } from './greeting.jsx'
 import { MessageRevisionControls, UserRevisionToolbar } from '../../message-revisions/client/controls.jsx'
 import { originalImage } from '../../media/shared/image.js'
+import { editedNode } from '../../message-revisions/client/message.js'
+import { IconButton } from '../../../client/components/icon-button.jsx'
 
 function Avatar({ name, image }) {
   const dialog = useRef(null)
@@ -16,13 +18,13 @@ function Avatar({ name, image }) {
   const portrait = image && !failed
   const close = () => { dialog.current?.close(); setOpened(false); trigger.current?.focus() }
   return <>
-    <button ref={trigger} type="button" className="mayori-message-avatar" aria-label={`Открыть аватар: ${name}`}
+    <IconButton ref={trigger} className="mayori-message-avatar" label={`Открыть аватар: ${name}`}
       aria-haspopup="dialog" onClick={() => { setOpened(true) }} onKeyDown={event => {
         if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
       }}>
       {portrait ? <img src={image} alt="" loading="lazy" decoding="async" onError={() => { setFailed(true) }} />
         : <span aria-hidden="true">{Array.from(name.trim())[0]?.toLocaleUpperCase() || '?'}</span>}
-    </button>
+    </IconButton>
     {opened && createPortal(<dialog ref={dialog} className="mayori-avatar-dialog" aria-labelledby={titleId}
       onClose={() => { setOpened(false); trigger.current?.focus() }}
       onCancel={event => { event.preventDefault(); close() }} onKeyDown={event => { event.stopPropagation() }} onClick={event => {
@@ -32,7 +34,7 @@ function Avatar({ name, image }) {
       }}>
       <div className="mayori-avatar-dialog-header">
         <h2 id={titleId}>{name}</h2>
-        <button type="button" autoFocus onClick={close} aria-label="Закрыть аватар">×</button>
+        <IconButton portal={false} autoFocus onClick={close} label="Закрыть аватар">×</IconButton>
       </div>
       <div className="mayori-avatar-dialog-media">
         {portrait ? <img src={originalImage(image)} alt={`Аватар: ${name}`} decoding="async" onError={() => { setFailed(true) }} />
@@ -86,6 +88,12 @@ export function CharacterMessage({ stock, stockChildren, childPrefix, chatFor, r
   const chat = chatFor(props.sessionId)
   const snapshot = useSyncExternalStore(chat.subscribe, chat.getSnapshot, chat.getSnapshot)
   const mapped = remapChildProps(props, stockChildren, childPrefix)
+  const revisions = revisionFor?.(props.sessionId)
+  const revisionSnapshot = useSyncExternalStore(revisions?.subscribe ?? (() => () => {}),
+    revisions?.getSnapshot ?? (() => null), revisions?.getSnapshot ?? (() => null))
+  const activity = props.useSession?.(state => state.running || (state.pendingSubmissions?.length ?? 0) > 0)
+  useEffect(() => { void revisions?.refresh?.() }, [revisions, activity])
+  mapped.node = editedNode(props.node, revisionSnapshot?.edits)
   const assistant = props.node.kind === 'assistant-step'
   const Stock = stock
   const content = assistant ? <GreetingMessage stock={Stock} chatFor={chatFor} {...mapped} /> : <Stock {...mapped} />

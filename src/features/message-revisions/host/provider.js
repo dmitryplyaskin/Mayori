@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { buildForkSeed } from '@deepseek-ai/dsh-session/fork'
+import { Session } from '@deepseek-ai/dsh-session'
 import { MessageRevisionService } from './service.js'
-import { authoredReply, editedContent, humanMessage, regenerationInput, textContent, MANUAL_PROVIDER } from '../domain/revisions.js'
+import { authoredReply, authoredInput, editedContent, humanMessage, regenerationInput, textContent, MANUAL_PROVIDER } from '../domain/revisions.js'
+import { readMessageEdits, revisedMessage, revisionMessage, revisionSurface } from '../domain/edits.js'
 import { presetSelectionMessage, readPresetSelection } from '../../presets/shared/preset.js'
 
-/** Use native forks and logged authored settlements; the source session is never rewritten. */
+/** Logged corrections and optional native forks preserve original events and never generate on edit. */
 export class SessionMessageRevisionProvider extends MessageRevisionService {
   constructor(ctx, characterSessions) { super(ctx); this.characters = characterSessions; this.changing = new Set() }
 
@@ -50,14 +52,20 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
     const { events } = await this.ctx.sessionQuery.readSession(agent.id)
     const event = events[seq]
     if (!event || !(event.type === 'assistant/message' || humanMessage(event))) throw new Error('Реплика не найдена в журнале чата.')
-    const message = agent.session.deriveEventMessage(event)
+    const edits = readMessageEdits(events)
+    const message = edits[seq] ? revisedMessage(event, edits) : agent.session.deriveEventMessage(event)
     if (!message) throw new Error('Реплика не содержит сообщения.')
     if (message.content.some(block => block.type === 'tool-call')) throw new Error('Вызовы инструментов нельзя редактировать как реплику.')
     const greeting = state.greeting?.messageId === message.id
-    const text = greeting ? state.greeting.text : textContent(message.content)
+    const text = edits[seq]?.text ?? (greeting ? state.greeting.text : textContent(message.content))
     if (!text.trim()) throw new Error('У этой реплики нет текста для редактирования.')
     return { events, event, message, text, greeting, role: message.role,
-      manual: message.source?.provider === MANUAL_PROVIDER }
+      manual: Boolean(edits[seq]) || message.source?.provider === MANUAL_PROVIDER }
+  }
+
+  async list(sessionId) {
+    const agent = await this._resolveAgent(sessionId)
+    return readMessageEdits(agent.session.snapshotEvents())
   }
 
   async inspect(sessionId, seq) {
@@ -81,6 +89,13 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
     try {
       // Native fork uses deployment defaults; repeat with the source chat's selected route.
       const { events } = await this.ctx.sessionQuery.readSession(agent.id)
+      for (const edit of Object.values(readMessageEdits(events)).filter(edit => edit.targetSeq <= atSeq && edit.eventSeq > atSeq)) {
+        const event = events[edit.targetSeq]
+        const message = event.type === 'user/message' ? event.data : event.data.message
+        const target = { event, message, role: message.role }
+        child.session.append('user/message', revisionMessage(target, edit.content, randomUUID()),
+          revisionSurface(child.session, target, readMessageEdits(child.session.snapshotEvents())))
+      }
       const selection = this._selection(events, agent)
       await this.ctx.sessionController.selectModel({ sessionId: child.id,
         provider: selection.provider, model: selection.model,
@@ -109,14 +124,28 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
     const { events } = await this.ctx.sessionQuery.readSession(agent.id)
     // An opening has no player input to preserve. Start before its turn so a
     // repeated manual opening remains the first turn, with no empty predecessor.
-    const opening = !events.slice(0, target.event.seq).some(humanMessage)
+    const opening = target.role === 'assistant' && !events.slice(0, target.event.seq).some(humanMessage)
     const inheritedEventCount = opening ? 0 : target.event.seq
     const seed = opening
       ? [{ type: 'session/end-seed', seq: 0, time: Date.now(), data: { inherited: true } }]
       : buildForkSeed(events, target.event.seq - 1)
     // Seed the completed authored turn before constructing Agent. Its loop must
     // initialize its next turn from the same durable history as cold replay.
-    seed.push(...authoredReply(seed, randomUUID(), content, Date.now()))
+    // Carry current corrections to earlier inherited dialogue into the new branch.
+    const inheritedEdits = Object.values(readMessageEdits(events)).filter(edit => edit.targetSeq < inheritedEventCount
+      && edit.eventSeq >= inheritedEventCount)
+    if (inheritedEdits.length) {
+      const projection = Session.create('mayori-edit-seed', seed, undefined, undefined, this.ctx.sessions.messageProjections)
+      for (const edit of inheritedEdits) {
+        const event = events[edit.targetSeq]
+        const message = event.type === 'user/message' ? event.data : event.data.message
+        const inheritedTarget = { event, message, role: message.role }
+        projection.append('user/message', revisionMessage(inheritedTarget, edit.content, randomUUID()),
+          revisionSurface(projection, inheritedTarget, readMessageEdits(projection.snapshotEvents())))
+      }
+      seed.splice(0, seed.length, ...projection.snapshotEvents())
+    }
+    seed.push(...(target.role === 'user' ? authoredInput : authoredReply)(seed, randomUUID(), content, Date.now()))
     if (opening) {
       // This branch has no inherited prefix. Carry the chat's exact instructions,
       // including null, so restoration cannot substitute the catalog default.
@@ -150,7 +179,8 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
     return sessionId
   }
 
-  async edit(sessionId, seq, text) {
+  async edit(sessionId, seq, text, mode = 'current') {
+    if (!['current', 'branch'].includes(mode)) throw new TypeError('Выберите сохранение в чате или создание ветки.')
     const agent = await this._resolveAgent(sessionId)
     return this._maintain(agent, async signal => {
       this._idle(agent)
@@ -158,17 +188,13 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
       signal.throwIfAborted()
       const content = editedContent(target.message.content, text)
       if (text === target.text) return { sessionId, changed: false }
-      if (target.role === 'assistant') {
+      if (mode === 'branch') {
         return { sessionId: await this._authoredFork(agent, target, content, signal), changed: true }
       }
-      const child = await this._fork(agent, seq - 1, signal)
-      try {
-        child.followup({ ...target.message, id: randomUUID(), content, source: { kind: 'user' } })
-        await this.ctx.sessions.flush(child.session)
-      } catch (error) {
-        throw new Error(`Ветка ${child.id} сохранена. Откройте её в истории чатов, чтобы продолжить.`, { cause: error })
-      }
-      return { sessionId: child.id, changed: true }
+      const edits = readMessageEdits(agent.session.snapshotEvents())
+      agent.session.append('user/message', revisionMessage(target, content, randomUUID()), revisionSurface(agent.session, target, edits))
+      await this.ctx.sessions.flush(agent.session)
+      return { sessionId: agent.id, changed: true, edits: readMessageEdits(agent.session.snapshotEvents()) }
     })
   }
 
@@ -181,7 +207,7 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
       const input = regenerationInput(target.events, seq)
       const child = await this._fork(agent, input.seq - 1, signal)
       try {
-        child.followup({ ...input.data, id: randomUUID(), source: { kind: 'user' } })
+        child.followup({ ...revisedMessage(input, readMessageEdits(target.events)), id: randomUUID(), source: { kind: 'user' } })
         await this.ctx.sessions.flush(child.session)
       } catch (error) {
         throw new Error(`Ветка ${child.id} сохранена. Откройте её в истории чатов, чтобы продолжить.`, { cause: error })

@@ -30,6 +30,7 @@ import { presetCommand } from '../features/presets/client/command.js'
 import { personaCommand } from '../features/personas/client/command.js'
 import { newChatCommand } from '../features/character-session/client/command.js'
 import { registerComposerPresentation } from './shell/composer.js'
+import { RevisionContextMessage } from '../features/message-revisions/client/message.js'
 
 export { DiceToolCard } from '../features/dice/client/card.jsx'
 export { CheckToolCard } from '../features/rules/client/card.jsx'
@@ -202,7 +203,7 @@ export function apply(ctx) {
     const installed = new Set()
     const disposers = []
     const register = () => {
-      for (const [key, component] of [['assistant-step', CharacterMessage], ['user', CharacterMessage], ['steering', CharacterMessage], ['turn-tail', GreetingTurnTail]]) {
+      for (const [key, component] of [['assistant-step', CharacterMessage], ['user', CharacterMessage], ['steering', CharacterMessage], ['turn-tail', GreetingTurnTail], ['context', RevisionContextMessage]]) {
         if (installed.has(key)) continue
         const stock = ctx.slots.entries('conversation.chat.node').find(entry => entry.options.key === key)
         if (!stock) continue

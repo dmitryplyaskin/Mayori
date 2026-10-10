@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { IconButton } from '../../../client/components/icon-button.jsx'
+import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconCloseOutlineRegular, IconPersonalizationOutlineMedium, IconSettingsOutlineMedium, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { MayoriSettings } from '../../plugins/client/panel.jsx'
 
@@ -8,11 +10,11 @@ const tabs = [['general', 'Основные', IconSettingsOutlineMedium], ['plug
 export function MayoriSettingsLauncher({ wide, preferences }) {
   const [open, setOpen] = useState(false)
   return <>
-    <button type="button" className="mayori-navigation-row mayori-settings-trigger" aria-label="Настройки Mayori"
-      title={wide ? undefined : 'Настройки Mayori'} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
+    <Tooltip label="Настройки Mayori" side="right" disabled={wide} portal><button type="button" className="mayori-navigation-row mayori-settings-trigger" aria-label="Настройки Mayori"
+      aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
       <span className="mayori-navigation-glyph" aria-hidden="true"><IconPersonalizationOutlineMedium size={wide ? 16 : 18} /></span>
       {wide && <span className="mayori-navigation-label">Настройки Mayori</span>}
-    </button>
+    </button></Tooltip>
     {open && <MayoriSettingsModal preferences={preferences} onClose={() => setOpen(false)} />}
   </>
 }
@@ -52,7 +54,7 @@ function MayoriSettingsModal({ preferences, onClose }) {
     </div>
     <div className="mayori-settings-content">
       <div className="mayori-settings-header">
-        <button type="button" aria-label="Закрыть настройки Mayori" onClick={onClose}><IconCloseOutlineRegular size={14} /></button>
+        <IconButton label="Закрыть настройки Mayori" onClick={onClose}><IconCloseOutlineRegular size={14} /></IconButton>
       </div>
       <div className="mayori-settings-options">
         <div role="tabpanel" id={`${id}-general-panel`} aria-labelledby={`${id}-general-tab`} hidden={active !== 'general'} tabIndex={0} />

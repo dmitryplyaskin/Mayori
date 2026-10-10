@@ -37,6 +37,18 @@ export function authoredReply(events, messageId, content, time) {
   return additions.map((event, index) => ({ ...event, seq: events.length + index, time }))
 }
 
+/** A saved player edit closes its authored turn without scheduling any model work. */
+export function authoredInput(events, messageId, content, time) {
+  const turn = events.reduce((last, event) => event.type === 'turn/start' ? Math.max(last, event.data.turn) : last, 0) + 1
+  return [
+    { type: 'turn/start', data: { turn } },
+    { type: 'step/start', data: { turn, step: 1 } },
+    { type: 'user/message', surfaceOp: 'append', data: { id: messageId, role: 'user', source: { kind: 'user' }, content } },
+    { type: 'step/end', data: { turn, step: 1 } },
+    { type: 'turn/end', data: { turn, reason: { kind: 'completed' } } },
+  ].map((event, index) => ({ ...event, seq: events.length + index, time }))
+}
+
 /** Native parent links own branch navigation; no second version store is needed. */
 export function branchRows(snapshot, sessionId) {
   const rows = snapshot.byId

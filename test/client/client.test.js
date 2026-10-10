@@ -20,6 +20,7 @@ async function loadBuiltClient(runtime = {}) {
     const exports = handoff.factory((id) => {
       required.push(id)
       if (id === 'react') return runtime.react ?? {
+        forwardRef: React.forwardRef,
         useId() { return 'avatar-title' },
         useEffect() {}, useMemo(factory) { return factory() }, useRef(value) { return { current: value } },
         useState(value) { return [typeof value === 'function' ? value() : value, () => {}] },
@@ -28,6 +29,7 @@ async function loadBuiltClient(runtime = {}) {
       if (id === 'react/jsx-runtime') return runtime.jsx ?? { Fragment: Symbol('Fragment'), jsx() {}, jsxs() {} }
       if (id === 'react-dom') return { createPortal(value) { return value } }
       if (id === '@deepseek-ai/dsh-client-ui-primitives') return runtime.primitives ?? {
+        Tooltip({ children }) { return children },
         Menu({ anchor }) { return anchor },
         IconChevronDownOutlineRegular() { return null },
       }
@@ -426,7 +428,7 @@ test('sidebar omits New Session while preserving home, panels, toggle, settings 
     assert.equal(toggled, 1)
     assert.equal(headerButtons[1].props['aria-keyshortcuts'], 'Control+b')
     const panel = element.props.children[1].props.children[0]
-    panel.type(panel.props).props.onClick()
+    panel.type(panel.props).props.children.props.onClick()
     assert.deepEqual(selected, ['mayori-home', 'mayori-home'])
     assert.ok(rendered.some(row => row.name === 'mayori.navigation.sidebar.sidebar.brand.name'))
     assert.ok(rendered.some(row => row.name === 'mayori.navigation.sidebar.sidebar.settings' && row.owner.wide))
@@ -440,7 +442,7 @@ test('sidebar omits New Session while preserving home, panels, toggle, settings 
     }
     const leadingElement = leading.component({ ...componentProps, ...leading.options.inject() })
     assert.doesNotMatch(renderToStaticMarkup(leadingElement), /New Session|session\.new/)
-    assert.equal(leadingElement.props['aria-label'], 'toggle.open')
+    assert.equal(leadingElement.props.label, 'toggle.open')
     leadingElement.props.onClick()
     assert.equal(toggled, 2)
     assert.equal(stock.inject().startSession, startSession, 'Original injections remain untouched')

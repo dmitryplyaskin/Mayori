@@ -7,6 +7,7 @@ import { ByteCache, WorkQueue } from '../../../shared/resources.js'
 import { PreviewCache } from './cache.js'
 import { randomUUID } from 'node:crypto'
 import { historyConfig } from './config.js'
+import { readMessageEdits, revisedMessage } from '../../message-revisions/domain/edits.js'
 
 export class HistoryDetailsService extends Service {
   constructor(ctx) { super(ctx, 'mayoriHistoryDetails') }
@@ -31,12 +32,13 @@ export function previewText(parts) {
 
 export function messagePreview(events, projections = []) {
   const folded = foldSurface(events, projections)
+  const edits = readMessageEdits(events)
   // Conversation history survives model-context compaction. Walk dialogue
   // settlements in log order, using the folded projections for revised content.
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]
     if (!['user/message', 'assistant/message'].includes(event.type)) continue
-    const message = deriveEventMessage(event, folded.projectedMessages)
+    const message = edits[event.seq] ? revisedMessage(event, edits) : deriveEventMessage(event, folded.projectedMessages)
     if (!message || !['user', 'assistant'].includes(message.role)) continue
     const source = message.source
     if (message.role === 'user' && !['user', 'steering', 'mayori-greeting'].includes(source?.kind)) continue

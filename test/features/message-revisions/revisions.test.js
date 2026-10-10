@@ -7,6 +7,8 @@ import { SessionMessageRevisionProvider } from '../../../src/features/message-re
 import { editedContent, authoredReply, branchRows, MANUAL_PROVIDER } from '../../../src/features/message-revisions/domain/revisions.js'
 import { reconstructTrajectoryContext } from '../../../src/features/trajectory/host/context.js'
 import { presetSelectionMessage, readPresetSelection } from '../../../src/features/presets/shared/preset.js'
+import { readMessageEdits, revisedMessage } from '../../../src/features/message-revisions/domain/edits.js'
+import { messagePreview } from '../../../src/features/history/host/details.js'
 
 function harness() {
   const source = Session.create('source', greetingSeed({ messageId: 'greeting', text: 'Original greeting' }))
@@ -66,9 +68,69 @@ function harness() {
   return { source, original, input, reply, agents, forks, models, flushes, creations, disposed, attached, ctx, characters, provider }
 }
 
+test('saving in the current chat retains later dialogue, original events and historical request input without generation', async () => {
+  const h = harness()
+  const before = h.source.snapshotEvents()
+  const historical = reconstructTrajectoryContext(before, h.reply.seq)
+  for (const [seq, text] of [[h.input.seq, 'I wait by the door.'], [h.reply.seq, 'The door stays shut.']]) {
+    const result = await h.provider.edit('source', seq, text)
+    assert.equal(result.sessionId, 'source')
+    assert.equal(result.changed, true)
+    assert.equal((await h.provider.inspect('source', seq)).text, text)
+  }
+  assert.deepEqual(h.source.snapshotEvents().slice(0, before.length), before)
+  assert.deepEqual(h.forks, [])
+  assert.deepEqual(h.creations, [])
+  assert.deepEqual(h.original.followups, [])
+  assert.deepEqual(reconstructTrajectoryContext(h.source.snapshotEvents(), h.reply.seq), historical)
+  assert.equal(h.source.snapshotEvents().filter(event => event.type === 'turn/start').length, 2)
+  assert.equal(messagePreview(h.source.snapshotEvents()), 'The door stays shut.')
+  const reopened = Session.create('source', JSON.parse(JSON.stringify(h.source.snapshotEvents())), h.source.header)
+  assert.deepEqual(readMessageEdits(reopened.snapshotEvents()), await h.provider.list('source'))
+  assert.deepEqual(reopened.deriveMessages(), h.source.deriveMessages())
+  assert.equal(revisedMessage(h.reply, readMessageEdits(reopened.snapshotEvents())).content[0].text, 'The door stays shut.')
+})
+
+test('repeated current edits replace their latest active correction and a later branch inherits prior edits', async () => {
+  const h = harness()
+  await h.provider.edit('source', h.input.seq, 'Corrected player input.')
+  await h.provider.edit('source', h.input.seq, 'Final player input.')
+  const edits = await h.provider.list('source')
+  assert.equal(h.source.surface.nodes.filter(seq => h.source.snapshotEvents()[seq].data.source?.kind === 'mayori-message-edit').length, 1)
+  assert.equal(edits[h.input.seq].text, 'Final player input.')
+  const result = await h.provider.edit('source', h.reply.seq, 'A new branch reply.', 'branch')
+  const child = h.agents.get(result.sessionId)
+  assert.equal(readMessageEdits(child.session.snapshotEvents())[h.input.seq].text, 'Final player input.')
+  assert.match(JSON.stringify(child.session.deriveMessages()), /Final player input/)
+  assert.doesNotMatch(JSON.stringify(child.session.deriveMessages()), /Open the door/)
+  assert.equal(child.followups.length, 0)
+})
+
+test('editing compacted dialogue appends a replayable correction without altering the summary or invoking a model', async () => {
+  const h = harness()
+  h.source.append('user/message', { id: 'summary', role: 'user', source: { kind: 'compact-checkpoint' },
+    content: [{ type: 'text', text: 'Earlier dialogue was summarized.' }] },
+  { surfaceOp: { op: 'replace', startSeq: h.input.seq, endSeq: h.reply.seq }, sourceEventSeqs: [h.input.seq, h.reply.seq] })
+  await h.provider.edit('source', h.reply.seq, 'Corrected compacted reply.')
+  const correction = h.source.snapshotEvents().at(-1)
+  assert.equal(correction.surfaceOp, 'append')
+  assert.match(JSON.stringify(h.source.deriveMessages()), /Earlier dialogue was summarized/)
+  assert.match(JSON.stringify(h.source.deriveMessages()), /Corrected compacted reply/)
+  assert.equal((await h.provider.inspect('source', h.reply.seq)).text, 'Corrected compacted reply.')
+  assert.equal(h.original.followups.length, 0)
+})
+
+test('edit modes are validated and explicit regeneration uses the corrected player input', async () => {
+  const h = harness()
+  await assert.rejects(h.provider.edit('source', h.reply.seq, 'Changed', 'unexpected'), /сохранение/)
+  await h.provider.edit('source', h.input.seq, 'Corrected input for regeneration.')
+  const result = await h.provider.regenerate('source', h.reply.seq)
+  assert.equal(h.agents.get(result.sessionId).followups[0].content[0].text, 'Corrected input for regeneration.')
+})
+
 test('manual assistant editing preserves the source and produces a replayable authored branch without a model call', async () => {
   const h = harness(), before = JSON.stringify(h.source.snapshotEvents())
-  const result = await h.provider.edit('source', h.reply.seq, '  Дверь остаётся закрытой.\nЯ жду.  ')
+  const result = await h.provider.edit('source', h.reply.seq, '  Дверь остаётся закрытой.\nЯ жду.  ', 'branch')
   const child = h.agents.get(result.sessionId)
   assert.equal(JSON.stringify(h.source.snapshotEvents()), before)
   assert.deepEqual(h.forks, [])
@@ -92,16 +154,18 @@ test('manual assistant editing preserves the source and produces a replayable au
   assert.equal(h.flushes.at(-1), child.id)
 })
 
-test('editing a human reply forks before that input and sends the new literal text once', async () => {
+test('editing a human reply into a branch saves the new literal text without model work', async () => {
   const h = harness(), before = h.source.snapshotEvents()
-  const result = await h.provider.edit('source', h.input.seq, 'I leave the door alone.')
+  const result = await h.provider.edit('source', h.input.seq, 'I leave the door alone.', 'branch')
   const child = h.agents.get(result.sessionId)
   assert.deepEqual(h.source.snapshotEvents(), before)
-  assert.equal(h.forks[0].atSeq, h.input.seq - 1)
-  assert.equal(child.followups.length, 1)
-  assert.deepEqual(child.followups[0].content, [{ type: 'text', text: 'I leave the door alone.' }])
-  assert.notEqual(child.followups[0].id, h.input.data.id)
-  assert.deepEqual(child.followups[0].source, { kind: 'user' })
+  assert.equal(h.creations[0].inheritedEventCount, h.input.seq)
+  assert.equal(child.followups.length, 0)
+  const input = child.session.snapshotEvents().findLast(event => event.type === 'user/message')
+  assert.deepEqual(input.data.content, [{ type: 'text', text: 'I leave the door alone.' }])
+  assert.notEqual(input.data.id, h.input.data.id)
+  assert.deepEqual(input.data.source, { kind: 'user' })
+  assert.equal(child.session.snapshotEvents().at(-2).type, 'turn/end')
   const history = JSON.stringify(child.session.deriveMessages())
   assert.ok(!history.includes('Open the door.') && !history.includes('The door opens.'))
 })
@@ -134,14 +198,14 @@ test('author greetings use the selected text; regeneration requires an actual pl
   assert.equal((await h.provider.inspect('source', 3)).text, 'Chosen opening')
   assert.equal((await h.provider.inspect('source', 3)).canRegenerate, false)
   await assert.rejects(h.provider.regenerate('source', 3), /приветствие/)
-  const result = await h.provider.edit('source', 3, 'My manually changed opening.')
+  const result = await h.provider.edit('source', 3, 'My manually changed opening.', 'branch')
   assert.deepEqual(h.agents.get(result.sessionId).session.deriveMessages().at(-1).content,
     [{ type: 'text', text: 'My manually changed opening.' }])
   const child = h.agents.get(result.sessionId)
   const opening = child.session.snapshotEvents().find(event => event.type === 'assistant/message')
   assert.equal(opening.data.turn, 1)
   assert.equal((await h.provider.inspect(child.id, opening.seq)).canRegenerate, false)
-  const reedited = await h.provider.edit(child.id, opening.seq, 'My second opening.')
+  const reedited = await h.provider.edit(child.id, opening.seq, 'My second opening.', 'branch')
   assert.equal(h.agents.get(reedited.sessionId).session.snapshotEvents().find(event => event.type === 'assistant/message').data.turn, 1)
 })
 
@@ -150,14 +214,14 @@ test('editing and re-editing an opening preserve its logged preset, including ex
     const h = harness()
     h.source.append('user/message', presetSelectionMessage(preset, 'preset-selection'), { surfaceOp: 'append' })
     const before = h.source.snapshotEvents()
-    const result = await h.provider.edit('source', 3, 'My revised opening.')
+    const result = await h.provider.edit('source', 3, 'My revised opening.', 'branch')
     const child = h.agents.get(result.sessionId)
     assert.deepEqual(readPresetSelection(child.session.snapshotEvents()), preset)
     assert.deepEqual(h.source.snapshotEvents(), before)
     const reopened = Session.create(child.id, child.session.snapshotEvents(), child.session.header, child.session.inheritedEventCount)
     assert.deepEqual(readPresetSelection(reopened.snapshotEvents()), preset)
     const opening = child.session.snapshotEvents().find(event => event.type === 'assistant/message')
-    const second = await h.provider.edit(child.id, opening.seq, 'My second revision.')
+    const second = await h.provider.edit(child.id, opening.seq, 'My second revision.', 'branch')
     assert.deepEqual(readPresetSelection(h.agents.get(second.sessionId).session.snapshotEvents()), preset)
     assert.equal(child.session.snapshotEvents().find(event => event.type === 'turn/start').data.turn, 1)
   }
@@ -192,7 +256,7 @@ test('a cold chat is resumed through the native Controller before reading or edi
 test('the logged pending model selection overrides old runtime options and retains reasoning effort', async () => {
   const h = harness()
   h.source.append('model/selection', { provider: 'new-route', model: 'new-model', reasoningEffort: 'high' })
-  await h.provider.edit('source', h.reply.seq, 'Changed.')
+  await h.provider.edit('source', h.reply.seq, 'Changed.', 'branch')
   assert.deepEqual(h.creations[0].agentOptions, { provider: 'new-route', model: 'new-model', reasoningEffort: 'high' })
   assert.deepEqual(h.creations[0].seed.at(-1).data, h.creations[0].agentOptions)
 })
@@ -222,7 +286,7 @@ test('model selection failure reports the saved child for recovery and preserves
 test('an authored branch releases its temporary owner even when persistence fails', async () => {
   const h = harness(), before = h.source.snapshotEvents()
   h.ctx.sessions.flush = async session => { if (session.id !== 'source') throw new Error('Disk unavailable') }
-  await assert.rejects(h.provider.edit('source', h.reply.seq, 'Saved in the new branch.'), /Ветка session-.* создана/)
+  await assert.rejects(h.provider.edit('source', h.reply.seq, 'Saved in the new branch.', 'branch'), /Ветка session-.* создана/)
   assert.deepEqual(h.disposed, [h.creations[0].sessionId])
   assert.deepEqual(h.source.snapshotEvents(), before)
   assert.equal(h.provider.changing.size, 0)

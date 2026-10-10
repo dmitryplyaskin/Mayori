@@ -3,6 +3,7 @@ import { filterPresets, presetChanged } from './presentation.js'
 import { Select } from '../../../client/components/select.jsx'
 import { PresetStructureEditor } from './structure.jsx'
 import { downloadPreset, readPresetFile } from './files.js'
+import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 
 const blank = () => ({ name: '', instructions: '' })
 
@@ -166,7 +167,7 @@ export function PresetPanel({ presets, sessions, presetFor }) {
             <div><h2>{draft.id ? saved.name : 'Новый пресет'}</h2>{(dirty || draft.id) && <span className="mayori-preset-save-state">{dirty ? 'Есть несохранённые изменения' : 'Сохранён в библиотеке'}</span>}</div>
             <details ref={menuRef} className="mayori-preset-menu" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false }} onKeyDown={event => {
               if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary').focus(); event.stopPropagation() }
-            }}><summary aria-label="Действия с пресетом" title="Действия с пресетом"><Glyph kind="more" /></summary><div>
+            }}><Tooltip label="Действия с пресетом" side="top" portal><summary aria-label="Действия с пресетом"><Glyph kind="more" /></summary></Tooltip><div>
               {draft.id && <button type="button" disabled={busy} onClick={() => choose({ ...draft, id: undefined, name: `${draft.name} — копия`.slice(0, 120) })}>Дублировать пресет</button>}
               <button type="button" disabled={disabled} onClick={() => {
                 menuRef.current.open = false

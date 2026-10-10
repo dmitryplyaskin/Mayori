@@ -1,6 +1,7 @@
 /** Coordinate character selection, session events and scoped prompt contributions. */
 import { mkdir } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
+import { readMessageEdits } from '../../message-revisions/domain/edits.js'
 import { resolve } from 'node:path'
 import { joinContextSections } from '@deepseek-ai/dsh-system-prompt'
 import { DEFAULT_PERSONA, renderTemplate } from '../../../shared/templates.js'
@@ -204,14 +205,15 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
     const match = message?.id.match(/:swipe:(\d+):/)
     const content = message?.content.map(block => block.type === 'text' ? block.text : '').join('') ?? ''
     const persona = character.persona ?? DEFAULT_PERSONA
+    const edit = Object.values(readMessageEdits(agent.session.snapshotEvents())).find(edit => edit.messageId === character.greeting?.messageId)
     return { character: { id: character.id, name: character.name, image: imageSource(character.image), originalImage: imageSource(character.image, 'original') },
       persona: { ...persona, avatar: imageSource(persona.avatar) ?? '', originalAvatar: imageSource(persona.avatar, 'original') },
       greeting: character.greeting ? { messageId: character.greeting.messageId,
-        eventSeq: opening?.seq ?? null,
+        eventSeq: edit?.eventSeq ?? opening?.seq ?? null,
         index: match ? Number(match[1]) : character.greeting.index,
         count: 1 + character.data.alternate_greetings.length,
-        text: opening?.type === 'user/message' ? JSON.parse(content).mayori_authored_opening : content,
-        canSwipe: this._canSwipe(agent, character) && surfaceOpening !== null } : null }
+        text: edit?.text ?? (opening?.type === 'user/message' ? JSON.parse(content).mayori_authored_opening : content),
+        canSwipe: !edit && this._canSwipe(agent, character) && surfaceOpening !== null } : null }
   }
 
   async state(sessionId) {

@@ -1,6 +1,7 @@
 /** Full-screen Gallery Consumer for the Host-owned Character Library. */
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { IconButton } from '../../../client/components/icon-button.jsx'
 import { COLUMN_OPTIONS, readCatalogPreferences, saveCatalogPreferences } from './catalog-view.js'
 import { paginate } from '../../../client/components/pagination-model.js'
 import { Pagination } from '../../../client/components/pagination.jsx'
@@ -162,9 +163,9 @@ export function CharacterInfoDialog({ card, onClose, onRemove, triggerRef, onPla
             <h2 id="mayori-character-title">{card.name}</h2>
             <p>{text(card.data.creator) ?? 'Автор не указан'}</p>
           </div>
-          <button type="button" className="mayori-icon-action" aria-label="Закрыть информацию" onClick={() => { dialogRef.current?.close() }}>
+          <IconButton portal={false} className="mayori-icon-action" label="Закрыть информацию" onClick={() => { dialogRef.current?.close() }}>
             {icon('close')}
-          </button>
+          </IconButton>
         </header>
         <div className="mayori-character-content">
           <div className="mayori-character-portrait"><CardPortrait card={card} large /></div>

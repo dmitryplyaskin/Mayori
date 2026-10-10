@@ -1,5 +1,7 @@
 /** Mayori-owned replacement for the stock workspace/coding sidebar region. */
 import { remapChildProps } from '../infrastructure/slot-mirror.js'
+import { IconButton } from '../components/icon-button.jsx'
+import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 
 export function MayoriMark({ className }) {
   return (
@@ -36,26 +38,26 @@ export function MayoriSidebar() {
 export function MayoriLeadingControls({ toggleSidebar, useShortcuts, t }) {
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'sidebar.left.toggle'))
   const label = t('toggle.open')
-  return <button type="button" className="mayori-navigation-toggle" aria-label={label} title={label}
+  return <IconButton className="mayori-navigation-toggle" label={label}
     aria-keyshortcuts={shortcut?.aria} onClick={() => toggleSidebar()}>
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
       <rect x="3" y="4" width="18" height="16" rx="3" /><path d="M9 4v16" />
     </svg>
-  </button>
+  </IconButton>
 }
 
 /** Each panel subscribes to selection through the sidebar's public runtime. */
 function NavigationRow({ id, label, wide, usePanelInfo, selectPanel, renderSlot }) {
   const active = usePanelInfo(info => info.activePanelId === id)
   return (
-    <button type="button" className="mayori-navigation-row" aria-label={label}
-      aria-current={active ? 'page' : undefined} title={wide ? undefined : label}
+    <Tooltip label={label} side="right" disabled={wide} portal><button type="button" className="mayori-navigation-row" aria-label={label}
+      aria-current={active ? 'page' : undefined}
       onClick={() => selectPanel(id)}>
       <span className="mayori-navigation-glyph" aria-hidden="true">
         {renderSlot('sidebar.panellist', { size: wide ? 16 : 18, active }, { only: id })}
       </span>
       {wide && <span className="mayori-navigation-label">{label}</span>}
-    </button>
+    </button></Tooltip>
   )
 }
 
@@ -75,13 +77,13 @@ export function MayoriNavigationSidebar(props) {
           <span aria-hidden="true">{renderSlot('sidebar.brand.mark', { size: 24 })}</span>
           <span className="mayori-navigation-name">{renderSlot('sidebar.brand.name', {})}</span>
         </button>}
-        <button type="button" className="mayori-navigation-toggle" aria-label={toggleLabel}
-          title={toggleLabel} aria-keyshortcuts={shortcut?.aria} onClick={() => toggleSidebar()}>
+        <IconButton className="mayori-navigation-toggle" label={toggleLabel}
+          aria-keyshortcuts={shortcut?.aria} onClick={() => toggleSidebar()}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
             <rect x="3" y="4" width="18" height="16" rx="3" /><path d="M9 4v16" />
           </svg>
           {!wide && renderSlot('sidebar.toggle.badge', {})}
-        </button>
+        </IconButton>
       </div>
       {panels.length > 0 && <nav className="mayori-navigation-panels" aria-label={t('panels.label')}>
         {panels.map(({ id, label }) => <NavigationRow key={id} id={id} label={label} wide={wide}

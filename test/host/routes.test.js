@@ -83,7 +83,8 @@ test('HTTP adapter dispatches each existing endpoint to its owning capability wi
     ['session-persona', 'characterSessions', 'setPersona', [input.sessionId, input.personaId], 'characterSessions.setPersona'],
     ['trajectory-context', 'trajectoryContext', 'inspect', [input.sessionId, input.selection], 'trajectoryContext.inspect'],
     ['message-inspect', 'messageRevisions', 'inspect', [input.sessionId, input.seq], 'messageRevisions.inspect'],
-    ['message-edit', 'messageRevisions', 'edit', [input.sessionId, input.seq, input.text], 'messageRevisions.edit'],
+    ['message-revisions', 'messageRevisions', 'list', [input.sessionId], 'messageRevisions.list'],
+    ['message-edit', 'messageRevisions', 'edit', [input.sessionId, input.seq, input.text, input.mode], 'messageRevisions.edit'],
     ['message-regenerate', 'messageRevisions', 'regenerate', [input.sessionId, input.seq], 'messageRevisions.regenerate'],
   ]
   for (const [endpoint, name, method, args, value] of cases) {

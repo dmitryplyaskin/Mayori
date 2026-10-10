@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { Select } from '../../../client/components/select.jsx'
+import { IconButton } from '../../../client/components/icon-button.jsx'
 import { activePresetBlocks, canMovePresetNode, MAX_PRESET_TEXT, presetNodeEntries, presetNodes } from '../shared/tree.js'
 import { presetDropPosition } from './drag.js'
 
@@ -160,10 +161,10 @@ export function PresetStructureEditor({ editor, disabled }) {
       const drop = drag?.drop?.targetId === node.id ? drag.drop.position : ''
       return <li key={node.id}>
         <div data-preset-node={node.id} className={`mayori-preset-tree-row${selectedNodeId === node.id ? ' is-selected' : ''}${drag?.sourceId === node.id ? ' is-dragging' : ''}${drop ? ` drop-${drop}` : ''}`}>
-          <button type="button" className="mayori-preset-drag-handle" disabled={disabled} data-preset-handle={node.id}
-            aria-label={`Переместить ${node.title}`} onPointerDown={event => startDrag(event, node)} onClick={() => openMove(node.id)}><DragHandle /></button>
-          {node.kind === 'group' ? <button type="button" className="mayori-preset-tree-fold" disabled={disabled} aria-label={`${collapsed.includes(node.id) ? 'Раскрыть' : 'Свернуть'} ${node.title}`}
-            aria-expanded={!collapsed.includes(node.id)} aria-controls={`${id}-${node.id}`} onClick={() => editor.toggleGroup(node.id)}>{collapsed.includes(node.id) ? '▸' : '▾'}</button> : <span className="mayori-preset-tree-spacer" />}
+          <IconButton className="mayori-preset-drag-handle" disabled={disabled} data-preset-handle={node.id}
+            label={`Переместить ${node.title}`} onPointerDown={event => startDrag(event, node)} onClick={() => openMove(node.id)}><DragHandle /></IconButton>
+          {node.kind === 'group' ? <IconButton className="mayori-preset-tree-fold" disabled={disabled} label={`${collapsed.includes(node.id) ? 'Раскрыть' : 'Свернуть'} ${node.title}`}
+            aria-expanded={!collapsed.includes(node.id)} aria-controls={`${id}-${node.id}`} onClick={() => editor.toggleGroup(node.id)}>{collapsed.includes(node.id) ? '▸' : '▾'}</IconButton> : <span className="mayori-preset-tree-spacer" />}
           <label className="mayori-preset-node-toggle"><input type="checkbox" disabled={disabled} aria-label={`Включить ${node.title}`} checked={node.enabled} onChange={event => editor.changeNode(node.id, 'enabled', event.target.checked)} /></label>
           <button type="button" className="mayori-preset-tree-pick" disabled={disabled} aria-pressed={selectedNodeId === node.id} onClick={() => editor.selectNode(node.id)}>
             <span className={node.kind === 'group' ? 'mayori-preset-group-title' : ''}>{node.title || 'Без названия'}</span>

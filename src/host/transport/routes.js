@@ -52,7 +52,7 @@ export function createMayoriRoute({ library, personas, presets, sessionPresets, 
         else if (endpoint === 'persona-save') sendJson(res, 200, { ok: true, value: await personas.save(payload) })
         else if (endpoint === 'preset-list') sendJson(res, 200, { ok: true, value: await presets.list() })
         else if (endpoint === 'preset-save') sendJson(res, 200, { ok: true, value: await presets.save(payload) })
-        else if (['preset-remove', 'preset-default', 'session-preset-state', 'session-preset', 'persona-remove', 'persona-default', 'session-state', 'swipe', 'session-persona', 'trajectory-context', 'message-inspect', 'message-edit', 'message-regenerate'].includes(endpoint)) {
+        else if (['preset-remove', 'preset-default', 'session-preset-state', 'session-preset', 'persona-remove', 'persona-default', 'session-state', 'swipe', 'session-persona', 'trajectory-context', 'message-inspect', 'message-revisions', 'message-edit', 'message-regenerate'].includes(endpoint)) {
           if (!payload || typeof payload !== 'object') throw new TypeError('Некорректный запрос.')
           let value
           if (endpoint === 'preset-remove') { await presets.remove(payload.id); value = { removed: true } }
@@ -66,7 +66,8 @@ export function createMayoriRoute({ library, personas, presets, sessionPresets, 
           if (endpoint === 'session-persona') value = await characterSessions.setPersona(payload.sessionId, payload.personaId)
           if (endpoint === 'trajectory-context') value = trajectoryContext.inspect(payload.sessionId, payload.selection)
           if (endpoint === 'message-inspect') value = await messageRevisions.inspect(payload.sessionId, payload.seq)
-          if (endpoint === 'message-edit') value = await messageRevisions.edit(payload.sessionId, payload.seq, payload.text)
+          if (endpoint === 'message-revisions') value = await messageRevisions.list(payload.sessionId)
+          if (endpoint === 'message-edit') value = await messageRevisions.edit(payload.sessionId, payload.seq, payload.text, payload.mode)
           if (endpoint === 'message-regenerate') value = await messageRevisions.regenerate(payload.sessionId, payload.seq)
           sendJson(res, 200, { ok: true, value })
         }

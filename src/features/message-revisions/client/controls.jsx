@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { Select } from '../../../client/components/select.jsx'
 import { branchRows } from '../domain/revisions.js'
+import { IconButton } from '../../../client/components/icon-button.jsx'
 
 function RevisionIcon({ repeat }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
@@ -39,7 +40,7 @@ export function AssistantRevisionActions({ chatFor, revisionFor, sessionId, clos
     canRepeat={turn > 1} />
 }
 
-/** Native dialog keeps an unsaved draft local until the Host creates its durable branch. */
+/** The author chooses where to save; editing never starts model work. */
 export function MessageRevisionControls({ revisions, seq, canRepeat, useSession }) {
   const snapshot = useSyncExternalStore(revisions.subscribe, revisions.getSnapshot, revisions.getSnapshot)
   const activity = useSession(state => state.running || state.awaitingFirstTurn || state.pendingSubmissions.length > 0)
@@ -82,7 +83,7 @@ export function MessageRevisionControls({ revisions, seq, canRepeat, useSession 
     pending.current = true; setError('')
     const revision = epoch.current
     try {
-      if (editor.mode === 'edit') await revisions.edit(seq, text)
+      if (editor.mode === 'edit') await revisions.edit(seq, text, event.nativeEvent?.submitter?.value === 'branch' ? 'branch' : 'current')
       else await revisions.regenerate(seq)
       if (revision === epoch.current) dialog.current?.close()
     } catch (failure) { if (revision === epoch.current) setError(failure.message) }
@@ -90,11 +91,11 @@ export function MessageRevisionControls({ revisions, seq, canRepeat, useSession 
   }
   return <>
     <span className="mayori-message-actions">
-      <button type="button" aria-label="Редактировать" title="Редактировать" aria-haspopup="dialog" disabled={busy}
-        onClick={event => { void open('edit', event.currentTarget) }}><RevisionIcon /></button>
-      {canRepeat && <button type="button" aria-label="Повторить ответ" title="Повторить ответ" aria-haspopup="dialog" disabled={busy}
-        onClick={event => { void open('regenerate', event.currentTarget) }}><RevisionIcon repeat /></button>}
-      <span className="mayori-revision-status" role="status">{loading ? 'Загружаем реплику…' : snapshot.busy ? 'Создаём ветку…' : ''}</span>
+      <IconButton label="Редактировать" aria-haspopup="dialog" disabled={busy}
+        onClick={event => { void open('edit', event.currentTarget) }}><RevisionIcon /></IconButton>
+      {canRepeat && <IconButton label="Повторить ответ" aria-haspopup="dialog" disabled={busy}
+        onClick={event => { void open('regenerate', event.currentTarget) }}><RevisionIcon repeat /></IconButton>}
+      <span className="mayori-revision-status" role="status">{loading ? 'Загружаем реплику…' : snapshot.busy ? 'Сохраняем…' : ''}</span>
     </span>
     {error && !editor && <p role="alert" className="mayori-error">{error}</p>}
     {editor && createPortal(<dialog ref={dialog} className="mayori-message-editor" aria-labelledby={titleId}
@@ -102,7 +103,8 @@ export function MessageRevisionControls({ revisions, seq, canRepeat, useSession 
       onClose={() => { setEditor(null); setError('') }}>
       <form onSubmit={submit}>
         <h2 id={titleId}>{editor.mode === 'edit' ? 'Редактировать сообщение' : 'Повторить ответ'}</h2>
-        <p>Продолжение откроется в новой ветке от этой реплики. Исходный чат сохранится.</p>
+        <p>{editor.mode === 'edit' ? 'Сохраните правку в текущем чате или создайте ветку с исправленной репликой. Модель не будет отвечать автоматически.'
+          : 'Продолжение откроется в новой ветке от этой реплики. Исходный чат сохранится.'}</p>
         {editor.mode === 'edit' ? <>
           <label htmlFor={textId}>{editor.role === 'user' ? 'Реплика игрока' : 'Реплика персонажа'}</label>
           <textarea ref={field} id={textId} autoFocus value={text} disabled={snapshot.busy}
@@ -111,12 +113,13 @@ export function MessageRevisionControls({ revisions, seq, canRepeat, useSession 
             onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); event.currentTarget.form.requestSubmit() } }} />
         </> : <p>Модель заново ответит на реплику игрока. Инструменты выполнятся снова, и результаты игровых бросков могут измениться.</p>}
         {error && <p id={errorId} role="alert" className="mayori-error">{error}</p>}
-        <p role="status">{snapshot.busy ? 'Сохраняем ветку…' : ''}</p>
+        <p role="status">{snapshot.busy ? 'Сохраняем…' : ''}</p>
         <div className="mayori-message-editor-actions">
           <button type="button" disabled={snapshot.busy} onClick={close}>Отмена</button>
-          <button type="submit" autoFocus={editor.mode === 'regenerate'} disabled={busy}>
-            {editor.mode === 'regenerate' ? 'Повторить ответ' : editor.role === 'user' ? 'Сохранить и отправить' : 'Сохранить'}
-          </button>
+          {editor.mode === 'edit' ? <>
+            <button type="submit" value="current" disabled={busy}>Сохранить в чате</button>
+            <button type="submit" value="branch" disabled={busy}>Создать ветку</button>
+          </> : <button type="submit" autoFocus disabled={busy}>Повторить ответ</button>}
         </div>
       </form>
     </dialog>, document.body)}
