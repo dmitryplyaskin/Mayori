@@ -77,4 +77,33 @@ await call('/_mayori-smoke', { action: 'adopt', sessionId: withoutPreset.session
 assert.equal((await rpc('session-preset-state', { sessionId: withoutPreset.sessionId })).preset, null,
   'An explicit no-preset selection must survive opening edits despite a non-null default')
 await rpc('preset-default', { id: initial.defaultId })
+const nested = await rpc('preset-save', { name: 'Nested preset smoke', instructions: 'UNTRUSTED_BROWSER_COMPILATION', nodes: [
+  { id: 'rules', kind: 'group', title: 'Mechanics', enabled: true, children: [
+    { id: 'checks', kind: 'group', title: 'Checks', enabled: true, children: [
+      { id: 'active', kind: 'block', title: 'Active', enabled: true, text: 'NESTED_ACTIVE: {{unknown}}' },
+      { id: 'disabled', kind: 'block', title: 'Disabled', enabled: false, text: 'NESTED_DISABLED_SECRET' },
+    ] },
+    { id: 'off', kind: 'group', title: 'Off group', enabled: false, children: [
+      { id: 'hidden', kind: 'block', title: 'Hidden', enabled: true, text: 'NESTED_PARENT_SECRET' },
+    ] },
+  ] },
+] })
+try {
+  assert.equal(nested.instructions, 'NESTED_ACTIVE: {{unknown}}')
+  await rpc('session-preset', { sessionId, presetId: nested.id })
+  const nestedTurn = await call('/_mayori-smoke', { action: 'turn', sessionId })
+  const content = nestedTurn.requests[0].messages.map(message => JSON.stringify(message.content)).join('\n')
+  assert.ok(content.includes('NESTED_ACTIVE'))
+  for (const secret of ['NESTED_DISABLED_SECRET', 'NESTED_PARENT_SECRET', 'UNTRUSTED_BROWSER_COMPILATION']) assert.ok(!content.includes(secret))
+  const nestedLog = await call('/_mayori-smoke', { action: 'inspect', sessionId })
+  assert.deepEqual(readPresetSelection(nestedLog.events), nested)
+  await rpc('preset-save', { ...nested, nodes: [] })
+  assert.deepEqual((await rpc('session-preset-state', { sessionId })).preset, nested)
+  await rpc('preset-remove', { id: nested.id })
+  const nestedFork = await call('/_mayori-smoke', { action: 'fork', sessionId, atSeq: nestedLog.events.at(-1).seq })
+  assert.deepEqual((await rpc('session-preset-state', { sessionId: nestedFork.sessionId })).preset, nested)
+  await rpc('session-preset', { sessionId, presetId: null })
+} finally {
+  if ((await rpc('preset-list')).presets.some(p => p.id === nested.id)) await rpc('preset-remove', { id: nested.id })
+}
 console.log(JSON.stringify({ ok: true, sessionId, forkId: fork.sessionId }))

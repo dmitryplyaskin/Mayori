@@ -18,13 +18,13 @@ export class FileSystemPresetStore {
       if (error.code !== 'ENOENT') throw error
       return null
     }
-    if (record.format !== 1 || !Array.isArray(record.presets)
+    if (![1, 2].includes(record.format) || !Array.isArray(record.presets)
       || record.presets.some(p => !p || typeof p.id !== 'string' || !(p.id === 'mayori' || /^[a-f0-9-]{36}$/.test(p.id)))
       || new Set(record.presets.map(p => p.id)).size !== record.presets.length
       || (record.defaultId !== null && !record.presets.some(p => p.id === record.defaultId))) {
       throw new Error('Каталог пресетов повреждён. Восстановите его из резервной копии.')
     }
-    for (const preset of record.presets) validatePreset(preset)
+    record.presets = record.presets.map(preset => ({ id: preset.id, ...validatePreset(preset) }))
     return record
   }
   async list() {
@@ -54,6 +54,7 @@ export class FileSystemPresetStore {
       const previous = input.id ? record.presets.find(p => p.id === input.id) : null
       if (input.id && !previous) throw new Error('Пресет больше не найден. Обновите список.')
       const preset = { ...data, id: previous?.id ?? randomUUID() }
+      if (data.nodes) record.format = 2
       if (previous) record.presets[record.presets.indexOf(previous)] = preset
       else record.presets.push(preset)
       return preset

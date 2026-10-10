@@ -1,19 +1,24 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm, readFile } from 'node:fs/promises'
+import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { createScope, scopeOf } from '@deepseek-ai/dsh-scope'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
+import { createSystemMessage } from '@deepseek-ai/dsh-llm'
 import { Session } from '@deepseek-ai/dsh-session'
 import { FileSystemPresetStore } from '../../../src/features/presets/host/store.js'
 import { FileSystemRoleplayPresetProvider } from '../../../src/features/presets/host/provider.js'
 import { LoggedSessionPresetProvider } from '../../../src/features/presets/host/session.js'
-import { presetContext, readPresetSelection } from '../../../src/features/presets/shared/preset.js'
+import { presetContext, presetSelectionMessage, readPresetSelection } from '../../../src/features/presets/shared/preset.js'
 import { greetingSeed } from '../../../src/features/character-session/host/greeting.js'
 
 const initial = { name: 'Mayori', instructions: 'Protect player agency. Default instructions.' }
+const structured = () => ({ name: 'Nested preset', nodes: [{ id: 'group', kind: 'group', title: 'Group title', enabled: true, children: [
+  { id: 'active', kind: 'block', title: 'Active title', enabled: true, text: 'ACTIVE {{cwd}}' },
+  { id: 'disabled', kind: 'block', title: 'Disabled title', enabled: false, text: 'SECRET_DISABLED' },
+] }] })
 
 async function catalog(t) {
   const root = await mkdtemp(join(tmpdir(), 'mayori-presets-'))
@@ -207,4 +212,46 @@ test('failed journal admission rolls back instructions; failed flush retains its
   await assert.rejects(h.provider.select('chat', custom.id), /disk full/)
   assert.deepEqual(readPresetSelection(agent.session.snapshotEvents()), custom)
   assert.deepEqual((await h.provider.state('chat')).preset, custom)
+})
+
+test('format 1 catalogs remain literal and structured saves upgrade the catalog without losing legacy entries', async t => {
+  const { root, store } = await catalog(t)
+  await writeFile(store.path, JSON.stringify({ format: 1, defaultId: 'mayori', presets: [{ id: 'mayori', ...initial }] }))
+  assert.deepEqual(await store.resolve(), { id: 'mayori', ...initial })
+  const saved = await store.save({ ...structured(), instructions: 'CLIENT_TEXT_MUST_NOT_WIN' })
+  assert.equal(saved.instructions, 'ACTIVE {{cwd}}')
+  assert.equal(JSON.parse(await readFile(store.path, 'utf8')).format, 2)
+  assert.deepEqual(await new FileSystemPresetStore(root, initial).resolve(saved.id), saved)
+  assert.deepEqual(await store.resolve('mayori'), { id: 'mayori', ...initial })
+})
+
+test('structured selection logs the full tree but model projection includes only frozen active instructions', async t => {
+  const h = await runtime(t)
+  const agent = await h.create('nested')
+  const preset = await h.presets.save(structured())
+  await h.provider.select('nested', preset.id)
+  const original = agent.session.snapshotEvents()
+  const prompt = renderPrompt(await agent.ctx.systemPrompt.assemble({ scope: scopeOf(agent.ctx) }))
+  assert.ok(prompt.includes('ACTIVE {{cwd}}'))
+  for (const hidden of ['SECRET_DISABLED', 'Disabled title', 'Group title', 'children']) assert.ok(!prompt.includes(hidden))
+  assert.deepEqual(readPresetSelection(original), preset)
+  agent.session.append('system/message', { message: createSystemMessage(presetContext(preset)) }, { surfaceOp: 'append' })
+  agent.session.append('user/message', { id: 'projected', role: 'user', content: [], source: { kind: 'runtime-context', sections: [{ name: 'mayori:roleplay-preset', text: presetContext(preset) }] } }, { surfaceOp: 'append' })
+  assert.deepEqual(readPresetSelection(agent.session.snapshotEvents()), preset, 'A newer projection cannot erase authoring metadata')
+  await h.presets.save({ ...preset, nodes: [] })
+  await h.presets.remove(preset.id)
+  const restored = await h.create('restored-nested', agent.session.snapshotEvents())
+  assert.deepEqual((await h.provider.state('restored-nested')).preset, preset)
+  assert.ok(renderPrompt(await restored.ctx.systemPrompt.assemble({ scope: scopeOf(restored.ctx) })).includes('ACTIVE {{cwd}}'))
+  const fork = await h.create('fork-nested', original)
+  assert.deepEqual((await h.provider.state('fork-nested')).preset, preset)
+})
+
+test('structured replay preserves the recorded compiled text and supports an all-disabled preset', () => {
+  const preset = { id: 'recorded', ...structured(), compilerVersion: 1, instructions: 'FROZEN HISTORICAL TEXT' }
+  const event = { type: 'user/message', data: presetSelectionMessage(preset) }
+  assert.deepEqual(readPresetSelection([event]), preset)
+  assert.ok(presetContext(readPresetSelection([event])).includes('FROZEN HISTORICAL TEXT'))
+  const empty = { id: 'empty', name: 'Empty', nodes: [], compilerVersion: 1, instructions: '' }
+  assert.deepEqual(readPresetSelection([{ type: 'user/message', data: presetSelectionMessage(empty) }]), empty)
 })

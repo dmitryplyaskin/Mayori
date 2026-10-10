@@ -1,0 +1,173 @@
+/** Run only against an isolated profile with dsh-smoke-probe. */
+import assert from 'node:assert/strict'
+import { createRequire } from 'node:module'
+import { mkdir } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
+import { chooseMenu } from './browser-select.js'
+
+const require = createRequire(import.meta.url)
+const { chromium } = require(process.env.MAYORI_PLAYWRIGHT_PATH ?? 'playwright')
+const url = new URL(process.argv[2])
+assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
+const output = resolve(process.argv[3] ?? '.dsh-dev/preset-tree-browser')
+await mkdir(output, { recursive: true })
+async function call(path, payload = {}) {
+  const response = await fetch(url.origin + path, { method: 'POST', headers: { 'content-type': 'application/json', origin: url.origin, 'sec-fetch-site': 'same-origin' }, body: JSON.stringify(payload) })
+  const result = await response.json()
+  assert.ok(response.ok && result.ok, JSON.stringify(result))
+  return result.value
+}
+const rpc = (name, payload) => call(`/mayori/characters/${name}`, payload)
+await call('/_mayori-smoke', { action: 'create' })
+const catalog = await rpc('preset-list')
+const block = (id, text = id, enabled = true) => ({ id, kind: 'block', title: id, text, enabled })
+const group = (id, children, enabled = true) => ({ id, kind: 'group', title: id, children, enabled })
+const preset = await rpc('preset-save', { name: 'Nested UI smoke', nodes: [group('Role', [block('Agency')]), group('Mechanics', [group('Checks', [block('Success'), block('Failure')]), group('Combat', [block('Damage', 'SECRET_DAMAGE')], false)]), block('Style')] })
+await rpc('preset-default', { id: preset.id })
+const browser = await chromium.launch({ headless: true, ...(process.env.MAYORI_CHROMIUM_PATH ? { executablePath: process.env.MAYORI_CHROMIUM_PATH } : {}) })
+let page
+try {
+  page = await browser.newPage({ viewport: { width: 1280, height: 1100 } })
+  const errors = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('dialog', dialog => dialog.accept())
+  await page.goto(url.href)
+  await page.getByRole('button', { name: 'Пресеты', exact: true }).click()
+  await page.getByLabel('Название', { exact: true }).waitFor()
+  const structure = page.locator('.mayori-preset-structure')
+  await structure.scrollIntoViewIfNeeded()
+  const row = id => structure.locator(`[data-preset-node="${id}"]`)
+  const handle = id => structure.locator(`[data-preset-handle="${id}"]`)
+  const parent = id => row(id).evaluate(el => el.parentElement.closest('ul').parentElement.closest('li')?.querySelector(':scope > [data-preset-node]')?.dataset.presetNode ?? null)
+  async function save() {
+    await page.getByRole('button', { name: 'Сохранить пресет', exact: true }).click()
+    await page.getByRole('status').filter({ hasText: 'Пресет сохранён.' }).waitFor()
+    return (await rpc('preset-list')).presets.find(p => p.id === preset.id)
+  }
+  async function drag(source, target, position) {
+    await structure.scrollIntoViewIfNeeded()
+    const from = await handle(source).boundingBox()
+    const to = await (target === null ? structure.locator('[data-preset-root-drop]') : row(target)).boundingBox()
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(from.x + from.width / 2 + 8, from.y + from.height / 2 + 8, { steps: 3 })
+    await page.mouse.move(to.x + to.width * 0.75, to.y + to.height * (position === 'before' ? 0.1 : position === 'after' ? 0.9 : 0.5), { steps: 12 })
+    await page.mouse.up()
+  }
+  await drag('Success', 'Style', 'before')
+  assert.equal(await parent('Success'), null)
+  let saved = await save()
+  assert.deepEqual(saved.nodes.map(n => n.id), ['Role', 'Mechanics', 'Success', 'Style'])
+  await drag('Checks', 'Role', 'inside')
+  saved = await save()
+  assert.equal(saved.nodes[0].children.at(-1).id, 'Checks')
+  assert.equal(saved.nodes[0].children.at(-1).children[0].id, 'Failure')
+  const beforeCycle = saved.nodes
+  await drag('Role', 'Checks', 'inside')
+  saved = await save()
+  assert.deepEqual(saved.nodes, beforeCycle, 'Invalid drops must preserve the tree')
+  await row('Combat').getByRole('button', { name: 'Свернуть Combat', exact: true }).click()
+  await drag('Style', 'Combat', 'inside')
+  assert.equal(await row('Style').isVisible(), true, 'Dropping into a collapsed group expands it')
+  assert.equal(await page.locator('.mayori-preset-node-state').innerText(), 'Выключена группа «Combat».')
+  await page.getByRole('button', { name: 'Посмотреть итог', exact: true }).click()
+  assert.doesNotMatch(await page.locator('.mayori-preset-compiled pre').innerText(), /SECRET_DAMAGE|Style/)
+  await page.getByRole('button', { name: 'Вернуться к редактору', exact: true }).click()
+  await page.getByRole('button', { name: 'Отменить действие', exact: true }).click()
+  assert.equal(await parent('Style'), null)
+  // Escape cancels an in-flight pointer transfer without opening the move dialog.
+  const cancelFrom = await handle('Style').boundingBox()
+  await page.mouse.move(cancelFrom.x + 12, cancelFrom.y + 12)
+  await page.mouse.down()
+  await page.mouse.move(cancelFrom.x + 30, cancelFrom.y + 30)
+  await page.keyboard.press('Escape')
+  await page.mouse.up()
+  assert.equal(await parent('Style'), null)
+  assert.equal(await page.getByRole('dialog').isVisible(), false)
+  // Chromium touch input exercises real pointer capture and touch-action.
+  const touch = await page.context().newCDPSession(page)
+  await touch.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 })
+  const touchFrom = await handle('Style').boundingBox(), touchTo = await row('Role').boundingBox()
+  const point = (x, y) => [{ x, y, id: 1 }]
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: point(touchFrom.x + 12, touchFrom.y + 12) })
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: point(touchFrom.x + 24, touchFrom.y + 24) })
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: point(touchTo.x + touchTo.width * 0.75, touchTo.y + touchTo.height * 0.5) })
+  await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  assert.equal(await parent('Style'), 'Role')
+  await page.getByRole('button', { name: 'Отменить действие', exact: true }).click()
+  await touch.send('Emulation.setTouchEmulationEnabled', { enabled: false })
+  await touch.detach()
+  await structure.scrollIntoViewIfNeeded()
+  await handle('Style').focus()
+  await handle('Style').press('Enter')
+  await page.getByRole('dialog').waitFor()
+  await chooseMenu(page, 'Место назначения', 'Role / Checks')
+  await page.getByRole('button', { name: 'Переместить', exact: true }).focus()
+  await page.keyboard.press('Enter')
+  assert.equal(await parent('Style'), 'Checks')
+  assert.equal(await handle('Style').evaluate(el => el === document.activeElement), true)
+  await row('Checks').getByRole('button', { name: 'Checks', exact: true }).click()
+  await page.getByRole('button', { name: '+ Группа', exact: true }).click()
+  await page.getByLabel('Название группы', { exact: true }).fill('Outcomes')
+  await page.getByRole('button', { name: '+ Блок', exact: true }).click()
+  await page.getByLabel('Название блока', { exact: true }).fill('Critical')
+  await page.getByLabel('Текст инструкции', { exact: true }).fill('CRITICAL_LITERAL {{unknown}}')
+  await page.getByRole('button', { name: 'Главная', exact: true }).click()
+  await page.getByRole('button', { name: 'Пресеты', exact: true }).click()
+  assert.equal(await page.getByLabel('Название блока', { exact: true }).inputValue(), 'Critical')
+  saved = await save()
+  assert.ok(saved.instructions.includes('CRITICAL_LITERAL {{unknown}}'))
+  await page.reload()
+  await page.getByRole('button', { name: 'Пресеты', exact: true }).click()
+  await page.getByLabel('Название', { exact: true }).waitFor()
+  await page.waitForFunction(name => document.querySelector('[name="presetName"]')?.value === name, preset.name)
+  assert.equal(await page.getByLabel('Название', { exact: true }).inputValue(), preset.name)
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' })
+    for (const width of [1280, 720, 320]) {
+      await page.setViewportSize({ width, height: 1100 })
+      await page.locator('.mayori-preset-structure').scrollIntoViewIfNeeded()
+      assert.equal(await page.locator('.mayori-presets-panel').evaluate(el => el.scrollWidth <= el.clientWidth + 1), true)
+      await page.screenshot({ path: join(output, `tree-${colorScheme}-${width}.png`), fullPage: true })
+    }
+  }
+  // A twelve-level tree must also reflow at 320px; indentation is capped visually.
+  let deep = block('Leaf')
+  for (let index = 0; index < 11; index++) deep = group(`Depth${index}`, [deep])
+  await rpc('preset-save', { ...saved, nodes: [deep] })
+  await page.reload()
+  await page.getByRole('button', { name: 'Пресеты', exact: true }).click()
+  await page.getByLabel('Название', { exact: true }).waitFor()
+  await page.waitForFunction(() => document.querySelector('[data-preset-node="Leaf"]'))
+  assert.equal(await page.locator('.mayori-preset-tree-scroll').evaluate(el => el.scrollWidth <= el.clientWidth + 1), true)
+  await row('Leaf').scrollIntoViewIfNeeded()
+  await page.screenshot({ path: join(output, 'tree-deep-320.png'), fullPage: true })
+  // Drag near the lower edge scrolls long lists and can reach the root drop zone.
+  await rpc('preset-save', { ...saved, nodes: [group('Long', Array.from({ length: 18 }, (_, i) => block(`Item${i}`)))] })
+  await page.setViewportSize({ width: 1280, height: 1100 })
+  await page.reload()
+  await page.getByRole('button', { name: 'Пресеты', exact: true }).click()
+  await row('Item0').waitFor()
+  await structure.scrollIntoViewIfNeeded()
+  const scrollFrom = await handle('Item0').boundingBox(), scrollBounds = await page.locator('.mayori-preset-tree-scroll').boundingBox()
+  await page.mouse.move(scrollFrom.x + 12, scrollFrom.y + 12)
+  await page.mouse.down()
+  await page.mouse.move(scrollBounds.x + scrollBounds.width * 0.8, scrollBounds.y + scrollBounds.height - 8, { steps: 8 })
+  await page.waitForFunction(() => {
+    const scroller = document.querySelector('.mayori-preset-tree-scroll')
+    return scroller.scrollTop > 0 && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 3
+  })
+  const rootDrop = await structure.locator('[data-preset-root-drop]').boundingBox()
+  await page.mouse.move(rootDrop.x + rootDrop.width / 2, rootDrop.y + rootDrop.height / 2)
+  await page.mouse.up()
+  assert.equal(await parent('Item0'), null)
+  assert.deepEqual(errors, [])
+  console.log(JSON.stringify({ ok: true, output, presetId: preset.id }))
+} catch (error) {
+  if (page) await page.screenshot({ path: join(output, 'tree-failure.png'), fullPage: true })
+  throw error
+} finally {
+  await browser.close()
+  await rpc('preset-default', { id: catalog.defaultId })
+  await rpc('preset-remove', { id: preset.id })
+}

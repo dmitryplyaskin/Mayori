@@ -34,7 +34,7 @@ Mayori/
 │   │   ├── character-session/    # выбор, snapshots, приветствия и сообщения
 │   │   ├── message-revisions/    # редактирование, повтор ответа и ветки
 │   │   ├── personas/             # каталог и редактор персон игрока
-│   │   ├── presets/              # каталог игровых инструкций и выбор из session log
+│   │   ├── presets/              # дерево инструкций, каталог и выбор из session log
 │   │   ├── history/              # каталог DSH, архив и cold previews
 │   │   ├── storage/              # deployment root и пути native DSH providers
 │   │   ├── trajectory/           # реконструкция и отображение контекста
