@@ -171,6 +171,8 @@ Browser `CharacterLibraryService.refresh()` повторяет чтение ка
 
 ### Character Session
 
+Browser-команда `/new` — action contribution в `ctx.commandUi`. Consumer читает Character Chat для sessionId вызова и запускает существующий `startCharacterSession` с явным `sourceSessionId`, чтобы сохранить кампанию при изменении навигации во время запроса. Host `create()` сохраняет новый snapshot текущей карточки галереи с основным приветствием и default-персоной; preset provider выбирает default для новой сессии. Команда не форкает журнал и не меняет исходную сессию. Повторный вызов на время создания блокируется; ошибки передаются в штатный `conversation.input` исходного чата.
+
 Запуск игры образует отдельный capability seam:
 
 - **Service Definition** — Host `CharacterSessionService.prepareCampaign()`, `create(characterId, workspaceId, greetingIndex)`, `state(sessionId)`, `swipe(sessionId, index)`, `setPersona(sessionId, personaId)` и legacy `select(sessionId, characterId)`;
@@ -226,6 +228,8 @@ Character Session Provider регистрирует scoped waterfall `agent/pre-
 Порядок view tabs определяется Mayori header consumer: после дедупликации `chat` всегда идёт первым, затем остальные entries в исходном порядке. Приоритет wrapper выбирает renderer Trajectory, но не меняет положение чата. Исходный массив регистраций не изменяется; результат memoized для стабильного observable selector.
 
 ### Персона игрока
+
+Browser consumers `/persona` и `/preset` регистрируются обратимо через публичный `ctx.commandUi` из `ui-commands`. Штатный popupSelect владеет поиском, клавиатурой и ошибками; feature consumers читают каталоги и актуальный snapshot чата при каждом открытии и вызывают `CharacterChatService.setPersona()` / `SessionPresetService.select()` для sessionId, захваченного командой. При unload открытые меню закрываются и регистрации снимаются. Нового хранилища или модельного ввода команды нет: сохранение и проекция выбора остаются у существующих Host providers.
 
 - **Service Definition** — Host `PersonaService` (`list`, `save`, `remove`, `setDefault`, `resolve`) и observable browser `PersonaService`;
 - **Provider** — `FileSystemPersonaProvider` с сериализованными атомарными записями `personas.json` в валидируемом `personasPath`, по умолчанию `~/.dsh-mayori/mayori/personas`;

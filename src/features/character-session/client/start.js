@@ -1,7 +1,7 @@
 /** Browser orchestration from a gallery card to a selected chat session. */
 
-function targetWorkspace(sessions, workspaces) {
-  const current = Object.values(sessions.list.getSnapshot().byId).find(item => item.retainedBy?.mainView > 0)?.id
+function targetWorkspace(sessions, workspaces, sourceSessionId) {
+  const current = sourceSessionId ?? Object.values(sessions.list.getSnapshot().byId).find(item => item.retainedBy?.mainView > 0)?.id
   const snapshot = workspaces.list.getSnapshot()
   const currentWorkspace = current === undefined
     ? undefined
@@ -10,8 +10,8 @@ function targetWorkspace(sessions, workspaces) {
 }
 
 /** Create a fresh workspace session, bind the card, name it, and navigate. */
-export async function startCharacterSession({ sessions, workspaces, uiWorkspace, library }, card, greetingIndex = 0) {
-  let workspaceId = targetWorkspace(sessions, workspaces)
+export async function startCharacterSession({ sessions, workspaces, uiWorkspace, library, sourceSessionId }, card, greetingIndex = 0) {
+  let workspaceId = targetWorkspace(sessions, workspaces, sourceSessionId)
   if (workspaceId === undefined) {
     const campaign = await library.prepareCampaign()
     const workspace = await workspaces.create({ path: campaign.path })

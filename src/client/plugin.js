@@ -26,12 +26,15 @@ import { PluginSettingsClient } from '../features/plugins/client/settings.js'
 import { PLUGIN_SETTINGS_STYLE } from '../features/plugins/client/panel.jsx'
 import { MayoriSettingsLauncher, SETTINGS_MODAL_STYLE } from '../features/settings/client/modal.jsx'
 import { SessionProviders } from './infrastructure/session-providers.js'
+import { presetCommand } from '../features/presets/client/command.js'
+import { personaCommand } from '../features/personas/client/command.js'
+import { newChatCommand } from '../features/character-session/client/command.js'
 
 export { DiceToolCard } from '../features/dice/client/card.jsx'
 export { CheckToolCard } from '../features/rules/client/card.jsx'
 export { BRAND_STYLE } from './styles.js'
 
-export const inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout']
+export const inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout', 'commandUi']
 
 /** Register reversible browser contributions through Cordis. */
 export function apply(ctx) {
@@ -51,6 +54,24 @@ export function apply(ctx) {
   ctx.provide('mayoriSessionPresets', { forSession: presetFor })
   const chats = new SessionProviders(id => new RemoteCharacterChatProvider(id))
   const chatFor = sessionId => chats.get(sessionId)
+  const commands = [
+    presetCommand({ presets, presetFor, icon: PresetIcon }),
+    personaCommand({ personas, chatFor, icon: PersonaIcon }),
+    newChatCommand({ chatFor, icon: CharacterGalleryIcon,
+      startCharacter: (card, sourceSessionId) => startCharacterSession({ sessions: ctx.sessions,
+        workspaces: ctx.workspaces, uiWorkspace: ctx.uiWorkspace, library, sourceSessionId }, card),
+      notify: (sessionId, text) => {
+        const scope = ctx.sessions.scope(sessionId)
+        scope?.get('conversation')?.input.for(scope).notify('error', text)
+      },
+    }),
+  ]
+  for (const command of commands) {
+    ctx.effect(() => {
+      const unregister = ctx.commandUi.register(command)
+      return () => { ctx.commandUi.dismiss(command.name); unregister() }
+    }, 'mayori: chat command')
+  }
   const contexts = new SessionProviders(id => new RemoteTrajectoryContextProvider(id), 4)
   const contextFor = sessionId => contexts.get(sessionId)
   ctx.provide('mayoriTrajectoryContext', { forSession: contextFor })

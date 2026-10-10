@@ -76,3 +76,13 @@ test('with no main-view reference, uses a registered workspace without the retir
   await startCharacterSession(h.services, { id: 'aster', name: 'Aster' })
   assert.deepEqual(h.calls[0], ['start', 'aster', 'campaign', 0])
 })
+
+test('a new-chat command keeps its source workspace even if navigation has changed', async () => {
+  const h = harness()
+  h.services.workspaces.list.getSnapshot = () => ({ items: [
+    { workspaceId: 'campaign', sessionIds: ['current'] }, { workspaceId: 'source-campaign', sessionIds: ['source'] },
+  ] })
+  await startCharacterSession({ ...h.services, sourceSessionId: 'source' }, { id: 'aster', name: 'Aster' })
+  assert.deepEqual(h.calls[0], ['start', 'aster', 'source-campaign', 0])
+  assert.deepEqual(h.calls[1], ['create', { workspaceId: 'source-campaign', sessionId: 'new' }])
+})

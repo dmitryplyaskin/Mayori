@@ -52,6 +52,10 @@ test('registers reversible Mayori client contributions', async () => {
   const created = []
   const renamed = []
   const played = []
+  const commands = []
+  const commandDisposers = []
+  const dismissed = []
+  const unregistered = []
   const previousDocument = globalThis.document
   globalThis.document = {
     createElement(name) {
@@ -69,6 +73,7 @@ test('registers reversible Mayori client contributions', async () => {
 
   try {
     client.apply({
+      commandUi: { register(command) { commands.push(command); return () => unregistered.push(command.name) }, dismiss(name) { dismissed.push(name) } },
       sessions: {
         list: { getSnapshot: () => ({ ids: ['old-session'], byId: { 'old-session': { id: 'old-session', retainedBy: { mainView: 1 } } } }) },
         async create(input) { created.push(input); return 'character-session' },
@@ -87,6 +92,7 @@ test('registers reversible Mayori client contributions', async () => {
       },
       effect(factory, label) {
         if (label === 'mayori: client styles') dispose = factory()
+        else if (label === 'mayori: chat command') commandDisposers.push(factory())
         else { assert.ok(['mayori: greeting renderer', 'mayori: trajectory context', 'mayori: trajectory header', 'mayori: home conversation', 'mayori: home navigation', 'mayori: catalog requests', 'mayori: session provider caches', 'mayori: history cache'].includes(label)); return factory() }
       },
       slots: {
@@ -103,6 +109,13 @@ test('registers reversible Mayori client contributions', async () => {
     })
 
     assert.equal(typeof provided.mayoriCharacters.importFiles, 'function')
+    assert.deepEqual(commands.map(command => [command.name, command.label(), command.ui.kind]), [
+      ['preset', 'Сменить пресет', 'popupSelect'], ['persona', 'Сменить персону', 'popupSelect'],
+      ['new', 'Новый чат', 'action'],
+    ])
+    for (const disposeCommand of commandDisposers) disposeCommand()
+    assert.deepEqual(dismissed, ['preset', 'persona', 'new'])
+    assert.deepEqual(unregistered, ['preset', 'persona', 'new'])
     assert.deepEqual(slotInjections.map(item => item.name), [
       'sidebar.footer.action',
       'tool.call.toolview', 'tool.call.toolview',
@@ -168,7 +181,7 @@ test('built message wrappers place portraits on each side and retain native cont
   const previousDocument = globalThis.document
   globalThis.document = { createElement: () => ({ dataset: {}, remove() {} }), head: { appendChild() {} } }
   try {
-    client.apply({ sessions: {}, workspaces: {}, uiWorkspace: {}, provide() {}, effect: factory => factory(),
+    client.apply({ commandUi: { register: () => () => {}, dismiss() {} }, sessions: {}, workspaces: {}, uiWorkspace: {}, provide() {}, effect: factory => factory(),
       slots: { inject(name, factory) { if (name === 'conversation.chat.node') factory() }, subscribe: () => () => {},
         entries: name => name === 'conversation.chat.node' ? ['assistant-step', 'user', 'steering', 'turn-tail'].map(key => ({ options: { key },
           children: { 'message.detail': { kind: 'single', scope: 'session' } },
@@ -255,7 +268,7 @@ test('built client artifact registers a lazy DSH module factory', async () => {
   const { handoff, exports, required } = await loadBuiltClient()
   assert.equal(handoff.id, 'dsh-mayori')
   assert.equal(typeof exports.apply, 'function')
-  assert.deepEqual(exports.inject, ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout'])
+  assert.deepEqual(exports.inject, ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout', 'commandUi'])
   assert.deepEqual(required.sort(), ['@deepseek-ai/dsh-client-ui-primitives', 'react', 'react-dom', 'react/jsx-runtime'])
 })
 
@@ -376,7 +389,7 @@ test('sidebar omits New Session while preserving home, panels, toggle, settings 
   const previousDocument = globalThis.document
   globalThis.document = { createElement: () => ({ dataset: {}, remove() {} }), head: { appendChild() {} } }
   try {
-    client.apply({ sessions: {}, workspaces: {}, uiWorkspace: {}, layout: { selectPanel: id => selected.push(id) }, provide() {},
+    client.apply({ commandUi: { register: () => () => {}, dismiss() {} }, sessions: {}, workspaces: {}, uiWorkspace: {}, layout: { selectPanel: id => selected.push(id) }, provide() {},
       effect(factory, label) { const dispose = factory(); if (label === 'mayori: home navigation') disposeNavigation.push(dispose) },
       slots: {
         inject(name, factory) { if (['sidebar', 'shell.leading'].includes(name)) factory() },
@@ -442,7 +455,7 @@ test('empty conversation shows home while named empty chats and existing session
   const previousDocument = globalThis.document
   globalThis.document = { createElement: () => ({ dataset: {}, remove() {} }), head: { appendChild() {} } }
   try {
-    client.apply({ sessions: {}, workspaces: {}, uiWorkspace: {}, provide() {}, effect: factory => factory(),
+    client.apply({ commandUi: { register: () => () => {}, dismiss() {} }, sessions: {}, workspaces: {}, uiWorkspace: {}, provide() {}, effect: factory => factory(),
       slots: { inject(name, factory) { if (name === 'main.conversation') factory() }, subscribe: () => () => {},
         entries: name => name === 'main.conversation' ? [{ options: {}, children: { 'conversation.header': { kind: 'single', scope: 'session-maybe' } },
           component: props => React.createElement('div', null, 'Native conversation', props.renderSlot('conversation.header'), React.createElement('textarea')) }] : [],
