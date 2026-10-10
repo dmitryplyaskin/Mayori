@@ -13,7 +13,7 @@ Mayori is an engine for role-playing, creative writing, collaborative storytelli
 - Deployment-varying choices belong in validated `Config` fields.
 - Use ESM, keep files newline-terminated, and preserve the user's creative control. In role-playing, preserve player agency unless the user explicitly delegates it.
 - Update tests and the affected guide with every behavior change.
-- Every icon-only action in the chat must have a visible hover/focus tooltip and an accessible name. Use the shared IconButton / native DSH Tooltip; a title attribute alone is not enough. Apply the same convention to other Mayori icon actions.
+- Every icon-only action in the chat must have a visible hover/focus tooltip and an accessible name. Use the shared IconButton / native DSH Tooltip; a title attribute alone is not enough. Match neighboring native controls' placement, delays, shortcuts and portal behavior; enable portal only when containment requires it. Apply the same convention to other Mayori icon actions.
 
 ## Source layout
 

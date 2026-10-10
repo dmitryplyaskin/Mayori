@@ -161,9 +161,9 @@ export function PresetStructureEditor({ editor, disabled }) {
       const drop = drag?.drop?.targetId === node.id ? drag.drop.position : ''
       return <li key={node.id}>
         <div data-preset-node={node.id} className={`mayori-preset-tree-row${selectedNodeId === node.id ? ' is-selected' : ''}${drag?.sourceId === node.id ? ' is-dragging' : ''}${drop ? ` drop-${drop}` : ''}`}>
-          <IconButton className="mayori-preset-drag-handle" disabled={disabled} data-preset-handle={node.id}
+          <IconButton portal className="mayori-preset-drag-handle" disabled={disabled} data-preset-handle={node.id}
             label={`Переместить ${node.title}`} onPointerDown={event => startDrag(event, node)} onClick={() => openMove(node.id)}><DragHandle /></IconButton>
-          {node.kind === 'group' ? <IconButton className="mayori-preset-tree-fold" disabled={disabled} label={`${collapsed.includes(node.id) ? 'Раскрыть' : 'Свернуть'} ${node.title}`}
+          {node.kind === 'group' ? <IconButton portal className="mayori-preset-tree-fold" disabled={disabled} label={`${collapsed.includes(node.id) ? 'Раскрыть' : 'Свернуть'} ${node.title}`}
             aria-expanded={!collapsed.includes(node.id)} aria-controls={`${id}-${node.id}`} onClick={() => editor.toggleGroup(node.id)}>{collapsed.includes(node.id) ? '▸' : '▾'}</IconButton> : <span className="mayori-preset-tree-spacer" />}
           <label className="mayori-preset-node-toggle"><input type="checkbox" disabled={disabled} aria-label={`Включить ${node.title}`} checked={node.enabled} onChange={event => editor.changeNode(node.id, 'enabled', event.target.checked)} /></label>
           <button type="button" className="mayori-preset-tree-pick" disabled={disabled} aria-pressed={selectedNodeId === node.id} onClick={() => editor.selectNode(node.id)}>

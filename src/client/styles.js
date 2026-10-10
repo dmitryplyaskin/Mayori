@@ -72,9 +72,9 @@ html[data-platform=darwin] .mayori-navigation { background: transparent; padding
 .mayori-message-actions button { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; inline-size: calc(28px + var(--dsh-content-font-delta, 0px)); block-size: calc(28px + var(--dsh-content-font-delta, 0px)); padding: 6px; border: 0; border-radius: var(--dsw-radius-sm, 6px); background: transparent; color: inherit; cursor: pointer; }
 .mayori-message-actions svg { inline-size: calc(15px + var(--dsh-content-font-delta, 0px)); block-size: calc(15px + var(--dsh-content-font-delta, 0px)); }
 [data-clock=end] .mayori-message-actions svg { inline-size: calc(17px + var(--dsh-content-font-delta, 0px)); block-size: calc(17px + var(--dsh-content-font-delta, 0px)); }
-.mayori-message-actions button:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }
+.mayori-message-actions button:hover:not([aria-disabled="true"]) { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }
 .mayori-revision-status { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.mayori-message-actions button:disabled { cursor: default; opacity: 0.5; }
+.mayori-message-actions button:is(:disabled, [aria-disabled="true"]) { cursor: default; opacity: 0.5; }
 .mayori-message-actions button:focus-visible, .mayori-message-editor :is(button, textarea):focus-visible { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 2px; }
 .mayori-message-editor { box-sizing: border-box; inline-size: min(720px, calc(100vw - 32px)); max-block-size: calc(100dvh - 32px); margin: auto; padding: 24px; overflow: auto; border: 1px solid var(--dsw-alias-border-l2); border-radius: 16px; background: var(--dsw-alias-bg-layer-1, Canvas); color: var(--dsw-alias-label-primary, CanvasText); }
 .mayori-message-editor::backdrop { background: oklch(0 0 0 / 0.56); }

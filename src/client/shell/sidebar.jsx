@@ -38,7 +38,7 @@ export function MayoriSidebar() {
 export function MayoriLeadingControls({ toggleSidebar, useShortcuts, t }) {
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'sidebar.left.toggle'))
   const label = t('toggle.open')
-  return <IconButton className="mayori-navigation-toggle" label={label}
+  return <IconButton className="mayori-navigation-toggle" label={label} side="right" delayMs={500} shortcutKeys={shortcut?.keys}
     aria-keyshortcuts={shortcut?.aria} onClick={() => toggleSidebar()}>
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
       <rect x="3" y="4" width="18" height="16" rx="3" /><path d="M9 4v16" />
@@ -50,7 +50,7 @@ export function MayoriLeadingControls({ toggleSidebar, useShortcuts, t }) {
 function NavigationRow({ id, label, wide, usePanelInfo, selectPanel, renderSlot }) {
   const active = usePanelInfo(info => info.activePanelId === id)
   return (
-    <Tooltip label={label} side="right" disabled={wide} portal><button type="button" className="mayori-navigation-row" aria-label={label}
+    <Tooltip label={label} side="right" delayMs={500} disabled={wide}><button type="button" className="mayori-navigation-row" aria-label={label}
       aria-current={active ? 'page' : undefined}
       onClick={() => selectPanel(id)}>
       <span className="mayori-navigation-glyph" aria-hidden="true">
@@ -70,6 +70,7 @@ export function MayoriNavigationSidebar(props) {
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'sidebar.left.toggle'))
   const wide = !collapsed
   const toggleLabel = t(collapsed ? 'toggle.open' : 'toggle.collapse')
+  const toggleSide = globalThis.document?.documentElement?.hasAttribute('data-windows-titlebar') ? 'bottom' : 'right'
   return (
     <div className="mayori-navigation" data-collapsed={collapsed} style={wide ? { width } : undefined}>
       <div className="mayori-navigation-header" data-window-drag>
@@ -77,7 +78,7 @@ export function MayoriNavigationSidebar(props) {
           <span aria-hidden="true">{renderSlot('sidebar.brand.mark', { size: 24 })}</span>
           <span className="mayori-navigation-name">{renderSlot('sidebar.brand.name', {})}</span>
         </button>}
-        <IconButton className="mayori-navigation-toggle" label={toggleLabel}
+        <IconButton className="mayori-navigation-toggle" label={toggleLabel} side={toggleSide} delayMs={500} shortcutKeys={shortcut?.keys}
           aria-keyshortcuts={shortcut?.aria} onClick={() => toggleSidebar()}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
             <rect x="3" y="4" width="18" height="16" rx="3" /><path d="M9 4v16" />

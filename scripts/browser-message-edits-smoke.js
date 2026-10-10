@@ -63,7 +63,25 @@ try {
   const editor = page.getByRole('dialog', { name: 'Редактировать сообщение', exact: true })
   if (!restore) {
     const original = await rpc('/_mayori-smoke', { action: 'settle', sessionId: fixture.sessionId })
-    const edit = page.locator('[data-turn-tail]').last().getByRole('button', { name: 'Редактировать', exact: true })
+    const tail = page.locator('[data-turn-tail]').last()
+    const tooltipStyle = async button => {
+      await button.hover()
+      const bubble = page.getByRole('tooltip')
+      await bubble.waitFor()
+      const style = await bubble.evaluate(node => {
+        const style = getComputedStyle(node)
+        return { side: node.dataset.side, portal: Boolean(node.dataset.portal), font: style.font,
+          padding: style.padding, background: style.backgroundColor, radius: style.borderRadius, animation: style.animationDuration }
+      })
+      await page.mouse.move(0, 0)
+      await bubble.waitFor({ state: 'detached' })
+      return style
+    }
+    const stockStyle = await tooltipStyle(tail.getByRole('button', { name: /^(Copy|Копировать)$/ }))
+    const edit = tail.getByRole('button', { name: 'Редактировать', exact: true })
+    assert.deepEqual(await tooltipStyle(edit), stockStyle, 'Custom actions match the neighboring native tooltip')
+    assert.equal(stockStyle.side, 'bottom')
+    assert.equal(stockStyle.portal, false)
     await edit.hover()
     await page.getByRole('tooltip').filter({ hasText: 'Редактировать' }).waitFor()
     await page.mouse.move(0, 0)
@@ -71,6 +89,7 @@ try {
     await edit.focus()
     await page.getByRole('tooltip').filter({ hasText: 'Редактировать' }).waitFor()
     await edit.click()
+    await page.getByRole('tooltip').waitFor({ state: 'detached' })
     await editor.waitFor({ state: 'visible' })
     await editor.getByRole('button', { name: 'Сохранить в чате', exact: true }).waitFor()
     await editor.getByRole('button', { name: 'Создать ветку', exact: true }).waitFor()
@@ -117,6 +136,24 @@ try {
   }
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.screenshot({ path: join(output, restore ? 'current-restored.png' : 'current-saved.png') })
+  if (!restore) {
+    const sidebar = page.locator('.mayori-navigation')
+    if (await sidebar.getAttribute('data-collapsed') !== 'true') await sidebar.locator('.mayori-navigation-toggle').click()
+    const home = sidebar.getByRole('button', { name: 'Главная', exact: true })
+    const tip = page.getByRole('tooltip').filter({ hasText: 'Главная' })
+    await home.hover()
+    await page.waitForTimeout(100)
+    assert.equal(await tip.count(), 0, 'Sidebar tooltips use the native hover delay')
+    await tip.waitFor()
+    assert.equal(await tip.getAttribute('data-side'), 'right')
+    assert.equal(await tip.getAttribute('data-portal'), null)
+    await page.mouse.move(0, 0)
+    await tip.waitFor({ state: 'detached' })
+    await page.keyboard.press('Tab')
+    await home.focus()
+    await tip.waitFor()
+    await page.screenshot({ path: join(output, 'sidebar-tooltip.png') })
+  }
   assert.deepEqual(errors, [])
   console.log(JSON.stringify({ ok: true, restored: restore, fixture, output }))
 } catch (error) {

@@ -10,7 +10,7 @@ const tabs = [['general', 'Основные', IconSettingsOutlineMedium], ['plug
 export function MayoriSettingsLauncher({ wide, preferences }) {
   const [open, setOpen] = useState(false)
   return <>
-    <Tooltip label="Настройки Mayori" side="right" disabled={wide} portal><button type="button" className="mayori-navigation-row mayori-settings-trigger" aria-label="Настройки Mayori"
+    <Tooltip label="Настройки Mayori" side="right" delayMs={500} disabled={wide}><button type="button" className="mayori-navigation-row mayori-settings-trigger" aria-label="Настройки Mayori"
       aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
       <span className="mayori-navigation-glyph" aria-hidden="true"><IconPersonalizationOutlineMedium size={wide ? 16 : 18} /></span>
       {wide && <span className="mayori-navigation-label">Настройки Mayori</span>}

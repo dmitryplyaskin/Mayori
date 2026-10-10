@@ -91,9 +91,9 @@ export function MessageRevisionControls({ revisions, seq, canRepeat, useSession 
   }
   return <>
     <span className="mayori-message-actions">
-      <IconButton label="Редактировать" aria-haspopup="dialog" disabled={busy}
+      <IconButton label="Редактировать" aria-haspopup="dialog" aria-disabled={busy || undefined}
         onClick={event => { void open('edit', event.currentTarget) }}><RevisionIcon /></IconButton>
-      {canRepeat && <IconButton label="Повторить ответ" aria-haspopup="dialog" disabled={busy}
+      {canRepeat && <IconButton label="Повторить ответ" aria-haspopup="dialog" aria-disabled={busy || undefined}
         onClick={event => { void open('regenerate', event.currentTarget) }}><RevisionIcon repeat /></IconButton>}
       <span className="mayori-revision-status" role="status">{loading ? 'Загружаем реплику…' : snapshot.busy ? 'Сохраняем…' : ''}</span>
     </span>
