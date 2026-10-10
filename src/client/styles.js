@@ -130,6 +130,7 @@ html[data-platform=darwin] .mayori-navigation { background: transparent; padding
 .mayori-presets-panel :is(button, summary) { cursor: pointer; }
 .mayori-presets-panel :disabled { opacity: 0.5; cursor: default; }
 .mayori-presets-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.mayori-presets-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .mayori-presets-header h1 { font-size: 26px; line-height: 1.3; font-weight: 650; }
 .mayori-preset-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-block-size: 42px; flex: none; padding: 10px 14px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 9px; background: var(--dsw-alias-bg-l1, Canvas); color: inherit; font: inherit; font-weight: 500; }
 .mayori-preset-button:hover, .mayori-preset-menu :is(summary, button):hover { background: var(--dsw-alias-interactive-bg-hover); }
@@ -182,7 +183,7 @@ html[data-platform=darwin] .mayori-navigation { background: transparent; padding
 .mayori-preset-structure-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 16px; border-block-end: 1px solid var(--dsw-alias-border-l2); }
 .mayori-preset-structure-heading p, .mayori-preset-node-path, .mayori-preset-node-state { font-size: 12px; line-height: 1.6; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
 .mayori-preset-structure-heading p, .mayori-preset-structure-footer span { font-variant-numeric: tabular-nums; }
-.mayori-preset-structure-layout { display: grid; grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.4fr); }
+.mayori-preset-structure-layout { display: grid; grid-template-columns: max(210px, calc(100% * 0.9 / 2.3 - 50px)) minmax(0, 1fr); }
 .mayori-preset-structure-tree { min-inline-size: 0; background: var(--dsw-alias-bg-l2, Canvas); border-inline-end: 1px solid var(--dsw-alias-border-l2); padding: 14px 8px; }
 .mayori-preset-tree-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 0 8px 12px; }
 .mayori-preset-tree-toolbar h3 { flex-basis: 100%; }
@@ -210,7 +211,7 @@ html[data-platform=darwin] .mayori-navigation { background: transparent; padding
 .mayori-preset-root-drop { margin-block-start: 14px; padding: 10px; border: 1px dashed var(--dsw-alias-border-l2); border-radius: 6px; font-size: 12px; color: var(--dsw-alias-label-secondary); text-align: center; }
 .mayori-preset-node-editor { display: flex; flex-direction: column; align-items: stretch; gap: 16px; min-inline-size: 0; padding: 22px; }
 .mayori-preset-node-field { display: flex; flex-direction: column; gap: 8px; min-inline-size: 0; }
-.mayori-presets-panel .mayori-preset-node-field textarea { min-block-size: 300px; max-inline-size: 75ch; resize: vertical; font-size: 16px; line-height: 1.6; }
+.mayori-presets-panel .mayori-preset-node-field textarea { min-block-size: 300px; max-inline-size: none; resize: vertical; font-size: 16px; line-height: 1.6; }
 .mayori-preset-group-content { display: grid; gap: 8px; }
 .mayori-preset-group-content ul { padding-inline-start: 20px; margin: 0; }
 .mayori-preset-node-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -228,7 +229,7 @@ html[data-platform=darwin] .mayori-navigation { background: transparent; padding
 @media (pointer: coarse) { .mayori-presets-panel :is(.mayori-preset-drag-handle, .mayori-preset-tree-fold) { min-block-size: 44px; } }
 @container (max-width: 900px) {
   .mayori-presets-content { padding: 24px; }
-  .mayori-preset-structure-layout { grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.2fr); }
+  .mayori-preset-structure-layout { grid-template-columns: max(190px, calc(100% * 0.9 / 2.1 - 50px)) minmax(0, 1fr); }
   .mayori-preset-current-control { flex-wrap: wrap; }
 }
 @container (max-width: 680px) {

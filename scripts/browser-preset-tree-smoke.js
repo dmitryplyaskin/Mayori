@@ -1,9 +1,10 @@
 /** Run only against an isolated profile with dsh-smoke-probe. */
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { mkdir } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { mkdir, readFile } from 'node:fs/promises'
+import { basename, join, resolve } from 'node:path'
 import { chooseMenu } from './browser-select.js'
+import { importPreset } from '../src/features/presets/shared/transfer.js'
 
 const require = createRequire(import.meta.url)
 const { chromium } = require(process.env.MAYORI_PLAYWRIGHT_PATH ?? 'playwright')
@@ -26,11 +27,14 @@ const preset = await rpc('preset-save', { name: 'Nested UI smoke', nodes: [group
 await rpc('preset-default', { id: preset.id })
 const browser = await chromium.launch({ headless: true, ...(process.env.MAYORI_CHROMIUM_PATH ? { executablePath: process.env.MAYORI_CHROMIUM_PATH } : {}) })
 let page
+let transferredId
+let stImportedId
 try {
   page = await browser.newPage({ viewport: { width: 1280, height: 1100 } })
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
-  page.on('dialog', dialog => dialog.accept())
+  let acceptDialog = true
+  page.on('dialog', dialog => acceptDialog ? dialog.accept() : dialog.dismiss())
   await page.goto(url.href)
   await page.getByRole('button', { name: 'Пресеты', exact: true }).click()
   await page.getByLabel('Название', { exact: true }).waitFor()
@@ -47,11 +51,17 @@ try {
   async function drag(source, target, position) {
     await structure.scrollIntoViewIfNeeded()
     const from = await handle(source).boundingBox()
-    const to = await (target === null ? structure.locator('[data-preset-root-drop]') : row(target)).boundingBox()
+    const destination = target === null ? structure.locator('[data-preset-root-drop]') : row(target)
     await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
     await page.mouse.down()
     await page.mouse.move(from.x + from.width / 2 + 8, from.y + from.height / 2 + 8, { steps: 3 })
+    // Autoscroll can move rows while traversing the page: use live geometry
+    // for the final drop. Dedicated edge scrolling is exercised below.
+    await destination.evaluate(element => element.scrollIntoView({ block: 'center', inline: 'nearest' }))
+    let to = await destination.boundingBox()
     await page.mouse.move(to.x + to.width * 0.75, to.y + to.height * (position === 'before' ? 0.1 : position === 'after' ? 0.9 : 0.5), { steps: 12 })
+    to = await destination.boundingBox()
+    await page.mouse.move(to.x + to.width * 0.75, to.y + to.height * (position === 'before' ? 0.1 : position === 'after' ? 0.9 : 0.5))
     await page.mouse.up()
   }
   await drag('Success', 'Style', 'before')
@@ -117,6 +127,49 @@ try {
   assert.equal(await page.getByLabel('Название блока', { exact: true }).inputValue(), 'Critical')
   saved = await save()
   assert.ok(saved.instructions.includes('CRITICAL_LITERAL {{unknown}}'))
+  // Download the live draft, then import it without trusting a catalog identity.
+  const unsavedText = 'CRITICAL_LITERAL {{unknown}}\nUNSAVED_EXPORT'
+  await page.getByLabel('Текст инструкции', { exact: true }).fill(unsavedText)
+  await page.getByLabel('Действия с пресетом', { exact: true }).click()
+  const [download] = await Promise.all([
+    page.waitForEvent('download'), page.getByRole('button', { name: 'Экспорт', exact: true }).click(),
+  ])
+  assert.equal(await page.locator('.mayori-preset-menu').evaluate(menu => menu.open), false)
+  assert.ok(download.suggestedFilename().endsWith('.mayori.json'))
+  const transferPath = join(output, download.suggestedFilename())
+  await download.saveAs(transferPath)
+  const exported = JSON.parse(await readFile(transferPath, 'utf8'))
+  assert.equal(exported.preset.id, undefined)
+  assert.ok(JSON.stringify(exported.preset.nodes).includes('UNSAVED_EXPORT'))
+  assert.deepEqual((await rpc('preset-list')).presets.find(p => p.id === preset.id), saved, 'Export cannot save draft edits')
+  const chooserPromise = page.waitForEvent('filechooser')
+  await page.getByRole('button', { name: 'Импорт', exact: true }).click()
+  const chooser = await chooserPromise
+  await chooser.setFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{broken') })
+  await page.getByRole('alert').filter({ hasText: 'Не удалось прочитать JSON' }).waitFor()
+  assert.equal(await page.getByLabel('Текст инструкции', { exact: true }).inputValue(), unsavedText)
+  const beforeImport = await rpc('preset-list')
+  acceptDialog = false
+  await page.getByLabel('Файл пресета', { exact: true }).setInputFiles(transferPath)
+  await page.waitForFunction(() => !document.querySelector('button[type="submit"]').disabled)
+  assert.equal(await page.getByLabel('Текст инструкции', { exact: true }).inputValue(), unsavedText)
+  assert.equal(await page.getByRole('heading', { name: preset.name, exact: true }).count(), 1)
+  acceptDialog = true
+  await page.getByLabel('Файл пресета', { exact: true }).setInputFiles(transferPath)
+  await page.getByRole('status').filter({ hasText: 'Пресет импортирован.' }).waitFor()
+  assert.equal(await page.getByRole('heading', { name: 'Новый пресет', exact: true }).count(), 1)
+  assert.deepEqual(await rpc('preset-list'), beforeImport, 'Import opens a draft without changing defaults or the library')
+  await structure.getByRole('button', { name: 'Critical', exact: true }).click()
+  assert.equal(await page.getByLabel('Текст инструкции', { exact: true }).inputValue(), unsavedText)
+  await page.getByRole('button', { name: 'Сохранить пресет', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: 'Пресет сохранён.' }).waitFor()
+  const afterImport = await rpc('preset-list')
+  const transferred = afterImport.presets.find(p => !beforeImport.presets.some(old => old.id === p.id))
+  transferredId = transferred?.id
+  assert.ok(transferredId && transferredId !== preset.id)
+  assert.deepEqual(transferred.nodes, exported.preset.nodes)
+  assert.ok(transferred.instructions.includes('UNSAVED_EXPORT'))
+  assert.deepEqual(afterImport.presets.find(p => p.id === preset.id), saved)
   await page.reload()
   await page.getByRole('button', { name: 'Пресеты', exact: true }).click()
   await page.getByLabel('Название', { exact: true }).waitFor()
@@ -161,6 +214,35 @@ try {
   await page.mouse.move(rootDrop.x + rootDrop.width / 2, rootDrop.y + rootDrop.height / 2)
   await page.mouse.up()
   assert.equal(await parent('Item0'), null)
+  if (process.argv[4]) {
+    const stPath = resolve(process.argv[4])
+    const source = await readFile(stPath, 'utf8')
+    const expected = importPreset(source, { filename: basename(stPath) })
+    const beforeST = await rpc('preset-list')
+    const fileChooserPromise = page.waitForEvent('filechooser')
+    await page.getByRole('button', { name: 'Импорт', exact: true }).click()
+    await (await fileChooserPromise).setFiles(stPath)
+    await page.getByRole('status').filter({ hasText: 'Пресет импортирован.' }).waitFor()
+    assert.equal(await page.getByLabel('Название', { exact: true }).inputValue(), expected.name)
+    assert.equal(await page.getByLabel('Текст инструкции', { exact: true }).inputValue(), expected.nodes[0].text)
+    assert.deepEqual(await rpc('preset-list'), beforeST, 'ST imports must not overwrite the catalog')
+    await page.getByRole('button', { name: 'Сохранить пресет', exact: true }).click()
+    await page.getByRole('status').filter({ hasText: 'Пресет сохранён.' }).waitFor()
+    const importedST = (await rpc('preset-list')).presets.find(p => !beforeST.presets.some(old => old.id === p.id))
+    stImportedId = importedST?.id
+    assert.ok(stImportedId)
+    assert.deepEqual(importedST.nodes, expected.nodes)
+    assert.equal(importedST.instructions, expected.instructions)
+    await page.getByLabel('Действия с пресетом', { exact: true }).click()
+    const [stDownload] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Экспорт', exact: true }).click()])
+    const exportedSTPath = join(output, 'st-preset-export.mayori.json')
+    await stDownload.saveAs(exportedSTPath)
+    assert.deepEqual(importPreset(await readFile(exportedSTPath, 'utf8')), expected)
+    assert.equal(await readFile(stPath, 'utf8'), source, 'The selected ST source file remains unchanged')
+    await page.getByRole('button', { name: 'Посмотреть итог', exact: true }).click()
+    assert.equal(await page.locator('.mayori-preset-compiled pre').innerText(), expected.instructions)
+    await page.screenshot({ path: join(output, 'st-preset-import.png'), fullPage: true })
+  }
   assert.deepEqual(errors, [])
   console.log(JSON.stringify({ ok: true, output, presetId: preset.id }))
 } catch (error) {
@@ -168,6 +250,8 @@ try {
   throw error
 } finally {
   await browser.close()
+  if (stImportedId) await rpc('preset-remove', { id: stImportedId })
+  if (transferredId) await rpc('preset-remove', { id: transferredId })
   await rpc('preset-default', { id: catalog.defaultId })
   await rpc('preset-remove', { id: preset.id })
 }

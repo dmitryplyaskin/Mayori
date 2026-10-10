@@ -48,6 +48,21 @@ try {
   await page.getByRole('heading', { name: 'Пресеты', exact: true }).waitFor()
   await page.waitForFunction(() => document.querySelector('[name=presetName]')?.value.length > 0)
   await page.getByRole('button', { name: 'Создать пресет', exact: true }).click()
+  for (const width of [1920, 1440, 1024, 320]) {
+    await page.setViewportSize({ width, height: 1000 })
+    const layout = await page.getByLabel('Текст инструкции', { exact: true }).evaluate(textarea => {
+      const field = textarea.parentElement.getBoundingClientRect()
+      const tree = document.querySelector('.mayori-preset-structure-tree').getBoundingClientRect()
+      const editor = document.querySelector('.mayori-preset-node-editor').getBoundingClientRect()
+      return { fieldWidth: field.width, textWidth: textarea.getBoundingClientRect().width, tree, editor,
+        overflows: document.querySelector('.mayori-presets-panel').scrollWidth > document.querySelector('.mayori-presets-panel').clientWidth + 1 }
+    })
+    assert.ok(Math.abs(layout.fieldWidth - layout.textWidth) < 1, `Text editing uses the full available width at ${width}px`)
+    assert.equal(layout.overflows, false, `Preset layout reflows at ${width}px`)
+    if (width > 680) assert.ok(layout.editor.width > layout.tree.width, 'The text editor receives more space than the structure')
+    if (width === 1920) await page.screenshot({ path: join(output, 'presets-wide-editor.png'), fullPage: true })
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 })
   await page.getByRole('button', { name: 'Сохранить пресет', exact: true }).click()
   assert.equal(await page.getByLabel('Название', { exact: true }).evaluate(element => element === document.activeElement), true)
   await page.getByLabel('Название', { exact: true }).fill('Медленный хоррор')
