@@ -95,11 +95,11 @@ test('registers reversible Mayori client contributions', async () => {
       effect(factory, label) {
         if (label === 'mayori: client styles') dispose = factory()
         else if (label === 'mayori: chat command') commandDisposers.push(factory())
-        else { assert.ok(['mayori: composer presentation', 'mayori: greeting renderer', 'mayori: trajectory context', 'mayori: trajectory header', 'mayori: home conversation', 'mayori: home navigation', 'mayori: catalog requests', 'mayori: session provider caches', 'mayori: history cache'].includes(label)); return factory() }
+        else { assert.ok(['mayori: composer presentation', 'mayori: greeting renderer', 'mayori: revision chat flow', 'mayori: trajectory context', 'mayori: trajectory header', 'mayori: home conversation', 'mayori: home navigation', 'mayori: catalog requests', 'mayori: session provider caches', 'mayori: history cache'].includes(label)); return factory() }
       },
       slots: {
         subscribe() { return () => {} },
-        entries(name) { return (name === 'conversation.chat.node' ? ['assistant-step', 'user', 'steering', 'turn-tail'] : [null]).map(key => ({ options: name === 'conversation.view' ? { id: 'trajectory', label: 'Trajectory', order: 10 } : { key }, locale: 'chat', component() {}, inject: () => ({ hooks: { presentation: 'stock-presentation' } }) })) },
+        entries(name) { return (name === 'conversation.chat.node' ? ['assistant-step', 'user', 'steering', 'turn-tail'] : [null]).map(key => ({ options: name === 'conversation.view' ? { id: 'trajectory', label: 'Trajectory', order: 10 } : { key }, locale: 'chat', store: name === 'conversation.chat.flow' ? 'native-chat-store' : undefined, component() {}, inject: () => ({ hooks: { presentation: 'stock-presentation' } }) })) },
         inject(name, callback) {
           slotInjections.push({ name, callback })
         },
@@ -123,7 +123,7 @@ test('registers reversible Mayori client contributions', async () => {
       'sidebar.footer.action',
       'tool.call.toolview', 'tool.call.toolview',
       'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark', 'sidebar.workspaces', 'sidebar', 'shell.leading',
-      'main', 'sidebar.panellist', 'main.conversation', 'main', 'main', 'main', 'main', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'conversation.chat.node', 'conversation.view', 'conversation.session.header',
+      'main', 'sidebar.panellist', 'main.conversation', 'main', 'main', 'main', 'main', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'conversation.chat.node', 'conversation.chat.flow', 'conversation.view', 'conversation.session.header',
     ])
     for (const slot of slotInjections) slot.callback()
     assert.equal(registrations.some(item => item.options.name === 'settings.section'), false)
@@ -148,6 +148,8 @@ test('registers reversible Mayori client contributions', async () => {
     assert.equal(greeting.options.priority, -100)
     assert.equal(greeting.options.locale, 'chat')
     assert.equal(greeting.options.inject().hooks.presentation, 'stock-presentation')
+    const flow = registrations.find(item => item.options.name === 'conversation.chat.flow')
+    assert.equal(flow.options.store, 'native-chat-store', 'Native chat node seats need the inherited store hooks')
     assert.deepEqual(registrations.filter(item => item.options.name === 'conversation.chat.node').map(item => item.options.key), ['assistant-step', 'user', 'steering', 'turn-tail'])
     const trajectory = registrations.find(item => item.options.id === 'trajectory')
     assert.equal(trajectory.options.priority, -100)

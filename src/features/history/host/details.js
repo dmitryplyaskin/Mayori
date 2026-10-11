@@ -38,6 +38,7 @@ export function messagePreview(events, projections = []) {
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]
     if (!['user/message', 'assistant/message'].includes(event.type)) continue
+    if (edits[event.seq]?.deleted) continue
     const message = edits[event.seq] ? revisedMessage(event, edits) : deriveEventMessage(event, folded.projectedMessages)
     if (!message || !['user', 'assistant'].includes(message.role)) continue
     const source = message.source

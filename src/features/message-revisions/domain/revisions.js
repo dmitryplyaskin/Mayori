@@ -15,10 +15,17 @@ export function humanMessage(event) {
   return event.type === 'user/message' && ['user', 'steering'].includes(event.data.source?.kind)
 }
 
+/** A reply owns the model process after its nearest input or opening turn boundary. */
+export function replyProcessRange(events, targetSeq) {
+  const boundary = events.slice(0, targetSeq).findLast(event => humanMessage(event) || event.type === 'turn/start')
+  return { startSeq: (boundary?.seq ?? 0) + 1, endSeq: targetSeq }
+}
+
 /** Repeat the nearest human input; keep everything before that input in its original order. */
-export function regenerationInput(events, targetSeq) {
+export function regenerationInput(events, targetSeq, edits = {}) {
   const input = events.slice(0, targetSeq).findLast(humanMessage)
   if (!input || input.seq < 1) throw new Error('У этого ответа нет реплики игрока для повторной генерации.')
+  if (edits[input.seq]?.deleted) throw new Error('Реплика игрока для этого ответа удалена.')
   return input
 }
 

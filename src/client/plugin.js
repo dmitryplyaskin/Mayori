@@ -30,7 +30,8 @@ import { presetCommand } from '../features/presets/client/command.js'
 import { personaCommand } from '../features/personas/client/command.js'
 import { newChatCommand } from '../features/character-session/client/command.js'
 import { registerComposerPresentation } from './shell/composer.js'
-import { RevisionContextMessage } from '../features/message-revisions/client/message.js'
+import { RevisionContextMessage, RevisionChatFlow } from '../features/message-revisions/client/message.js'
+import { IconButton } from './components/icon-button.jsx'
 
 export { DiceToolCard } from '../features/dice/client/card.jsx'
 export { CheckToolCard } from '../features/rules/client/card.jsx'
@@ -80,7 +81,10 @@ export function apply(ctx) {
   ctx.provide('mayoriTrajectoryContext', { forSession: contextFor })
   const revisions = new SessionProviders(sessionId => new RemoteMessageRevisionProvider(sessionId, async id => {
       try { await ctx.sessions.refresh() } finally { ctx.uiWorkspace.openSession(id) }
-    }))
+    }, seq => ctx.sessions.using(sessionId, { source: 'mayoriVariants' }, async reference => {
+      const binding = await reference.ready
+      await binding.session.loadThrough(seq)
+    })))
   const revisionFor = sessionId => revisions.get(sessionId)
   ctx.effect(() => () => { sessionPresets.dispose(); chats.dispose(); contexts.dispose(); revisions.dispose() }, 'mayori: session provider caches')
   ctx.provide('mayoriMessageRevisions', { forSession: revisionFor })
@@ -223,6 +227,28 @@ export function apply(ctx) {
     register()
     return () => { unsubscribe(); for (const dispose of disposers) dispose() }
   }, 'mayori: greeting renderer'))
+  ctx.slots.inject('conversation.chat.flow', () => ctx.effect(() => {
+    let dispose
+    let installed = false
+    const register = () => {
+      if (installed) return
+      const stock = ctx.slots.entries('conversation.chat.flow')[0]
+      if (!stock) return
+      installed = true
+      const prefix = 'mayori.revisions.flow'
+        const disposers = [ctx.slots.register({
+          ...stock.options, name: 'conversation.chat.flow', priority: -100,
+          locale: stock.locale, store: stock.store, children: mirroredChildren(stock.children, prefix),
+          inject: (...args) => ({ ...stock.inject?.(...args), stock: stock.component,
+            stockChildren: stock.children, childPrefix: prefix, revisionFor, IconButton }),
+      }, RevisionChatFlow)]
+      for (const name of Object.keys(stock.children ?? {})) disposers.push(mirrorSlot(ctx, name, `${prefix}.${name}`))
+      dispose = () => { for (const stop of disposers) stop() }
+    }
+    const unsubscribe = ctx.slots.subscribe('conversation.chat.flow', register)
+    register()
+    return () => { unsubscribe(); dispose?.() }
+  }, 'mayori: revision chat flow'))
   ctx.slots.inject('conversation.view', () => ctx.effect(() => {
     let installed = false
     const disposers = []

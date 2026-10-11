@@ -82,6 +82,7 @@ html[data-platform=darwin] .mayori-navigation { background: transparent; padding
 .mayori-message-editor h2, .mayori-message-editor p { margin: 0; }
 .mayori-message-editor h2 { font-size: 20px; }
 .mayori-message-editor p { line-height: 1.5; }
+.mayori-message-confirm { inline-size: min(360px, calc(100vw - 32px)); }
 .mayori-message-editor textarea { box-sizing: border-box; inline-size: 100%; min-block-size: 180px; max-block-size: 45dvh; resize: vertical; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); color: inherit; font: inherit; font-size: 16px; line-height: 1.5; }
 .mayori-message-editor-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; }
 .mayori-message-editor-actions button { min-block-size: 44px; padding: 8px 16px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); color: inherit; font: inherit; cursor: pointer; }

@@ -85,7 +85,10 @@ test('HTTP adapter dispatches each existing endpoint to its owning capability wi
     ['message-inspect', 'messageRevisions', 'inspect', [input.sessionId, input.seq], 'messageRevisions.inspect'],
     ['message-revisions', 'messageRevisions', 'list', [input.sessionId], 'messageRevisions.list'],
     ['message-edit', 'messageRevisions', 'edit', [input.sessionId, input.seq, input.text, input.mode], 'messageRevisions.edit'],
+    ['message-remove', 'messageRevisions', 'remove', [input.sessionId, input.seq], 'messageRevisions.remove'],
     ['message-regenerate', 'messageRevisions', 'regenerate', [input.sessionId, input.seq], 'messageRevisions.regenerate'],
+    ['message-variants', 'messageRevisions', 'variants', [input.sessionId], 'messageRevisions.variants'],
+    ['message-variant', 'messageRevisions', 'selectVariant', [input.sessionId, input.seq, input.index], 'messageRevisions.selectVariant'],
   ]
   for (const [endpoint, name, method, args, value] of cases) {
     const response = await request(route, endpoint, input)

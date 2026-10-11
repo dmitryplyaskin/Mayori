@@ -4,7 +4,8 @@ import { remapChildProps } from '../../../client/infrastructure/slot-mirror.js'
 import { GreetingMessage } from './greeting.jsx'
 import { MessageRevisionControls, UserRevisionToolbar } from '../../message-revisions/client/controls.jsx'
 import { originalImage } from '../../media/shared/image.js'
-import { editedNode } from '../../message-revisions/client/message.js'
+import { editedNode, removedNode } from '../../message-revisions/client/message.js'
+import { AnswerVariants } from '../../message-revisions/client/variants.js'
 import { IconButton } from '../../../client/components/icon-button.jsx'
 
 function Avatar({ name, image }) {
@@ -93,6 +94,7 @@ export function CharacterMessage({ stock, stockChildren, childPrefix, chatFor, r
     revisions?.getSnapshot ?? (() => null), revisions?.getSnapshot ?? (() => null))
   const activity = props.useSession?.(state => state.running || (state.pendingSubmissions?.length ?? 0) > 0)
   useEffect(() => { void revisions?.refresh?.() }, [revisions, activity])
+  if (removedNode(props.node, revisionSnapshot?.edits)) return null
   mapped.node = editedNode(props.node, revisionSnapshot?.edits)
   const assistant = props.node.kind === 'assistant-step'
   const Stock = stock
@@ -118,5 +120,7 @@ export function CharacterMessage({ stock, stockChildren, childPrefix, chatFor, r
     actions={editable && <MessageRevisionControls revisions={revisionFor(props.sessionId)} seq={seq}
       useSession={props.useSession} canRepeat={false} />}>
     {content}
+    {assistant && revisions && props.useSession && props.groupPart !== 'reasoning' && <AnswerVariants
+      revisions={revisions} seq={seq} useSession={props.useSession} IconButton={IconButton} />}
   </MessageWithAvatar>
 }

@@ -2,20 +2,14 @@ import { randomUUID } from 'node:crypto'
 import { buildForkSeed } from '@deepseek-ai/dsh-session/fork'
 import { Session } from '@deepseek-ai/dsh-session'
 import { MessageRevisionService } from './service.js'
-import { authoredReply, authoredInput, editedContent, humanMessage, regenerationInput, textContent, MANUAL_PROVIDER } from '../domain/revisions.js'
-import { readMessageEdits, revisedMessage, revisionMessage, revisionSurface } from '../domain/edits.js'
+import { authoredReply, authoredInput, editedContent, humanMessage, regenerationInput, replyProcessRange, textContent, MANUAL_PROVIDER } from '../domain/revisions.js'
+import { readMessageEdits, revisedMessage, revisionMessage, revisionSurface, removalMessage, restorationMessage } from '../domain/edits.js'
+import { readAnswerVariants, variantSnapshot, variantMessage } from '../domain/variants.js'
 import { presetSelectionMessage, readPresetSelection } from '../../presets/shared/preset.js'
 
 /** Logged corrections and optional native forks preserve original events and never generate on edit. */
 export class SessionMessageRevisionProvider extends MessageRevisionService {
   constructor(ctx, characterSessions) { super(ctx); this.characters = characterSessions; this.changing = new Set() }
-
-  _agent(sessionId) {
-    if (typeof sessionId !== 'string' || !sessionId.trim()) throw new TypeError('Некорректный идентификатор чата.')
-    const agent = this.ctx.agents.get(sessionId)
-    if (!agent) throw new Error('Чат закрыт. Откройте его снова.')
-    return agent
-  }
 
   async _resolveAgent(sessionId) {
     if (typeof sessionId !== 'string' || !sessionId.trim()) throw new TypeError('Некорректный идентификатор чата.')
@@ -49,10 +43,11 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
     if (!Number.isSafeInteger(seq) || seq < 1) throw new TypeError('Некорректная реплика.')
     const state = await this.characters.state(agent.id)
     if (!state?.character) throw new Error('Редактирование доступно в чате персонажа.')
-    const { events } = await this.ctx.sessionQuery.readSession(agent.id)
+    const events = agent.session.snapshotEvents()
     const event = events[seq]
     if (!event || !(event.type === 'assistant/message' || humanMessage(event))) throw new Error('Реплика не найдена в журнале чата.')
     const edits = readMessageEdits(events)
+    if (edits[seq]?.deleted) throw new Error('Реплика удалена из чата.')
     const message = edits[seq] ? revisedMessage(event, edits) : agent.session.deriveEventMessage(event)
     if (!message) throw new Error('Реплика не содержит сообщения.')
     if (message.content.some(block => block.type === 'tool-call')) throw new Error('Вызовы инструментов нельзя редактировать как реплику.')
@@ -60,7 +55,7 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
     const text = edits[seq]?.text ?? (greeting ? state.greeting.text : textContent(message.content))
     if (!text.trim()) throw new Error('У этой реплики нет текста для редактирования.')
     return { events, event, message, text, greeting, role: message.role,
-      manual: Boolean(edits[seq]) || message.source?.provider === MANUAL_PROVIDER }
+      manual: Boolean(edits[seq] && !edits[seq].restored) || message.source?.provider === MANUAL_PROVIDER }
   }
 
   async list(sessionId) {
@@ -68,44 +63,28 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
     return readMessageEdits(agent.session.snapshotEvents())
   }
 
+  _variants(events, edits = readMessageEdits(events)) {
+    return readAnswerVariants(events, edits).map(group => ({ groupId: group.groupId, replySeq: group.replySeq,
+      startSeq: group.variants.find(variant => variant.id === group.selectedId)?.entries[0]?.seq ?? group.groupId,
+      index: group.selectedIndex, count: group.variants.filter(variant => variant.replySeq !== null).length }))
+  }
+
+  async variants(sessionId) {
+    const agent = await this._resolveAgent(sessionId)
+    return this._variants(agent.session.snapshotEvents())
+  }
+
   async inspect(sessionId, seq) {
     const agent = await this._resolveAgent(sessionId)
     const target = await this._target(agent, seq)
     let canRegenerate = false
+    let regenerateError
     if (target.role === 'assistant' && !target.greeting) {
-      try { regenerationInput(target.events, seq); canRegenerate = true } catch {}
+      try { this._regeneration(agent, target); canRegenerate = true } catch (error) { regenerateError = error.message }
     }
     return { seq, text: target.text, role: target.role, manual: target.manual, canRegenerate,
-      editModes: ['current', 'branch'], editRunsModel: false }
-  }
-
-  async _fork(agent, atSeq, signal) {
-    signal.throwIfAborted()
-    this._idle(agent)
-    await this.ctx.sessions.flush(agent.session)
-    signal.throwIfAborted()
-    this._idle(agent)
-    const value = await this.ctx.sessionController.fork({ sessionId: agent.id, atSeq })
-    const child = this._agent(value.sessionId)
-    try {
-      // Native fork uses deployment defaults; repeat with the source chat's selected route.
-      const { events } = await this.ctx.sessionQuery.readSession(agent.id)
-      for (const edit of Object.values(readMessageEdits(events)).filter(edit => edit.targetSeq <= atSeq && edit.eventSeq > atSeq)) {
-        const event = events[edit.targetSeq]
-        const message = event.type === 'user/message' ? event.data : event.data.message
-        const target = { event, message, role: message.role }
-        child.session.append('user/message', revisionMessage(target, edit.content, randomUUID()),
-          revisionSurface(child.session, target, readMessageEdits(child.session.snapshotEvents())))
-      }
-      const selection = this._selection(events, agent)
-      await this.ctx.sessionController.selectModel({ sessionId: child.id,
-        provider: selection.provider, model: selection.model,
-        ...(selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort }) })
-      signal.throwIfAborted()
-    } catch (error) {
-      throw new Error(`Ветка ${child.id} сохранена, но модель не выбрана. Откройте её в истории чатов.`, { cause: error })
-    }
-    return child
+      editModes: ['current', 'branch'], editRunsModel: false, regenerateMode: 'current', regenerateKeepsVariants: true,
+      canDelete: true, regenerateError }
   }
 
   _selection(events, agent) {
@@ -141,8 +120,11 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
         const event = events[edit.targetSeq]
         const message = event.type === 'user/message' ? event.data : event.data.message
         const inheritedTarget = { event, message, role: message.role }
-        projection.append('user/message', revisionMessage(inheritedTarget, edit.content, randomUUID()),
-          revisionSurface(projection, inheritedTarget, readMessageEdits(projection.snapshotEvents())))
+        const surface = revisionSurface(projection, inheritedTarget, readMessageEdits(projection.snapshotEvents()))
+        projection.append('user/message', edit.deleted
+          ? removalMessage(inheritedTarget, randomUUID(), edit.reason, surface.surfaceOp === 'append')
+          : edit.restored ? restorationMessage(inheritedTarget, edit.content, randomUUID())
+            : revisionMessage(inheritedTarget, edit.content, randomUUID()), surface)
       }
       seed.splice(0, seed.length, ...projection.snapshotEvents())
     }
@@ -187,6 +169,7 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
       this._idle(agent)
       const target = await this._target(agent, seq)
       signal.throwIfAborted()
+      this._idle(agent)
       const content = editedContent(target.message.content, text)
       if (text === target.text) return { sessionId, changed: false }
       if (mode === 'branch') {
@@ -195,7 +178,56 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
       const edits = readMessageEdits(agent.session.snapshotEvents())
       agent.session.append('user/message', revisionMessage(target, content, randomUUID()), revisionSurface(agent.session, target, edits))
       await this.ctx.sessions.flush(agent.session)
-      return { sessionId: agent.id, changed: true, edits: readMessageEdits(agent.session.snapshotEvents()) }
+      return this._changed(agent)
+    })
+  }
+
+  _regeneration(agent, target) {
+    const edits = readMessageEdits(target.events)
+    const input = regenerationInput(target.events, target.event.seq, edits)
+    const events = this._activeSuffix(agent, target.events, input.seq, edits)
+    return { input, events, edits }
+  }
+
+  _activeSuffix(agent, history, fromSeq, edits) {
+    const events = history.filter(event => event.seq >= fromSeq && !edits[event.seq]?.deleted
+      && (event.type === 'assistant/message' || event.type === 'tool/result' || humanMessage(event)))
+    // A summary cannot be split back into individual replies without inventing its contents.
+    for (const event of events) {
+      const message = event.type === 'user/message' ? event.data : event.data.message
+      if (revisionSurface(agent.session, { event, message }, edits).surfaceOp === 'append') {
+        throw new Error('Это продолжение уже сжато. Повторите более новый ответ или создайте ветку перед сжатием.')
+      }
+    }
+    return events
+  }
+
+  _changed(agent) {
+    const events = agent.session.snapshotEvents()
+    const edits = readMessageEdits(events)
+    return { sessionId: agent.id, changed: true, edits, variants: this._variants(events, edits) }
+  }
+
+  _remove(session, event, edits, reason, greeting = false) {
+    const message = event.type === 'user/message' ? event.data : event.data.message
+    const target = { event, message, role: message.role, greeting }
+    const surface = revisionSurface(session, target, edits)
+    session.append('user/message', removalMessage(target, randomUUID(), reason, surface.surfaceOp === 'append'), surface)
+  }
+
+  async remove(sessionId, seq) {
+    const agent = await this._resolveAgent(sessionId)
+    return this._maintain(agent, async signal => {
+      const target = await this._target(agent, seq)
+      signal.throwIfAborted()
+      this._idle(agent)
+      const edits = readMessageEdits(target.events)
+      const range = replyProcessRange(target.events, seq)
+      const related = target.role === 'assistant' ? target.events.filter(event => event.seq >= range.startSeq && event.seq <= range.endSeq
+        && ['assistant/message', 'tool/result'].includes(event.type) && !edits[event.seq]?.deleted) : [target.event]
+      for (const event of related) this._remove(agent.session, event, edits, 'delete', target.greeting && event.seq === seq)
+      await this.ctx.sessions.flush(agent.session)
+      return this._changed(agent)
     })
   }
 
@@ -205,15 +237,56 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
       this._idle(agent)
       const target = await this._target(agent, seq)
       if (target.role !== 'assistant' || target.greeting) throw new Error('Авторское приветствие нельзя генерировать заново.')
-      const input = regenerationInput(target.events, seq)
-      const child = await this._fork(agent, input.seq - 1, signal)
-      try {
-        child.followup({ ...revisedMessage(input, readMessageEdits(target.events)), id: randomUUID(), source: { kind: 'user' } })
-        await this.ctx.sessions.flush(child.session)
-      } catch (error) {
-        throw new Error(`Ветка ${child.id} сохранена. Откройте её в истории чатов, чтобы продолжить.`, { cause: error })
+      const { input, events, edits } = this._regeneration(agent, target)
+      const message = { ...revisedMessage(input, edits), id: randomUUID(), source: { kind: 'user' } }
+      signal.throwIfAborted()
+      this._idle(agent)
+      const group = readAnswerVariants(target.events, edits).find(group => group.replySeq === seq)
+      const previous = variantSnapshot(group?.selectedId ?? String(seq), seq, events, edits,
+        event => edits[event.seq] ? revisedMessage(event, edits) : agent.session.deriveEventMessage(event))
+      agent.session.append('user/message', variantMessage({ action: 'regenerate', groupId: group?.groupId ?? seq,
+        previous, nextId: message.id }, randomUUID()), { surfaceOp: 'append' })
+      for (const event of events) this._remove(agent.session, event, edits, 'regenerate')
+      // Persist the replacement context before waking the same Agent behind maintenance.
+      await this.ctx.sessions.flush(agent.session)
+      signal.throwIfAborted()
+      this._idle(agent)
+      agent.followup(message)
+      return this._changed(agent)
+    })
+  }
+
+  async selectVariant(sessionId, seq, index) {
+    const agent = await this._resolveAgent(sessionId)
+    return this._maintain(agent, async signal => {
+      if (!(await this.characters.state(sessionId))?.character) throw new Error('Выберите чат персонажа.')
+      signal.throwIfAborted()
+      this._idle(agent)
+      const history = agent.session.snapshotEvents()
+      const edits = readMessageEdits(history)
+      const group = readAnswerVariants(history, edits).find(group => group.replySeq === seq || group.groupId === seq)
+      const ready = group?.variants.filter(variant => variant.replySeq !== null)
+      if (!Number.isSafeInteger(seq) || !Number.isSafeInteger(index) || index < 0 || !ready?.[index]) {
+        throw new TypeError('Вариант ответа не найден.')
       }
-      return { sessionId: child.id, changed: true }
+      const selected = ready[index]
+      if (selected.id === group.selectedId) return { sessionId, changed: false }
+      const fromSeq = Math.min(...group.variants.flatMap(variant => variant.entries.map(entry => entry.seq)))
+      const current = this._activeSuffix(agent, history, fromSeq, edits)
+      const previous = variantSnapshot(group.selectedId, group.replySeq, current, edits,
+        event => edits[event.seq] ? revisedMessage(event, edits) : agent.session.deriveEventMessage(event))
+      agent.session.append('user/message', variantMessage({ action: 'select', groupId: group.groupId, previous,
+        selectedId: selected.id }, randomUUID()), { surfaceOp: 'append' })
+      for (const event of current) this._remove(agent.session, event, edits, 'regenerate')
+      for (const entry of selected.entries) {
+        const event = history[entry.seq]
+        const message = entry.message
+        const target = { event, message, role: message.role }
+        agent.session.append('user/message', restorationMessage(target, message.content, randomUUID()),
+          { surfaceOp: 'append' })
+      }
+      await this.ctx.sessions.flush(agent.session)
+      return this._changed(agent)
     })
   }
 }

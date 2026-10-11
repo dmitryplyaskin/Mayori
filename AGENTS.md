@@ -13,6 +13,7 @@ Mayori is an engine for role-playing, creative writing, collaborative storytelli
 - Deployment-varying choices belong in validated `Config` fields.
 - Use ESM, keep files newline-terminated, and preserve the user's creative control. In role-playing, preserve player agency unless the user explicitly delegates it.
 - Update tests and the affected guide with every behavior change.
+- Keep UI copy short and concrete. Do not add explanatory filler, technical narration, or unsolicited warnings to routine actions. Repeat an answer immediately, without a confirmation dialog. Message deletion needs only a short confirmation question and Cancel/Delete buttons; no message preview or explanatory paragraphs.
 - Every icon-only action in the chat must have a visible hover/focus tooltip and an accessible name. Use the shared IconButton / native DSH Tooltip; a title attribute alone is not enough. Match neighboring native controls' placement, delays, shortcuts and portal behavior; enable portal only when containment requires it. Apply the same convention to other Mayori icon actions.
 
 ## Source layout

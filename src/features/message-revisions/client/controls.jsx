@@ -3,11 +3,12 @@ import { createPortal } from 'react-dom'
 import { Select } from '../../../client/components/select.jsx'
 import { branchRows } from '../domain/revisions.js'
 import { IconButton } from '../../../client/components/icon-button.jsx'
-import { assertSafeEdit } from './revisions.js'
+import { assertSafeEdit, assertCurrentRegeneration } from './revisions.js'
 
-function RevisionIcon({ repeat }) {
+function RevisionIcon({ repeat, remove }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-    {repeat ? <><path d="M20 7v5h-5" /><path d="M20 12a8 8 0 1 0-2.3 5.7M20 12l-3-4" /></>
+    {remove ? <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></>
+      : repeat ? <><path d="M20 7v5h-5" /><path d="M20 12a8 8 0 1 0-2.3 5.7M20 12l-3-4" /></>
       : <><path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15v5Z" /></>}
   </svg>
 }
@@ -72,8 +73,13 @@ export function MessageRevisionControls({ revisions, seq, canRepeat, useSession 
       const value = await revisions.inspect(seq)
       if (revision !== epoch.current) return
       if (mode === 'edit') assertSafeEdit(value)
-      if (mode === 'regenerate' && !value.canRegenerate) throw new Error('У этой реплики нет хода игрока для повторной генерации.')
-      setText(value.text); setEditor({ mode, ...value })
+      if (mode === 'regenerate') {
+        assertCurrentRegeneration(value)
+        if (!value.canRegenerate) throw new Error(value.regenerateError || 'У этой реплики нет хода игрока для повторной генерации.')
+      }
+      if (mode === 'delete' && !value.canDelete) throw new Error('Перезапустите Mayori и обновите страницу для удаления сообщений.')
+      if (mode === 'regenerate') await revisions.regenerate(seq)
+      else { setText(mode === 'edit' ? value.text : ''); setEditor({ mode, ...value }) }
     } catch (failure) { if (revision === epoch.current) setError(failure.message) }
     finally { pending.current = false; if (revision === epoch.current) setLoading(false) }
   }
@@ -87,7 +93,7 @@ export function MessageRevisionControls({ revisions, seq, canRepeat, useSession 
     const revision = epoch.current
     try {
       if (editor.mode === 'edit') await revisions.edit(seq, text, event.nativeEvent?.submitter?.value === 'branch' ? 'branch' : 'current')
-      else await revisions.regenerate(seq)
+      else await revisions.remove(seq)
       if (revision === epoch.current) dialog.current?.close()
     } catch (failure) { if (revision === epoch.current) setError(failure.message) }
     finally { pending.current = false }
@@ -96,41 +102,40 @@ export function MessageRevisionControls({ revisions, seq, canRepeat, useSession 
     <span className="mayori-message-actions">
       <IconButton label="Редактировать" aria-haspopup="dialog" aria-disabled={busy || undefined}
         onClick={event => { void open('edit', event.currentTarget) }}><RevisionIcon /></IconButton>
-      {canRepeat && <IconButton label="Повторить ответ" aria-haspopup="dialog" aria-disabled={busy || undefined}
+      {canRepeat && <IconButton label="Повторить ответ" aria-disabled={busy || undefined}
         onClick={event => { void open('regenerate', event.currentTarget) }}><RevisionIcon repeat /></IconButton>}
+      <IconButton label="Удалить сообщение" aria-haspopup="dialog" aria-disabled={busy || undefined}
+        onClick={event => { void open('delete', event.currentTarget) }}><RevisionIcon remove /></IconButton>
       <span className="mayori-revision-status" role="status">{loading ? 'Загружаем реплику…' : snapshot.busy ? 'Сохраняем…' : ''}</span>
     </span>
     {error && !editor && <p role="alert" className="mayori-error">{error}</p>}
-    {editor && createPortal(<dialog ref={dialog} className="mayori-message-editor" aria-labelledby={titleId}
+    {editor && createPortal(<dialog ref={dialog} className={`mayori-message-editor${editor.mode === 'delete' ? ' mayori-message-confirm' : ''}`} aria-labelledby={titleId}
       onCancel={event => { if (snapshot.busy) event.preventDefault() }}
       onKeyDown={event => { event.stopPropagation() }}
       onClose={() => { setEditor(null); setError('') }}>
       <form onSubmit={submit}>
-        <h2 id={titleId}>{editor.mode === 'edit' ? 'Редактировать сообщение' : 'Повторить ответ'}</h2>
-        <p>{editor.mode === 'edit' ? 'Сохраните правку в текущем чате или создайте ветку с исправленной репликой. Модель не будет отвечать автоматически.'
-          : 'Продолжение откроется в новой ветке от этой реплики. Исходный чат сохранится.'}</p>
-        {editor.mode === 'edit' ? <>
+        <h2 id={titleId}>{editor.mode === 'edit' ? 'Редактировать сообщение' : 'Удалить сообщение?'}</h2>
+        {editor.mode === 'edit' && <>
           <label htmlFor={textId}>{editor.role === 'user' ? 'Реплика игрока' : 'Реплика персонажа'}</label>
           <textarea ref={field} id={textId} autoFocus value={text} disabled={snapshot.busy}
             aria-invalid={error && !text.trim() ? true : undefined} aria-describedby={error ? errorId : undefined}
             onChange={event => { setText(event.target.value); setError('') }}
             onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); event.currentTarget.form.requestSubmit() } }} />
-        </> : <p>Модель заново ответит на реплику игрока. Инструменты выполнятся снова, и результаты игровых бросков могут измениться.</p>}
+        </>}
         {error && <p id={errorId} role="alert" className="mayori-error">{error}</p>}
-        <p role="status">{snapshot.busy ? 'Сохраняем…' : ''}</p>
         <div className="mayori-message-editor-actions">
-          <button type="button" disabled={snapshot.busy} onClick={close}>Отмена</button>
+          <button type="button" autoFocus={editor.mode === 'delete'} disabled={snapshot.busy} onClick={close}>Отмена</button>
           {editor.mode === 'edit' ? <>
             <button type="submit" value="current" disabled={busy}>Сохранить в чате</button>
             <button type="submit" value="branch" disabled={busy}>Создать ветку</button>
-          </> : <button type="submit" autoFocus disabled={busy}>Повторить ответ</button>}
+          </> : <button type="submit" disabled={busy}>{snapshot.busy ? 'Удаляем…' : 'Удалить'}</button>}
         </div>
       </form>
     </dialog>, document.body)}
   </>
 }
 
-/** The DSH catalog retains original and regenerated branches across reload and restart. */
+/** The DSH catalog retains explicitly authored branches across reload and restart. */
 export function RevisionBranchNavigation({ sessionId, sessions, open }) {
   const snapshot = useSyncExternalStore(sessions.list.subscribe, sessions.list.getSnapshot, sessions.list.getSnapshot)
   const rows = branchRows(snapshot, sessionId)

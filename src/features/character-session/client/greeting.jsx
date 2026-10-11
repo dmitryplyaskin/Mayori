@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { remapChildProps } from '../../../client/infrastructure/slot-mirror.js'
 import { AssistantRevisionActions } from '../../message-revisions/client/controls.jsx'
-import { editedNode } from '../../message-revisions/client/message.js'
+import { editedNode, removedNode } from '../../message-revisions/client/message.js'
 import { IconButton } from '../../../client/components/icon-button.jsx'
 
 /** Keep the shipped Markdown renderer; only authored greetings use the Host view. */
@@ -49,6 +49,7 @@ export function GreetingTurnTail({ stock: Stock, stockChildren, childPrefix, cha
     revisions?.getSnapshot ?? (() => null), revisions?.getSnapshot ?? (() => null))
   const activity = props.useSession?.(state => state.running || (state.pendingSubmissions?.length ?? 0) > 0)
   useEffect(() => { void revisions?.refresh?.() }, [revisions, activity])
+  if (removedNode(props.node, revisionSnapshot?.edits)) return null
   mapped.node = editedNode(props.node, revisionSnapshot?.edits)
   const render = mapped.renderSlot
   mapped.renderSlot = (name, owner, options) => name === 'conversation.chat.assistant-actions'
