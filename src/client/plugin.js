@@ -282,7 +282,7 @@ export function apply(ctx) {
         name: 'conversation.session.header', priority: -100,
         store: stock.store, locale: stock.locale, children: mirroredChildren(stock.children, prefix),
         inject: (...args) => ({ ...stock.inject?.(...args), stock: stock.component, stockChildren: stock.children, childPrefix: prefix,
-          revisionNavigation: RevisionBranchNavigation, revisionNavigationProps: { sessions: ctx.sessions, open: id => ctx.uiWorkspace.openSession(id) } }),
+          revisionNavigation: RevisionBranchNavigation, revisionNavigationProps: { sessions: { list: history }, open: history.open } }),
       }, TrajectorySessionHeader))
       for (const name of Object.keys(stock.children ?? {})) disposers.push(mirrorSlot(ctx, name, `${prefix}.${name}`))
     }

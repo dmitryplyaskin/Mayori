@@ -48,6 +48,8 @@ pnpm run bundle
 
 ## Проверка в локальном DSH
 
+`node scripts/browser-history-smoke.js <URL-test-Host> [output-directory]` проверяет поиск, фильтры, сортировку, удаление с отменой и подтверждением, Escape/фокус, повторную загрузку и ширины 1280/390/320 px в изолированном профиле с `storage-isolation-probe` из скрипта ниже. Используйте полный стартовый URL DSH для авторизации. Требуется Playwright (при необходимости задайте `MAYORI_PLAYWRIGHT_PATH` и `MAYORI_CHROMIUM_PATH`). Скрипт создаёт собственные тестовые карточки и чаты; используйте только временное хранилище. `storage-isolation-smoke.js` также проверяет HTTP-удаление и сохранение tombstones после перезапуска Host.
+
 `node scripts/storage-isolation-smoke.js <dsh-cli-bin.js>` устанавливает checkout
 через публичный CLI в временный профиль, проверяет `--dump-config` и запускает
 Mayori рядом с обычной Web-композицией. Оба профиля создают настоящие чаты в

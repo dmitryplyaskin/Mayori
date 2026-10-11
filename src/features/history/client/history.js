@@ -11,6 +11,7 @@ export class ChatHistoryService {
   subscribeArchive() { throw new Error('ChatHistoryService.subscribeArchive() is not implemented') }
   archive() { throw new Error('ChatHistoryService.archive() is not implemented') }
   restore() { throw new Error('ChatHistoryService.restore() is not implemented') }
+  remove() { throw new Error('ChatHistoryService.remove() is not implemented') }
   details() { throw new Error('ChatHistoryService.details() is not implemented') }
 }
 
@@ -24,17 +25,54 @@ export class SessionChatHistoryProvider extends ChatHistoryService {
     this.cache = new ByteCache()
     this.pending = new Map()
     this.revision = 0
+    this.deletedIds = []
+    this.deletionPhase = 'pending'
+    this.listeners = new Set()
   }
 
-  getSnapshot = () => this.sessions.list.getSnapshot()
-  subscribe = listener => this.sessions.list.subscribe(listener)
-  refresh = () => { this.revision++; this.cache.clear(); return this.sessions.refresh() }
-  ensureLoaded = () => this.getSnapshot().phase === 'ready' && this.getSnapshot().state !== 'error' ? Promise.resolve() : this.sessions.refresh()
-  open = id => this.uiWorkspace.openSession(id)
+  getSnapshot = () => {
+    const source = this.sessions.list.getSnapshot()
+    if (this.source !== source || this.filteredIds !== this.deletedIds || this.phase !== this.deletionPhase) {
+      const deleted = new Set(this.deletedIds)
+      this.source = source; this.filteredIds = this.deletedIds; this.phase = this.deletionPhase
+      this.snapshot = { ...source, phase: this.deletionPhase === 'pending' ? 'pending' : source.phase,
+        state: this.deletionPhase === 'error' ? 'error' : source.state,
+        ids: this.deletionPhase === 'ready' ? source.ids.filter(id => !deleted.has(id)) : [] }
+    }
+    return this.snapshot
+  }
+  subscribe = listener => {
+    this.listeners.add(listener)
+    const unsubscribe = this.sessions.list.subscribe(listener)
+    return () => { this.listeners.delete(listener); unsubscribe() }
+  }
+  publishDeleted = ids => {
+    if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string')) throw new Error('Некорректный список удалённых чатов.')
+    this.deletedIds = [...new Set([...this.deletedIds, ...ids])]
+    this.deletionPhase = 'ready'; this.listeners.forEach(listener => listener())
+  }
+  refresh = async () => {
+    this.revision++; this.cache.clear()
+    try {
+      const [ids] = await Promise.all([call('history-deleted', {}), this.sessions.refresh()])
+      this.publishDeleted(ids)
+    } catch (error) {
+      if (this.deletionPhase !== 'ready') { this.deletionPhase = 'error'; this.listeners.forEach(listener => listener()) }
+      throw error
+    }
+  }
+  ensureLoaded = () => this.getSnapshot().phase === 'ready' && this.getSnapshot().state !== 'error' ? Promise.resolve() : this.refresh()
+  assertAvailable = id => { if (this.deletedIds.includes(id)) throw new Error('Чат удалён.') }
+  open = async id => { this.assertAvailable(id); return this.uiWorkspace.openSession(id) }
   getArchiveSnapshot = () => this.workspaces.list.getSnapshot()
   subscribeArchive = listener => this.workspaces.list.subscribe(listener)
   archive = id => this.uiWorkspace.archiveSession(id)
-  restore = id => this.uiWorkspace.unarchiveSession(id)
+  restore = async id => { this.assertAvailable(id); return this.uiWorkspace.unarchiveSession(id) }
+  remove = async id => {
+    await this.uiWorkspace.archiveSession(id)
+    const ids = await call('history-remove', { id })
+    this.revision++; this.cache.clear(); this.publishDeleted(ids)
+  }
   details = async (ids, options = {}) => {
     const snapshot = this.getSnapshot()
     const revision = this.revision
@@ -56,22 +94,29 @@ export class SessionChatHistoryProvider extends ChatHistoryService {
     }
     return { ...result, ...await this.pending.get(requestKey) }
   }
-  dispose() { this.revision++; this.cache.clear() }
+  dispose() { this.revision++; this.cache.clear(); this.listeners.clear() }
 }
 
 /** Flatten all campaigns, retain ordinary forks, omit agent children and blanks. */
-export function historyRows(snapshot, query = '', archivedSessionIds = [], archivedOnly = false, limit = Infinity) {
+export function historyRows(snapshot, query = '', archivedSessionIds = [], archivedOnly = false, limit = Infinity, options = {}) {
   const needle = query.trim().toLocaleLowerCase('ru')
   const archived = new Set(archivedSessionIds)
   const rows = []
-  const order = (a, b) => b.updatedAt - a.updatedAt || a.id.localeCompare(b.id)
+  const order = (a, b) => (options.sort === 'oldest' ? a.updatedAt - b.updatedAt
+    : options.sort === 'title-asc' ? a.title.localeCompare(b.title, 'ru')
+    : options.sort === 'title-desc' ? b.title.localeCompare(a.title, 'ru')
+    : b.updatedAt - a.updatedAt) || a.id.localeCompare(b.id)
   for (const id of snapshot.ids) {
     const row = snapshot.byId[id]
     if (!row || row.origin === 'subagent' || (row.blank && !row.title?.trim())) continue
-    if (archived.has(id) !== archivedOnly) continue
+    if (options.status !== 'all' && archived.has(id) !== archivedOnly) continue
+    const current = row.retainedBy?.mainView > 0
+    if (options.kind === 'current' && !current || options.kind === 'branches' && !row.parentId
+      || options.kind === 'originals' && row.parentId || options.kind === 'running' && !row.running) continue
+    if (options.since !== undefined && row.updatedAt < options.since) continue
     const title = row.title?.trim() || 'Чат без названия'
     if (needle && !`${title}\n${id}`.toLocaleLowerCase('ru').includes(needle)) continue
-    rows.push({ id, title, updatedAt: row.updatedAt, current: row.retainedBy?.mainView > 0 })
+    rows.push({ id, title, updatedAt: row.updatedAt, current, archived: archived.has(id) })
     if (Number.isFinite(limit)) { rows.sort(order); if (rows.length > limit) rows.pop() }
   }
   return Number.isFinite(limit) ? rows : rows.sort(order)

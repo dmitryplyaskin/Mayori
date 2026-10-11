@@ -7,7 +7,7 @@ const ROUTE_PATH = '/mayori/characters'
 const message = error => error instanceof Error ? error.message : String(error)
 
 /** Adapt HTTP requests to already constructed capability services. */
-export function createMayoriRoute({ library, personas, presets, sessionPresets, characterSessions, trajectoryContext, historyDetails, messageRevisions, media }) {
+export function createMayoriRoute({ library, personas, presets, sessionPresets, characterSessions, trajectoryContext, historyDetails, chatDeletion, messageRevisions, media }) {
   const route = {
     kind: 'prefix',
     path: ROUTE_PATH,
@@ -48,6 +48,8 @@ export function createMayoriRoute({ library, personas, presets, sessionPresets, 
         if (endpoint === 'list') sendJson(res, 200, { ok: true, value: await library.query(payload ?? {}) })
         else if (endpoint === 'get') sendJson(res, 200, { ok: true, value: await library.get(payload?.id) })
         else if (endpoint === 'history-details') sendJson(res, 200, { ok: true, value: await historyDetails.read(payload?.ids) })
+        else if (endpoint === 'history-deleted') sendJson(res, 200, { ok: true, value: await chatDeletion.list() })
+        else if (endpoint === 'history-remove') sendJson(res, 200, { ok: true, value: await chatDeletion.remove(payload?.id) })
         else if (endpoint === 'persona-list') sendJson(res, 200, { ok: true, value: await personas.list() })
         else if (endpoint === 'persona-save') sendJson(res, 200, { ok: true, value: await personas.save(payload) })
         else if (endpoint === 'preset-list') sendJson(res, 200, { ok: true, value: await presets.list() })

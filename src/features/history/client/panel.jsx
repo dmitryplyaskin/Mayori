@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
+import { Select } from '../../../client/components/select.jsx'
 import { historyRows } from './history.js'
 import { paginate } from '../../../client/components/pagination-model.js'
 import { Pagination } from '../../../client/components/pagination.jsx'
@@ -47,21 +49,39 @@ export function HistoryRow({ row, detail, loading, disabled, onOpen }) {
 export function ChatHistoryPanel({ history }) {
   const snapshot = useSyncExternalStore(history.subscribe, history.getSnapshot, history.getSnapshot)
   const archiveSnapshot = useSyncExternalStore(history.subscribeArchive, history.getArchiveSnapshot, history.getArchiveSnapshot)
-  const [archivedOnly, setArchivedOnly] = useState(false)
+  const [status, setStatus] = useState('active')
+  const [kind, setKind] = useState('all')
+  const [period, setPeriod] = useState('all')
+  const [sort, setSort] = useState('recent')
+  const archivedOnly = status === 'archived'
   const [changingId, setChangingId] = useState(null)
   const changingRef = useRef(false)
-  const archiveToggleRef = useRef(null)
+  const controlsRef = useRef(null)
+  const [removing, setRemoving] = useState(null)
+  const dialogRef = useRef(null)
+  const triggerRef = useRef(null)
+  const dialogTitle = useId()
   const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
-  useEffect(() => { setPage(1) }, [query, archivedOnly, pageSize])
+  useEffect(() => { setPage(1) }, [query, status, kind, period, sort, pageSize])
   const [error, setError] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [detailsRevision, setDetailsRevision] = useState(0)
   useEffect(() => {
-    if (notice && changingId === null) archiveToggleRef.current?.focus()
+    if (notice && changingId === null) controlsRef.current?.focus()
   }, [notice, changingId])
+  useEffect(() => {
+    if (removing) dialogRef.current?.showModal()
+  }, [removing])
+  const closeRemoval = () => {
+    if (changingRef.current) return
+    dialogRef.current?.close()
+    setRemoving(null)
+    if (triggerRef.current?.isConnected) triggerRef.current.focus()
+    else controlsRef.current?.focus()
+  }
   useEffect(() => {
     let active = true
     setRefreshing(true)
@@ -84,50 +104,96 @@ export function ChatHistoryPanel({ history }) {
   }
   const changeArchive = async row => {
     if (changingRef.current) return
-    if (!archivedOnly && !window.confirm(`Убрать чат «${row.title}» в архив? Переписка сохранится, и чат можно будет восстановить.`)) return
+    if (!row.archived && !window.confirm(`Убрать чат «${row.title}» в архив?`)) return
     changingRef.current = true
     setChangingId(row.id)
     setError(null)
     setNotice('')
     try {
-      if (archivedOnly) await history.restore(row.id)
+      if (row.archived) await history.restore(row.id)
       else await history.archive(row.id)
-      setNotice(archivedOnly ? `Чат «${row.title}» восстановлен.` : `Чат «${row.title}» перемещён в архив.`)
+      setNotice(row.archived ? 'Чат восстановлен.' : 'Чат перемещён в архив.')
     } catch (failure) {
       setError(failure?.rpcError?.code === 'workspace/session-active'
         ? 'Чат ещё выполняет работу. Дождитесь завершения или остановите её в чате, затем повторите.'
-        : archivedOnly ? 'Не удалось восстановить чат. Попробуйте ещё раз.' : 'Не удалось переместить чат в архив. Попробуйте ещё раз.')
+        : row.archived ? 'Не удалось восстановить чат.' : 'Не удалось переместить чат в архив.')
     } finally {
       changingRef.current = false
       setChangingId(null)
     }
   }
+  const remove = async event => {
+    event.preventDefault()
+    if (changingRef.current || !removing) return
+    changingRef.current = true
+    setChangingId(removing.id); setError(null); setNotice('')
+    try {
+      await history.remove(removing.id)
+      setRemoving(null); setNotice('Чат удалён.')
+    } catch (failure) {
+      setError(failure?.rpcError?.code === 'workspace/session-active'
+        ? 'Чат ещё выполняет работу. Дождитесь завершения.' : failure.message || 'Не удалось удалить чат.')
+    } finally { changingRef.current = false; setChangingId(null) }
+  }
   const loading = refreshing || snapshot.phase === 'pending' || archiveSnapshot.phase === 'pending'
   const rows = useMemo(() => archiveSnapshot.phase === 'ready'
-    ? historyRows(snapshot, query, archiveSnapshot.archivedSessionIds, archivedOnly) : [], [snapshot, query, archiveSnapshot, archivedOnly])
+    && archiveSnapshot.state !== 'error'
+    ? historyRows(snapshot, query, archiveSnapshot.archivedSessionIds, archivedOnly, Infinity, {
+      status, kind, sort, since: period === 'all' ? undefined : Date.now() - Number(period) * 86400000,
+    }) : [], [snapshot, query, archiveSnapshot, archivedOnly, status, kind, sort, period])
   const pagination = paginate(rows, page, pageSize)
   const details = useHistoryDetails(history, pagination.items, detailsRevision)
   return <section className="mayori-history-panel" aria-labelledby="mayori-history-title">
     <header className="mayori-history-header">
       <h2 id="mayori-history-title">История чатов</h2>
       <div className="mayori-history-controls">
-        <label><input ref={archiveToggleRef} type="checkbox" checked={archivedOnly} disabled={changingId !== null} onChange={event => { setArchivedOnly(event.target.checked); setError(null); setNotice('') }} />Архив</label>
-        <button type="button" className="mayori-secondary-button" disabled={refreshing} onClick={() => { void refresh() }}>Обновить</button>
+        <button ref={controlsRef} type="button" className="mayori-secondary-button" disabled={refreshing || changingId !== null} onClick={() => { void refresh() }}>Обновить</button>
       </div>
     </header>
     <label className="mayori-search">Поиск по названию или ID чата
       <input type="search" value={query} onChange={event => { setQuery(event.target.value) }} placeholder="Например, имя персонажа" />
     </label>
+    <div className="mayori-history-filters">
+      <label>Статус<Select aria-label="Статус чатов" value={status} disabled={changingId !== null} onChange={setStatus} options={[
+        { value: 'active', label: 'Без архива' }, { value: 'archived', label: 'Архив' }, { value: 'all', label: 'Все чаты' },
+      ]} /></label>
+      <label>Чаты<Select aria-label="Тип чатов" value={kind} onChange={setKind} options={[
+        { value: 'all', label: 'Все' }, { value: 'current', label: 'Открытые' }, { value: 'running', label: 'В работе' },
+        { value: 'branches', label: 'Ветки' }, { value: 'originals', label: 'Без веток' },
+      ]} /></label>
+      <label>Активность<Select aria-label="Период активности" value={period} onChange={setPeriod} options={[
+        { value: 'all', label: 'За всё время' }, { value: '1', label: 'За 24 часа' }, { value: '7', label: 'За 7 дней' }, { value: '30', label: 'За 30 дней' },
+      ]} /></label>
+      <label>Сортировка<Select aria-label="Сортировка чатов" value={sort} onChange={setSort} options={[
+        { value: 'recent', label: 'Сначала недавние' }, { value: 'oldest', label: 'Сначала давние' },
+        { value: 'title-asc', label: 'Название: А–Я' }, { value: 'title-desc', label: 'Название: Я–А' },
+      ]} /></label>
+    </div>
     <p role="status">{loading ? 'Загружаем историю…' : notice || `Найдено чатов: ${rows.length}`}</p>
     {archiveSnapshot.state === 'error' && <p role="alert" className="mayori-error">Не удалось загрузить состояние архива. Проверьте соединение и перезагрузите страницу.</p>}
-    {error && <p role="alert" className="mayori-error">{error}</p>}
-    {!loading && !error && archiveSnapshot.state !== 'error' && rows.length === 0 && <p>{query.trim() ? 'Ничего не найдено. Измените запрос или очистите поиск.' : archivedOnly ? 'В архиве пока нет чатов.' : 'Чатов пока нет. Выберите персонажа и нажмите «Играть» или восстановите чат из архива.'}</p>}
+    {error && !removing && <p role="alert" className="mayori-error">{error}</p>}
+    {!loading && !error && archiveSnapshot.state !== 'error' && rows.length === 0 && <p>{query.trim() || kind !== 'all' || period !== 'all' ? 'Чаты не найдены. Измените фильтры или поиск.' : archivedOnly ? 'В архиве пока нет чатов.' : 'Чатов пока нет.'}</p>}
     <ul className="mayori-history-list">{pagination.items.map(row => <li key={row.id} className="mayori-history-item">
       <HistoryRow row={row} detail={details.value[row.id]} loading={details.loading} disabled={changingId === row.id} onOpen={open} />
-      <button type="button" className="mayori-secondary-button" disabled={changingId !== null || archiveSnapshot.state === 'error'} aria-label={`${archivedOnly ? 'Восстановить чат' : 'В архив — чат'} «${row.title}»`} onClick={() => { void changeArchive(row) }}>
-        {changingId === row.id ? 'Сохраняем…' : archivedOnly ? 'Восстановить' : 'В архив'}
-      </button>
+      <div className="mayori-history-actions">
+        <button type="button" className="mayori-secondary-button" disabled={changingId !== null || archiveSnapshot.state === 'error'} aria-label={`${row.archived ? 'Восстановить чат' : 'В архив — чат'} «${row.title}»`} onClick={() => { void changeArchive(row) }}>
+          {changingId === row.id ? 'Сохраняем…' : row.archived ? 'Восстановить' : 'В архив'}
+        </button>
+        <button type="button" className="mayori-secondary-button" disabled={changingId !== null || archiveSnapshot.state === 'error'} aria-haspopup="dialog" aria-label={`Удалить чат «${row.title}»`}
+          onClick={event => { triggerRef.current = event.currentTarget; setError(null); setRemoving(row) }}>Удалить</button>
+      </div>
     </li>)}</ul>
     {rows.length > 0 && <Pagination pagination={pagination} total={rows.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />}
+    {removing && createPortal(<dialog ref={dialogRef} className="mayori-message-editor mayori-message-confirm" aria-labelledby={dialogTitle}
+      onCancel={event => { event.preventDefault(); closeRemoval() }} onKeyDown={event => event.stopPropagation()}>
+      <form onSubmit={remove}>
+        <h2 id={dialogTitle}>Удалить чат «{removing.title}»?</h2>
+        {error && <p role="alert" className="mayori-error">{error}</p>}
+        <div className="mayori-message-editor-actions">
+          <button type="button" autoFocus disabled={changingId !== null} onClick={closeRemoval}>Отмена</button>
+          <button type="submit" disabled={changingId !== null}>{changingId !== null ? 'Удаляем…' : 'Удалить'}</button>
+        </div>
+      </form>
+    </dialog>, document.body)}
   </section>
 }

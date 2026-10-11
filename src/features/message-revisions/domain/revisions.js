@@ -70,5 +70,5 @@ export function branchRows(snapshot, sessionId) {
   const root = rootOf(sessionId)
   return snapshot.ids.filter(id => rows[id]?.origin !== 'subagent' && rootOf(id) === root)
     .sort((a, b) => (a === root ? -1 : b === root ? 1 : (rows[a].updatedAt ?? 0) - (rows[b].updatedAt ?? 0) || a.localeCompare(b)))
-    .map((id, index) => ({ id, label: index === 0 ? 'Исходный чат' : `Ветка ${index} · ${rows[id].title?.trim() || 'Чат без названия'}` }))
+    .map((id, index) => ({ id, label: id === root ? 'Исходный чат' : `Ветка ${index + (snapshot.ids.includes(root) ? 0 : 1)} · ${rows[id].title?.trim() || 'Чат без названия'}` }))
 }

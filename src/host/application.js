@@ -8,6 +8,7 @@ import { buildDirectorPrompt } from './director.js'
 import { PersistentCharacterSessionProvider } from '../features/character-session/host/provider.js'
 import { SessionTrajectoryContextProvider } from '../features/trajectory/host/context.js'
 import { SessionHistoryDetailsProvider } from '../features/history/host/details.js'
+import { PersistentChatDeletionProvider } from '../features/history/host/deletion.js'
 import { SessionMessageRevisionProvider } from '../features/message-revisions/host/provider.js'
 import { createMayoriRoute } from './transport/routes.js'
 import { CryptoDiceProvider } from '../features/dice/host/provider.js'
@@ -42,10 +43,11 @@ export function registerHostCapabilities(ctx, config) {
     const sessionPresets = new LoggedSessionPresetProvider(consumerCtx, presets)
     const trajectoryContext = new SessionTrajectoryContextProvider(consumerCtx)
     const historyDetails = new SessionHistoryDetailsProvider(consumerCtx, campaignsPath, media, config.history)
+    const chatDeletion = new PersistentChatDeletionProvider(consumerCtx, campaignsPath)
     const messageRevisions = new SessionMessageRevisionProvider(consumerCtx, characterSessions)
     await characterSessions.restoreActiveAgents()
     await sessionPresets.restoreActiveAgents()
-    const route = createMayoriRoute({ library, personas, presets, sessionPresets, characterSessions, trajectoryContext, historyDetails, messageRevisions, media })
+    const route = createMayoriRoute({ library, personas, presets, sessionPresets, characterSessions, trajectoryContext, historyDetails, chatDeletion, messageRevisions, media })
     consumerCtx.effect(() => consumerCtx.webServer.register(route), 'mayori: character library route')
   })
   return library

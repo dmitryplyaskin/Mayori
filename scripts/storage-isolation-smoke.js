@@ -51,7 +51,7 @@ export function apply(ctx) {
       let created
       if (input.action === 'create') {
         const workspace = await ctx.workspaceRegistry.create(input.path)
-        created = await ctx.sessionController.create({ workspaceId: workspace.id })
+        created = { ...await ctx.sessionController.create({ workspaceId: workspace.id, sessionId: input.sessionId }), workspaceId: workspace.id }
         await ctx.sessionController.rename({ sessionId: created.sessionId, title: input.title })
         await ctx.sessions.flush(ctx.agents.get(created.sessionId).session)
       }
@@ -101,7 +101,7 @@ async function boot(profile) {
     await call({ action: 'stop' })
     await exited
   }
-  return { child, call }
+  return { child, call, url: origin }
 }
 
 async function stop(child) {
@@ -126,6 +126,15 @@ try {
   assert.match(dump, /mayoriStorage\.path\('sessions'\)/)
   assert.match(dump, /name: dsh-mayori\/storage/)
   const [mayori, coding] = await Promise.all([boot('mayori'), boot('coding')])
+  const historyRpc = async (server, endpoint, payload = {}) => {
+    const response = await fetch(new URL(`/mayori/characters/${endpoint}`, server.url), {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: new URL(server.url).origin, 'sec-fetch-site': 'same-origin' },
+      body: JSON.stringify(payload),
+    })
+    const result = await response.json()
+    assert.ok(response.ok && result.ok, JSON.stringify(result))
+    return result.value
+  }
   const rpg = await mayori.call({ action: 'create', path: workspace, title: 'RPG isolation' })
   const code = await coding.call({ action: 'create', path: workspace, title: 'Coding isolation' })
   const assertCatalog = (result, expected, excluded) => {
@@ -145,10 +154,14 @@ try {
   assert.equal(code.configs['session-persistence-jsonl'].root, join(home, 'sessions'))
   assert.notEqual(await readFile(join(dataRoot, 'storages', 'workspace.json'), 'utf8'),
     await readFile(join(home, 'storages', 'workspace.json'), 'utf8'))
+  assert.deepEqual(await historyRpc(mayori, 'history-deleted'), [])
+  assert.deepEqual(await historyRpc(mayori, 'history-remove', { id: rpg.created.sessionId }), [rpg.created.sessionId])
+  assert.deepEqual(await historyRpc(mayori, 'history-remove', { id: rpg.created.sessionId }), [rpg.created.sessionId])
   await Promise.all([stop(mayori.child), stop(coding.child)])
   const [resumedMayori, resumedCoding] = await Promise.all([boot('mayori'), boot('coding')])
   assertCatalog(await resumedMayori.call({}), rpg.created.sessionId, code.created.sessionId)
   assertCatalog(await resumedCoding.call({}), code.created.sessionId, rpg.created.sessionId)
+  assert.deepEqual(await historyRpc(resumedMayori, 'history-deleted'), [rpg.created.sessionId])
   console.log(JSON.stringify({ ok: true, home, sharedWorkspace: true, nativeLaunch: true, coldIsolation: true }))
 } finally {
   await Promise.all(processes.map(stop))

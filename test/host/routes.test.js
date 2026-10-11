@@ -57,7 +57,7 @@ test('HTTP adapter dispatches each existing endpoint to its owning capability wi
   const service = name => new Proxy({}, {
     get: (_target, method) => (...args) => { calls.push([name, method, args]); return `${name}.${method}` },
   })
-  const route = createMayoriRoute(Object.fromEntries(['library', 'personas', 'presets', 'sessionPresets', 'characterSessions', 'trajectoryContext', 'historyDetails', 'messageRevisions'].map(name => [name, service(name)])))
+  const route = createMayoriRoute(Object.fromEntries(['library', 'personas', 'presets', 'sessionPresets', 'characterSessions', 'trajectoryContext', 'historyDetails', 'chatDeletion', 'messageRevisions'].map(name => [name, service(name)])))
   const input = { id: 'resource', ids: ['session'], sessionId: 'session', characterId: 'character', workspaceId: 'workspace', greetingIndex: 1, index: 2, personaId: 'persona', presetId: 'preset', selection: 'current', seq: 9, text: 'Changed' }
   const cases = [
     ['list', 'library', 'query', [input], 'library.query'],
@@ -65,6 +65,8 @@ test('HTTP adapter dispatches each existing endpoint to its owning capability wi
     ['import', 'library', 'import', [input], 'library.import'],
     ['remove', 'library', 'remove', [input.id], { removed: true }],
     ['history-details', 'historyDetails', 'read', [input.ids], 'historyDetails.read'],
+    ['history-deleted', 'chatDeletion', 'list', [], 'chatDeletion.list'],
+    ['history-remove', 'chatDeletion', 'remove', [input.id], 'chatDeletion.remove'],
     ['persona-list', 'personas', 'list', [], 'personas.list'],
     ['persona-save', 'personas', 'save', [input], 'personas.save'],
     ['persona-remove', 'personas', 'remove', [input.id], { removed: true }],

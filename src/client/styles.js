@@ -290,6 +290,9 @@ html[data-platform=darwin] .mayori-navigation { background: transparent; padding
 .mayori-history-item > .mayori-secondary-button { flex: none; }
 .mayori-history-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 .mayori-history-controls label { display: flex; align-items: center; gap: 8px; }
+.mayori-history-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-block: 16px; }
+.mayori-history-filters > label { display: grid; gap: 6px; min-inline-size: 0; }
+.mayori-history-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .mayori-history-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; inline-size: 100%; padding: 16px 12px; border: 0; border-block-end: 1px solid var(--dsw-alias-border-l2); background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
 .mayori-history-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .mayori-history-row > span { min-inline-size: 0; overflow-wrap: anywhere; }
@@ -529,7 +532,7 @@ body[data-ds-dark-theme] .mayori-character-portrait img { outline-color: oklch(1
   .mayori-history-panel { padding: 16px; }
   .mayori-history-item { flex-wrap: wrap; gap: 4px; margin-block-end: 12px; }
   .mayori-history-item > .mayori-history-row { flex-basis: 100%; }
-  .mayori-history-item > .mayori-secondary-button { margin-inline-start: 64px; }
+  .mayori-history-actions { margin-inline-start: 56px; }
   .mayori-history-row { grid-template-columns: 44px minmax(0, 1fr); gap: 12px; padding-inline: 0; }
   .mayori-history-row .mayori-history-avatar { inline-size: 44px; block-size: 44px; }
   .mayori-history-row time { grid-column: 2; white-space: normal; }
