@@ -79,6 +79,21 @@ try {
     }
     const stockStyle = await tooltipStyle(tail.getByRole('button', { name: /^(Copy|Копировать)$/ }))
     const edit = tail.getByRole('button', { name: 'Редактировать', exact: true })
+    // A new browser paired with the pre-update Host must refuse a generating save.
+    const inspectPath = '**/mayori/characters/message-inspect'
+    await page.route(inspectPath, async route => {
+      const response = await route.fetch()
+      const body = await response.json()
+      delete body.value.editModes
+      delete body.value.editRunsModel
+      await route.fulfill({ response, json: body })
+    })
+    await edit.click()
+    await page.getByRole('alert').filter({ hasText: 'Перезапустите Mayori' }).waitFor()
+    assert.equal(await editor.count(), 0)
+    assert.equal((await rpc('/_mayori-smoke', { action: 'settle', sessionId: fixture.sessionId })).requestCount, original.requestCount)
+    await page.unroute(inspectPath)
+    await page.mouse.move(0, 0)
     assert.deepEqual(await tooltipStyle(edit), stockStyle, 'Custom actions match the neighboring native tooltip')
     assert.equal(stockStyle.side, 'bottom')
     assert.equal(stockStyle.portal, false)

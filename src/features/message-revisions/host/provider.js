@@ -75,7 +75,8 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
     if (target.role === 'assistant' && !target.greeting) {
       try { regenerationInput(target.events, seq); canRegenerate = true } catch {}
     }
-    return { seq, text: target.text, role: target.role, manual: target.manual, canRegenerate }
+    return { seq, text: target.text, role: target.role, manual: target.manual, canRegenerate,
+      editModes: ['current', 'branch'], editRunsModel: false }
   }
 
   async _fork(agent, atSeq, signal) {

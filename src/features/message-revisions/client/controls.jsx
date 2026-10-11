@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Select } from '../../../client/components/select.jsx'
 import { branchRows } from '../domain/revisions.js'
 import { IconButton } from '../../../client/components/icon-button.jsx'
+import { assertSafeEdit } from './revisions.js'
 
 function RevisionIcon({ repeat }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
@@ -70,6 +71,7 @@ export function MessageRevisionControls({ revisions, seq, canRepeat, useSession 
     try {
       const value = await revisions.inspect(seq)
       if (revision !== epoch.current) return
+      if (mode === 'edit') assertSafeEdit(value)
       if (mode === 'regenerate' && !value.canRegenerate) throw new Error('У этой реплики нет хода игрока для повторной генерации.')
       setText(value.text); setEditor({ mode, ...value })
     } catch (failure) { if (revision === epoch.current) setError(failure.message) }
@@ -78,6 +80,7 @@ export function MessageRevisionControls({ revisions, seq, canRepeat, useSession 
   const close = () => { if (!snapshot.busy) dialog.current?.close() }
   const submit = async event => {
     event.preventDefault()
+    event.stopPropagation()
     if (busy || pending.current) return
     if (editor.mode === 'edit' && !text.trim()) { setError('Введите текст сообщения.'); field.current?.focus(); return }
     pending.current = true; setError('')
@@ -100,6 +103,7 @@ export function MessageRevisionControls({ revisions, seq, canRepeat, useSession 
     {error && !editor && <p role="alert" className="mayori-error">{error}</p>}
     {editor && createPortal(<dialog ref={dialog} className="mayori-message-editor" aria-labelledby={titleId}
       onCancel={event => { if (snapshot.busy) event.preventDefault() }}
+      onKeyDown={event => { event.stopPropagation() }}
       onClose={() => { setEditor(null); setError('') }}>
       <form onSubmit={submit}>
         <h2 id={titleId}>{editor.mode === 'edit' ? 'Редактировать сообщение' : 'Повторить ответ'}</h2>
