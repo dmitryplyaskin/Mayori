@@ -48,6 +48,8 @@ pnpm run bundle
 
 ## Проверка в локальном DSH
 
+`node scripts/browser-personas-smoke.js <URL-test-Host> [output-directory]` проверяет расширенные персоны в отдельном временном профиле с `scripts/dsh-smoke-probe.js`. Он создаёт тестовую карточку и персоны, меняет default, проверяет группы, reorder и tooltips, AUTO по чату, шаблон и вариант описания, поиск, копирование, сохранение черновика, reflow на 1280/390/320 px, выбор в открытом чате и фактический контекст тестовой модели. Итоговый текст сверяется с журналом DSH; fork наследует активированные блоки независимо от нового ID. Требуются Playwright и браузер; пути можно задать через `MAYORI_PLAYWRIGHT_PATH` и `MAYORI_CHROMIUM_PATH`. Скриншоты сохраняются в output-directory. Используйте только временные данные.
+
 `node scripts/browser-history-smoke.js <URL-test-Host> [output-directory]` проверяет поиск, фильтры, сортировку, удаление с отменой и подтверждением, Escape/фокус, повторную загрузку и ширины 1280/390/320 px в изолированном профиле с `storage-isolation-probe` из скрипта ниже. Используйте полный стартовый URL DSH для авторизации. Требуется Playwright (при необходимости задайте `MAYORI_PLAYWRIGHT_PATH` и `MAYORI_CHROMIUM_PATH`). Скрипт создаёт собственные тестовые карточки и чаты; используйте только временное хранилище. `storage-isolation-smoke.js` также проверяет HTTP-удаление и сохранение tombstones после перезапуска Host.
 
 `node scripts/storage-isolation-smoke.js <dsh-cli-bin.js>` устанавливает checkout

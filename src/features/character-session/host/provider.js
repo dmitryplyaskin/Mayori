@@ -129,7 +129,8 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
     if (card === undefined) throw new Error('Персонаж больше не найден в галерее.')
     const character = characterSnapshot(card)
     character.image ??= null
-    character.persona = await this._personas?.resolve() ?? { ...DEFAULT_PERSONA }
+    character.persona = await this._personas?.resolve(undefined, { sessionId: safeSessionId,
+      characterId: character.id, characterDescription: character.data.description }) ?? { ...DEFAULT_PERSONA }
     character.templateTime = Date.now()
     await this._store.save(safeSessionId, character, () => {
       signal.throwIfAborted()
@@ -150,13 +151,14 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
     if (!card) throw new Error('Персонаж больше не найден в галерее.')
     const character = characterSnapshot(card)
     character.image ??= null
-    character.persona = await this._personas?.resolve() ?? { ...DEFAULT_PERSONA }
+    const sessionId = `session-${randomUUID()}`
+    character.persona = await this._personas?.resolve(undefined, { sessionId,
+      characterId: character.id, characterDescription: character.data.description }) ?? { ...DEFAULT_PERSONA }
     character.templateTime = Date.now()
     const greetings = [character.data.first_mes, ...character.data.alternate_greetings]
     if (greetingIndex >= greetings.length) throw new TypeError('Приветствие больше не найдено в карточке.')
     character.greeting = { index: greetingIndex, messageId: randomUUID(),
       text: renderTemplate(greetings[greetingIndex], character, character.persona, character.templateTime) }
-    const sessionId = `session-${randomUUID()}`
     const preset = await this.ctx.agentPresets.resolve()
     await this._store.save(sessionId, character, () => {})
     const handle = await this.ctx.agents.create({
@@ -207,6 +209,7 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
     const persona = character.persona ?? DEFAULT_PERSONA
     const edit = Object.values(readMessageEdits(agent.session.snapshotEvents())).find(edit => edit.messageId === character.greeting?.messageId)
     return { character: { id: character.id, name: character.name, image: imageSource(character.image), originalImage: imageSource(character.image, 'original') },
+      personaContext: { sessionId: agent.id, characterId: character.id, characterDescription: character.data.description },
       persona: { ...persona, avatar: imageSource(persona.avatar) ?? '', originalAvatar: imageSource(persona.avatar, 'original') },
       greeting: character.greeting ? { messageId: character.greeting.messageId,
         eventSeq: edit?.eventSeq ?? opening?.seq ?? null,
@@ -275,7 +278,8 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
     return agent.runMaintenance(async signal => {
       const character = await this._store.read(sessionId)
       if (!character) throw new Error('Выберите чат персонажа из галереи.')
-      character.persona = await this._personas.resolve(personaId)
+      character.persona = await this._personas.resolve(personaId, { sessionId,
+        characterId: character.id, characterDescription: character.data.description })
       signal.throwIfAborted()
       this._assertLive(agent)
       await this._store.update(sessionId, character, () => { signal.throwIfAborted(); this._assertLive(agent) })

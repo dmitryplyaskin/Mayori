@@ -70,3 +70,35 @@ test('persona provider migrates avatars durably and validates uploads before sto
   assert.equal(stored, 0)
   await media.close()
 })
+
+test('character binding precedes the default only for new selections; explicit selections and snapshots stay independent', async t => {
+  const s = await store(t)
+  const characterId = 'a'.repeat(64)
+  const fallback = await s.save({ name: 'Default' })
+  await s.setDefault(fallback.id)
+  const bound = await s.save({ name: 'Bound', description: 'Base', characterIds: [characterId], blocks: [
+    { id: 'scene', type: 'item', text: 'Scene', activation: { auto: true, chatIds: ['session-1'] } },
+  ] })
+  const snapshot = await s.resolve(undefined, { sessionId: 'session-1', characterId })
+  assert.equal(snapshot.id, bound.id)
+  assert.equal(snapshot.promptSnapshot.description, 'Base\n\nScene')
+  assert.equal((await s.resolve()).id, fallback.id)
+  assert.equal((await s.resolve(fallback.id, { characterId })).id, fallback.id)
+  assert.equal((await s.resolve(null, { characterId })).name, 'Игрок')
+  await assert.rejects(s.save({ name: 'Conflict', characterIds: [characterId] }), /уже привязана/)
+  await s.save({ ...bound, description: 'Changed', blocks: [] })
+  const reopened = new FileSystemPersonaStore(s.root)
+  assert.equal((await reopened.resolve(undefined, { characterId })).promptSnapshot.description, 'Changed')
+  await reopened.remove(bound.id)
+  assert.equal(snapshot.promptSnapshot.description, 'Base\n\nScene')
+  assert.equal((await reopened.resolve(undefined, { characterId })).id, fallback.id)
+})
+
+test('invalid extended persona data cannot partially replace a durable catalog record', async t => {
+  const s = await store(t)
+  const persona = await s.save({ name: 'Original', blocks: [{ id: 'a', type: 'item', text: 'saved' }] })
+  assert.throws(() => s.save({ ...persona, blocks: [{ id: 'a', type: 'group', items: null }] }))
+  assert.deepEqual((await s.list()).personas, [persona])
+  await writeFile(s.path, JSON.stringify({ format: 1, defaultId: null, personas: [{ ...persona, blocks: [{ id: 'a', type: 'group', items: null }] }] }))
+  await assert.rejects(s.list(), /групп/)
+})

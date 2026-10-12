@@ -25,8 +25,8 @@ export class FileSystemPersonaProvider extends PersonaService {
   }
   remove(id) { return this.store.remove(id) }
   setDefault(id) { return this.store.setDefault(id) }
-  async resolve(id) {
-    const persona = await this.store.resolve(id)
+  async resolve(id, context) {
+    const persona = await this.store.resolve(id, context)
     if (this.media && persona.avatar) persona.avatar = await this.media.put(persona.avatar)
     return persona
   }

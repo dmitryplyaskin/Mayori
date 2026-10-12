@@ -7,6 +7,7 @@ import { paginate } from '../../../client/components/pagination-model.js'
 import { Pagination } from '../../../client/components/pagination.jsx'
 import { Select } from '../../../client/components/select.jsx'
 import { DEFAULT_PERSONA, renderTemplate } from '../../../shared/templates.js'
+import { snapshotPersona } from '../../personas/shared/persona.js'
 import { imageSource, originalImage } from '../../media/shared/image.js'
 
 const EMPTY_ARRAY = Object.freeze([])
@@ -233,7 +234,6 @@ function Filters({ facets, query, setQuery, sort, setSort, creator, setCreator, 
 
 export function CharacterGalleryPanel({ library, personas, startCharacter }) {
   const personaSnapshot = useSyncExternalStore(personas.subscribe, personas.getSnapshot, personas.getSnapshot)
-  const persona = personaSnapshot.personas.find(item => item.id === personaSnapshot.defaultId) ?? DEFAULT_PERSONA
   const inputRef = useRef(null)
   const detailTriggerRef = useRef(null)
   const catalog = useMemo(() => library.gallery(), [library])
@@ -245,6 +245,9 @@ export function CharacterGalleryPanel({ library, personas, startCharacter }) {
   const [selectedTags, setSelectedTags] = useState([])
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [selectedCard, setSelectedCard] = useState(null)
+  const selectedPersona = personaSnapshot.personas.find(item => item.characterIds?.includes(selectedCard?.id))
+    ?? personaSnapshot.personas.find(item => item.id === personaSnapshot.defaultId) ?? DEFAULT_PERSONA
+  const persona = snapshotPersona(selectedPersona, { characterId: selectedCard?.id, characterDescription: selectedCard?.data?.description })
   const [busy, setBusy] = useState(false)
   const [playingId, setPlayingId] = useState(null)
   const [notice, setNotice] = useState(null)

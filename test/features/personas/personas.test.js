@@ -30,3 +30,20 @@ test('persona browser provider observes Host snapshots and releases subscription
   assert.equal(provider.getSnapshot().personas.length, 0)
   assert.equal(notices, before)
 })
+
+test('late persona catalog responses cannot replace a newer selection or an unsaved editor draft', async t => {
+  const replies = []
+  transport(t, () => new Promise(resolve => replies.push(resolve)))
+  const provider = new RemotePersonaProvider()
+  provider.draft = { name: 'Unsaved', blocks: [{ id: 'draft', text: 'work in progress' }] }
+  const first = provider.refresh()
+  const second = provider.refresh()
+  // call() awaits the response.json() promise before publishing.
+  await Promise.resolve()
+  replies[1]({ ok: true, value: { personas: [{ id: 'new', name: 'New' }], defaultId: 'new' } })
+  await second
+  replies[0]({ ok: true, value: { personas: [{ id: 'old', name: 'Old' }], defaultId: 'old' } })
+  await first
+  assert.equal(provider.getSnapshot().defaultId, 'new')
+  assert.equal(provider.draft.blocks[0].text, 'work in progress')
+})

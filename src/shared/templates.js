@@ -2,6 +2,7 @@
 export const DEFAULT_PERSONA = Object.freeze({ id: null, name: 'Игрок', description: '', avatar: '', title: '' })
 
 export function renderTemplate(text, character, persona = DEFAULT_PERSONA, timestamp = 0) {
+  if (persona.promptSnapshot) persona = { ...persona, description: persona.promptSnapshot.description }
   const data = character.data ?? {}
   const date = new Date(timestamp)
   const names = { user: persona.name, char: character.name, charifnotgroup: character.name,

@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import { validateSessionId, characterSnapshot } from '../domain/character.js'
 import { mediaId } from '../../media/shared/image.js'
+import { validatePersonaExtensions } from '../../personas/shared/persona.js'
 
 /** Selection store; source cards stay fixed, persona changes are explicit. */
 export class FileSystemCharacterSessionStore {
@@ -47,6 +48,14 @@ export class FileSystemCharacterSessionStore {
       const persona = record.character.persona
       if (!persona || typeof persona.name !== 'string' || !persona.name.trim() || typeof persona.description !== 'string') {
         throw new Error('Snapshot персоны повреждён.')
+      }
+      validatePersonaExtensions(persona)
+      if (persona.promptSnapshot !== undefined && (!persona.promptSnapshot
+        || typeof persona.promptSnapshot.description !== 'string' || persona.promptSnapshot.description.length > 256000
+        || !Array.isArray(persona.promptSnapshot.activeIds) || persona.promptSnapshot.activeIds.some(id => typeof id !== 'string')
+        || persona.promptSnapshot.sessionId !== null && typeof persona.promptSnapshot.sessionId !== 'string'
+        || persona.promptSnapshot.characterId !== null && typeof persona.promptSnapshot.characterId !== 'string')) {
+        throw new Error('Snapshot описания персоны повреждён.')
       }
       snapshot.persona = { ...persona }
     }

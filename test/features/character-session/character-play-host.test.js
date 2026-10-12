@@ -10,6 +10,7 @@ import { PersistentCharacterSessionProvider } from '../../../src/features/charac
 import { FileSystemCharacterSessionStore } from '../../../src/features/character-session/host/store.js'
 import { characterSnapshot, buildCharacterContext } from '../../../src/features/character-session/domain/character.js'
 import { greetingSeed } from '../../../src/features/character-session/host/greeting.js'
+import { FileSystemPersonaStore } from '../../../src/features/personas/host/store.js'
 
 const CARD_ID = 'a'.repeat(64)
 const card = {
@@ -369,6 +370,35 @@ test('new chats snapshot the default persona and render it without avatar or tit
   persona.name = 'Changed'
   assert.equal(saved.persona.name, 'Алекс')
   assert.doesNotMatch(buildCharacterContext(saved), /private-label|private-image|Changed/)
+})
+
+test('extended personas bind using real chat context, update authored openings and restore independently of the catalog', async t => {
+  const h = await creationHarness(t)
+  const personas = new FileSystemPersonaStore(join(h.root, 'personas'))
+  h.provider._personas = personas
+  const persona = await personas.save({ name: 'Alex', description: 'Base {{user}}', title: 'private-title', characterIds: [CARD_ID],
+    blocks: [{ id: 'scene', type: 'item', title: 'private-block', text: 'With {{char}}.',
+      activation: { auto: true, match: 'ARCHIVIST' } }, { id: 'disabled', type: 'item', text: 'hidden-text', enabled: false }] })
+  h.library.list = async () => [{ ...card, data: { ...card.data, first_mes: '{{persona}}' } }]
+  const { sessionId } = await h.provider.create(CARD_ID, 'campaign')
+  const saved = await h.store.read(sessionId)
+  assert.equal(saved.persona.id, persona.id)
+  assert.equal(saved.persona.promptSnapshot.sessionId, sessionId)
+  assert.equal(h.created[0].seed[3].data.message.content[0].text, 'Base Alex\n\nWith Aster.')
+  assert.doesNotMatch(buildCharacterContext(saved), /private-title|private-block|hidden-text|promptSnapshot/)
+  await personas.remove(persona.id)
+  assert.equal((await h.store.read(sessionId)).persona.promptSnapshot.description, 'Base {{user}}\n\nWith {{char}}.')
+  const legacy = await openingHarness(t)
+  legacy.provider._personas = personas
+  const switched = await personas.save({ name: 'New', description: 'Base', blocks: [
+    { id: 'chat', type: 'item', text: 'This chat', activation: { auto: true, chatIds: [legacy.agent.id] } },
+  ] })
+  await legacy.provider.setPersona(legacy.agent.id, switched.id)
+  assert.match(legacy.render(), /Base\\n\\nThis chat/)
+  await personas.save({ ...switched, blocks: [] })
+  const old = legacy.render()
+  await legacy.listeners.get('agent/created')({ agent: legacy.agent })
+  assert.equal(legacy.render(), old)
 })
 
 test('character context follows all instructions in the actual assembled system prompt', async t => {

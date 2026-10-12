@@ -1,4 +1,5 @@
 import { DEFAULT_PERSONA, renderTemplate } from '../../../shared/templates.js'
+import { effectivePersona } from '../../personas/shared/persona.js'
 
 const CARD_ID = /^[a-f0-9]{64}$/
 
@@ -54,7 +55,7 @@ export function characterSnapshot(card) {
 
 /** Render card data with explicit framing below the director's instructions. */
 export function buildCharacterContext(character) {
-  const persona = character.persona ?? DEFAULT_PERSONA
+  const persona = effectivePersona(character.persona ?? DEFAULT_PERSONA)
   const expand = text => renderTemplate(text, character, persona, character.templateTime ?? 0)
   const visible = {
     name: character.name,

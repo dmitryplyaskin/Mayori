@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { DEFAULT_PERSONA } from '../../../shared/templates.js'
 import { mediaId } from '../../media/shared/image.js'
+import { validatePersonaExtensions, snapshotPersona } from '../shared/persona.js'
 
 export function validatePersona(input) {
   if (!input || typeof input.name !== 'string' || !input.name.trim() || input.name.length > 120) {
@@ -17,7 +18,7 @@ export function validatePersona(input) {
   if (avatar && !mediaId(avatar) && (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar) || avatar.length > 2_800_000)) {
     throw new TypeError('Выберите PNG, JPEG или WebP размером до 2 МБ.')
   }
-  return { name: input.name.trim(), title: input.title ?? '', description: input.description ?? '', avatar }
+  return { name: input.name.trim(), title: input.title ?? '', description: input.description ?? '', avatar, ...validatePersonaExtensions(input) }
 }
 
 export class FileSystemPersonaStore {
@@ -72,6 +73,9 @@ export class FileSystemPersonaStore {
     return this.#change(record => {
       const previous = input.id ? record.personas.find(p => p.id === input.id) : null
       if (input.id && !previous) throw new Error('Персона больше не найдена. Обновите список.')
+      if (record.personas.some(p => p.id !== previous?.id && p.characterIds?.some(id => data.characterIds?.includes(id)))) {
+        throw new Error('К этому персонажу уже привязана другая персона.')
+      }
       const persona = { ...data, id: previous?.id ?? randomUUID() }
       if (previous) record.personas[record.personas.indexOf(previous)] = persona
       else record.personas.push(persona)
@@ -91,12 +95,14 @@ export class FileSystemPersonaStore {
       record.defaultId = id
     })
   }
-  async resolve(id) {
+  async resolve(id, context = {}) {
     const record = await this.list()
-    const selected = id === undefined ? record.defaultId : id
+    const connections = id === undefined && context.characterId ? record.personas.filter(p => p.characterIds?.includes(context.characterId)) : []
+    if (connections.length > 1) throw new Error('К персонажу привязано несколько персон. Оставьте одну привязку.')
+    const selected = id === undefined ? connections[0]?.id ?? record.defaultId : id
     if (selected === null) return { ...DEFAULT_PERSONA }
     const persona = record.personas.find(p => p.id === selected)
     if (!persona) throw new Error('Персона больше не найдена. Выберите другую.')
-    return { ...persona }
+    return snapshotPersona(persona, context)
   }
 }

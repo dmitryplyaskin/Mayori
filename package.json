@@ -27,6 +27,7 @@
     "src/features/message-revisions/host",
     "src/features/message-revisions/domain",
     "src/features/personas/host",
+    "src/features/personas/shared",
     "src/features/presets/host",
     "src/features/presets/shared",
     "src/features/history/host",

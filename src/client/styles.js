@@ -261,6 +261,25 @@ html[data-platform=darwin] .mayori-navigation { background: transparent; padding
 .mayori-persona-form label { display: grid; gap: 6px; }
 .mayori-persona-form input, .mayori-persona-form textarea { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; padding: 10px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; font: inherit; font-size: 16px; background: var(--dsw-alias-bg-l1); color: inherit; }
 .mayori-persona-form textarea { resize: vertical; }
+.mayori-persona-catalog { display: grid; gap: 12px; align-content: start; min-inline-size: 0; }
+.mayori-persona-catalog > label { display: grid; gap: 6px; }
+.mayori-persona-catalog input { box-sizing: border-box; inline-size: 100%; padding: 10px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; font: inherit; background: var(--dsw-alias-bg-l1); color: inherit; }
+.mayori-persona-excerpt { display: -webkit-box !important; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mayori-persona-form .mayori-persona-check { display: flex; align-items: center; gap: 8px; }
+.mayori-persona-form .mayori-persona-check input { inline-size: 18px; block-size: 18px; flex: none; margin: 0; }
+.mayori-persona-section, .mayori-persona-block { min-inline-size: 0; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; padding: 12px; }
+.mayori-persona-section > summary, .mayori-persona-block > summary, .mayori-persona-activation > summary { cursor: pointer; padding-block: 4px; overflow-wrap: anywhere; }
+.mayori-persona-section[open] > summary, .mayori-persona-block[open] > summary { margin-block-end: 12px; }
+.mayori-persona-blocks, .mayori-persona-block-body { display: grid; gap: 12px; min-inline-size: 0; }
+.mayori-persona-block-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mayori-persona-block-toolbar .mayori-persona-check { margin-inline-end: auto; }
+.mayori-persona-block small { color: var(--dsw-alias-label-secondary); font-size: 12px; font-weight: normal; }
+.mayori-persona-activation[open] { display: grid; gap: 10px; }
+.mayori-persona-binding { display: flex; gap: 8px; align-items: center; margin-block-start: 8px; }
+.mayori-persona-binding span { flex: 1; min-inline-size: 0; overflow-wrap: anywhere; }
+.mayori-persona-preview { white-space: pre-wrap; overflow-wrap: anywhere; max-block-size: 360px; overflow-y: auto; padding: 12px; background: var(--dsw-alias-bg-l2); border-radius: 8px; font: inherit; font-size: 14px; }
+.mayori-persona-section > label + label { margin-block-start: 12px; }
+.mayori-personas-panel summary:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 .mayori-persona-hint, .mayori-persona-row small { color: var(--dsw-alias-label-secondary); font-size: 13px; line-height: 1.5; }
 .mayori-persona-image { inline-size: 96px; block-size: 96px; object-fit: cover; border-radius: 16px; }
 .mayori-persona-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block-start: 8px; }
