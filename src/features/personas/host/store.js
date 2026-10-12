@@ -15,8 +15,8 @@ export function validatePersona(input) {
   }
   if ((input.description?.length ?? 0) > 32000 || (input.title?.length ?? 0) > 200) throw new TypeError('Описание или подпись персоны слишком длинные.')
   const avatar = input.avatar ?? ''
-  if (avatar && !mediaId(avatar) && (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar) || avatar.length > 2_800_000)) {
-    throw new TypeError('Выберите PNG, JPEG или WebP размером до 2 МБ.')
+  if (avatar && !mediaId(avatar) && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(avatar)) {
+    throw new TypeError('Выберите PNG, JPEG или WebP.')
   }
   return { name: input.name.trim(), title: input.title ?? '', description: input.description ?? '', avatar, ...validatePersonaExtensions(input) }
 }

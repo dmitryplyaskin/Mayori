@@ -65,10 +65,32 @@ test('persona provider migrates avatars durably and validates uploads before sto
   assert.ok(!(await readFile(previous.path, 'utf8')).includes('data:image/'))
   let stored = 0
   provider.media = { put() { stored++; throw new Error('must validate first') } }
-  await assert.rejects(provider.save({ name: 'x', avatar: `data:image/png;base64,${'A'.repeat(2_800_004)}` }), /2 МБ/)
+  await assert.rejects(provider.save({ name: 'x', avatar: 'data:image/png;base64,not base64!' }), /PNG, JPEG или WebP/)
   await assert.rejects(provider.save({ name: 'x', avatar: 123 }), /поля/)
   assert.equal(stored, 0)
   await media.close()
+})
+
+test('persona avatars larger than 2 MiB persist as media resources and render thumbnails after reopening', async t => {
+  const previous = await store(t)
+  const bytes = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: '#123' } })
+    .png({ compressionLevel: 0 }).toBuffer()
+  assert.ok(bytes.length > 2 * 1024 * 1024)
+  const media = new ImageStore(join(previous.root, 'media'))
+  const provider = new FileSystemPersonaProvider(new Context(), previous.root, media)
+  const saved = await provider.save({ name: 'Большой аватар', avatar: `data:image/png;base64,${bytes.toString('base64')}` })
+  const reopened = new FileSystemPersonaProvider(new Context(), previous.root, media)
+  assert.equal((await reopened.list()).personas[0].avatar, saved.avatar)
+  assert.ok(!(await readFile(previous.path, 'utf8')).includes('data:image/'))
+  const id = saved.avatarReference.split(':')[1]
+  const original = await media.read(id, 'original')
+  assert.deepEqual(await readFile(original.path), bytes)
+  const thumbnail = await media.read(id, 'avatar')
+  try {
+    const metadata = await sharp(await readFile(thumbnail.path)).metadata()
+    assert.equal(metadata.width, 96)
+    assert.equal(metadata.height, 96)
+  } finally { thumbnail.release(); await media.close() }
 })
 
 test('character binding precedes the default only for new selections; explicit selections and snapshots stay independent', async t => {

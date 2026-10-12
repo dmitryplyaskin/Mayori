@@ -1,5 +1,7 @@
+import { PERSONA_STYLE } from '../features/personas/client/styles.js'
+
 /** Plugin-owned style; removed with the client fiber. */
-export const BRAND_STYLE = String.raw`
+export const BRAND_STYLE = PERSONA_STYLE + String.raw`
 .mayori-select { display: inline-flex; inline-size: 100%; min-inline-size: 0; vertical-align: middle; }
 .mayori-select-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; box-sizing: border-box; inline-size: 100%; min-inline-size: 0; min-block-size: 40px; padding: 9px 12px; border: 0; border-radius: var(--dsw-radius-md, 8px); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; font-weight: 400; line-height: 22px; text-align: start; cursor: pointer; }
 .mayori-select-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -120,8 +122,6 @@ html[data-platform=darwin] .mayori-navigation { background: transparent; padding
 .mayori-trajectory-context > p { padding-inline: 16px; }
 .mayori-trajectory-table { flex: 1; min-block-size: 0; }
 .mayori-trajectory-journal { flex: 1; min-block-size: 0; }
-.mayori-personas-panel { box-sizing: border-box; block-size: 100%; overflow-y: auto; padding: 24px; color: var(--dsw-alias-label-primary); }
-.mayori-personas-layout { display: grid; grid-template-columns: minmax(200px, 280px) minmax(0, 640px); gap: 32px; }
 .mayori-presets-panel { block-size: 100%; overflow-y: auto; container-type: inline-size; color: var(--dsw-alias-label-primary, CanvasText); background: var(--dsw-alias-bg-l1, Canvas); font-size: 14px; }
 .mayori-presets-content { box-sizing: border-box; display: flex; flex-direction: column; gap: 24px; min-block-size: 100%; max-inline-size: 1360px; margin-inline: auto; padding: 28px 32px; }
 .mayori-presets-panel :is(h1, h2, p) { margin: 0; }
@@ -249,47 +249,11 @@ html[data-platform=darwin] .mayori-navigation { background: transparent; padding
   .mayori-presets-panel .mayori-select-trigger { min-block-size: 44px; }
   .mayori-preset-editor-actions > button { flex: 1 1 auto; min-block-size: 44px; }
 }
-.mayori-persona-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
-.mayori-persona-row { display: flex; align-items: center; gap: 12px; inline-size: 100%; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; background: transparent; color: inherit; text-align: start; font: inherit; cursor: pointer; }
-.mayori-persona-row[aria-pressed=true] { border-color: currentColor; background: var(--dsw-alias-interactive-bg-hover); }
-.mayori-persona-row img, .mayori-persona-avatar { inline-size: 48px; block-size: 48px; border-radius: 50%; object-fit: cover; flex: none; }
-.mayori-persona-avatar { display: grid; place-items: center; background: var(--dsw-alias-bg-l2); }
-.mayori-persona-row span { min-inline-size: 0; overflow-wrap: anywhere; }
-.mayori-persona-row small { display: block; margin-block-start: 4px; }
-.mayori-persona-form { display: grid; gap: 12px; align-content: start; }
-.mayori-persona-form h3, .mayori-persona-form p { margin: 0; }
-.mayori-persona-form label { display: grid; gap: 6px; }
-.mayori-persona-form input, .mayori-persona-form textarea { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; padding: 10px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; font: inherit; font-size: 16px; background: var(--dsw-alias-bg-l1); color: inherit; }
-.mayori-persona-form textarea { resize: vertical; }
-.mayori-persona-catalog { display: grid; gap: 12px; align-content: start; min-inline-size: 0; }
-.mayori-persona-catalog > label { display: grid; gap: 6px; }
-.mayori-persona-catalog input { box-sizing: border-box; inline-size: 100%; padding: 10px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; font: inherit; background: var(--dsw-alias-bg-l1); color: inherit; }
-.mayori-persona-excerpt { display: -webkit-box !important; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.mayori-persona-form .mayori-persona-check { display: flex; align-items: center; gap: 8px; }
-.mayori-persona-form .mayori-persona-check input { inline-size: 18px; block-size: 18px; flex: none; margin: 0; }
-.mayori-persona-section, .mayori-persona-block { min-inline-size: 0; border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; padding: 12px; }
-.mayori-persona-section > summary, .mayori-persona-block > summary, .mayori-persona-activation > summary { cursor: pointer; padding-block: 4px; overflow-wrap: anywhere; }
-.mayori-persona-section[open] > summary, .mayori-persona-block[open] > summary { margin-block-end: 12px; }
-.mayori-persona-blocks, .mayori-persona-block-body { display: grid; gap: 12px; min-inline-size: 0; }
-.mayori-persona-block-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.mayori-persona-block-toolbar .mayori-persona-check { margin-inline-end: auto; }
-.mayori-persona-block small { color: var(--dsw-alias-label-secondary); font-size: 12px; font-weight: normal; }
-.mayori-persona-activation[open] { display: grid; gap: 10px; }
-.mayori-persona-binding { display: flex; gap: 8px; align-items: center; margin-block-start: 8px; }
-.mayori-persona-binding span { flex: 1; min-inline-size: 0; overflow-wrap: anywhere; }
-.mayori-persona-preview { white-space: pre-wrap; overflow-wrap: anywhere; max-block-size: 360px; overflow-y: auto; padding: 12px; background: var(--dsw-alias-bg-l2); border-radius: 8px; font: inherit; font-size: 14px; }
-.mayori-persona-section > label + label { margin-block-start: 12px; }
-.mayori-personas-panel summary:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
-.mayori-persona-hint, .mayori-persona-row small { color: var(--dsw-alias-label-secondary); font-size: 13px; line-height: 1.5; }
-.mayori-persona-image { inline-size: 96px; block-size: 96px; object-fit: cover; border-radius: 16px; }
-.mayori-persona-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block-start: 8px; }
-.mayori-personas-panel button { min-block-size: 44px; }
-.mayori-personas-panel :is(button, input, textarea):focus-visible, .mayori-greeting-swipes button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 .mayori-greeting-swipes { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-block-start: 8px; font-variant-numeric: tabular-nums; }
 .mayori-greeting-swipes button { inline-size: 44px; block-size: 44px; border: 0; border-radius: 8px; font-size: 24px; color: inherit; background: transparent; cursor: pointer; }
 .mayori-greeting-swipes button:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .mayori-greeting-swipes button:disabled { opacity: 0.5; cursor: wait; }
-@media (max-width: 700px) { .mayori-personas-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; } .mayori-personas-panel { padding: 16px; } }
+.mayori-greeting-swipes button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
  .mayori-gallery-panel {
   block-size: 100%; min-block-size: 0; overflow: hidden;
   background: var(--dsw-alias-bg-l1, var(--dsw-specific-sidebar-fill));
