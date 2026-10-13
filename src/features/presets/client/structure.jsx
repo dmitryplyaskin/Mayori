@@ -1,3 +1,4 @@
+import { tr, noticeText, formatLocale } from '../../localization/client/service.js'
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { Select } from '../../../client/components/select.jsx'
 import { IconButton } from '../../../client/components/icon-button.jsx'
@@ -30,9 +31,9 @@ export function PresetStructureEditor({ editor, disabled }) {
   const [moveError, setMoveError] = useState('')
   const [dragNotice, setDragNotice] = useState('')
   const moveTarget = entries.find(entry => entry.node.id === targetId)?.node
-  const movePositions = targetId === ':root' ? [{ value: 'inside', label: 'В конец основного списка' }]
-    : [...(moveTarget?.kind === 'group' ? [{ value: 'inside', label: 'Внутрь группы, в конец' }] : []),
-      { value: 'before', label: 'Перед элементом' }, { value: 'after', label: 'После элемента' }]
+  const movePositions = targetId === ':root' ? [{ value: 'inside', label: tr("В конец основного списка") }]
+    : [...(moveTarget?.kind === 'group' ? [{ value: 'inside', label: tr("Внутрь группы, в конец") }] : []),
+      { value: 'before', label: tr("Перед элементом") }, { value: 'after', label: tr("После элемента") }]
   const handleFor = nodeId => rootRef.current?.querySelector(`[data-preset-handle="${CSS.escape(nodeId)}"]`)
 
   useEffect(() => {
@@ -67,9 +68,9 @@ export function PresetStructureEditor({ editor, disabled }) {
         x: Math.max(0, Math.min(rootBounds.width - 180, current.x - rootBounds.left + 12)), y: current.y - rootBounds.top + 12 })
       const target = readEntries().find(entry => entry.node.id === current.drop?.targetId)?.node
       setDragNotice(current.drop
-        ? current.drop.position === 'inside' ? `Перенести в ${target ? `«${target.title}»` : 'основной список'}.`
-          : `${current.drop.position === 'before' ? 'Вставить перед' : 'Вставить после'} «${target.title}».`
-        : 'Выберите место вставки. Группу нельзя вложить в себя или её содержимое.')
+        ? current.drop.position === 'inside' ? tr("Перенести в {p1}.", { p1: target ? `«${target.title}»` : tr("основной список") })
+          : `${current.drop.position === 'before' ? tr("Вставить перед") : tr("Вставить после")} «${target.title}».`
+        : tr("Выберите место вставки. Группу нельзя вложить в себя или её содержимое."))
     }
     const autoScroll = () => {
       if (!dragRef.current?.active) return
@@ -110,7 +111,7 @@ export function PresetStructureEditor({ editor, disabled }) {
       suppressClick.current = true
       resetClick = setTimeout(() => { suppressClick.current = false }, 0)
       if (!cancel && !disabled && current.drop) editor.moveNode(current.sourceId, current.drop.targetId, current.drop.position)
-      else setDragNotice('Перенос отменён.')
+      else setDragNotice(tr("Перенос отменён."))
       if (!cancel && current.drop) setDragNotice('')
       requestAnimationFrame(() => handleFor(current.sourceId)?.focus())
     }
@@ -162,18 +163,18 @@ export function PresetStructureEditor({ editor, disabled }) {
       return <li key={node.id}>
         <div data-preset-node={node.id} className={`mayori-preset-tree-row${selectedNodeId === node.id ? ' is-selected' : ''}${drag?.sourceId === node.id ? ' is-dragging' : ''}${drop ? ` drop-${drop}` : ''}`}>
           <IconButton portal className="mayori-preset-drag-handle" disabled={disabled} data-preset-handle={node.id}
-            label={`Переместить ${node.title}`} onPointerDown={event => startDrag(event, node)} onClick={() => openMove(node.id)}><DragHandle /></IconButton>
-          {node.kind === 'group' ? <IconButton portal className="mayori-preset-tree-fold" disabled={disabled} label={`${collapsed.includes(node.id) ? 'Раскрыть' : 'Свернуть'} ${node.title}`}
+            label={tr("Переместить {p1}", { p1: node.title })} onPointerDown={event => startDrag(event, node)} onClick={() => openMove(node.id)}><DragHandle /></IconButton>
+          {node.kind === 'group' ? <IconButton portal className="mayori-preset-tree-fold" disabled={disabled} label={`${collapsed.includes(node.id) ? tr("Раскрыть") : tr("Свернуть")} ${node.title}`}
             aria-expanded={!collapsed.includes(node.id)} aria-controls={`${id}-${node.id}`} onClick={() => editor.toggleGroup(node.id)}>{collapsed.includes(node.id) ? '▸' : '▾'}</IconButton> : <span className="mayori-preset-tree-spacer" />}
-          <label className="mayori-preset-node-toggle"><input type="checkbox" disabled={disabled} aria-label={`Включить ${node.title}`} checked={node.enabled} onChange={event => editor.changeNode(node.id, 'enabled', event.target.checked)} /></label>
+          <label className="mayori-preset-node-toggle"><input type="checkbox" disabled={disabled} aria-label={tr("Включить {p1}", { p1: node.title })} checked={node.enabled} onChange={event => editor.changeNode(node.id, 'enabled', event.target.checked)} /></label>
           <button type="button" className="mayori-preset-tree-pick" disabled={disabled} aria-pressed={selectedNodeId === node.id} onClick={() => editor.selectNode(node.id)}>
-            <span className={node.kind === 'group' ? 'mayori-preset-group-title' : ''}>{node.title || 'Без названия'}</span>
-            {ancestors.length >= 4 && <small>Уровень {ancestors.length + 1}</small>}
-            {hiddenBy && node.enabled && <small>Выключено в «{hiddenBy.title}»</small>}
+            <span className={node.kind === 'group' ? 'mayori-preset-group-title' : ''}>{node.title || tr("Без названия")}</span>
+            {ancestors.length >= 4 && <small>{tr("Уровень {p1}", { p1: ancestors.length + 1 })}</small>}
+            {hiddenBy && node.enabled && <small>{tr("Выключено в «{p1}»", { p1: hiddenBy.title })}</small>}
           </button>
         </div>
         {node.kind === 'group' && <div id={`${id}-${node.id}`} hidden={collapsed.includes(node.id)}>
-          {node.children.length ? renderNodes(node.children, [...ancestors, node]) : <p className="mayori-preset-tree-empty">Пустая группа</p>}
+          {node.children.length ? renderNodes(node.children, [...ancestors, node]) : <p className="mayori-preset-tree-empty">{tr("Пустая группа")}</p>}
         </div>}
       </li>
     })}
@@ -182,45 +183,45 @@ export function PresetStructureEditor({ editor, disabled }) {
   return <div ref={rootRef} className="mayori-preset-structure" onKeyDown={event => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !['INPUT', 'TEXTAREA'].includes(event.target.tagName) && undo) { event.preventDefault(); editor.undo() }
   }}>
-    <div className="mayori-preset-structure-heading"><div><h3>Инструкции</h3><p>В итог входят {active.length} из {entries.filter(entry => entry.node.kind === 'block').length} блоков · {draft.instructions.length.toLocaleString('ru-RU')} символов в итоге</p></div>
-      <button type="button" className="mayori-preset-button" aria-pressed={preview} onClick={() => editor.update({ preview: !preview })}>{preview ? 'Вернуться к редактору' : 'Посмотреть итог'}</button></div>
+    <div className="mayori-preset-structure-heading"><div><h3>{tr("Инструкции")}</h3><p>{tr("В итог входят {p1} из {p2} блоков · {p3} символов в итоге", { p1: active.length, p2: entries.filter(entry => entry.node.kind === 'block').length, p3: draft.instructions.length.toLocaleString(formatLocale()) })}</p></div>
+      <button type="button" className="mayori-preset-button" aria-pressed={preview} onClick={() => editor.update({ preview: !preview })}>{preview ? tr("Вернуться к редактору") : tr("Посмотреть итог")}</button></div>
     <div className="mayori-preset-structure-layout" hidden={preview}>
-      <aside className="mayori-preset-structure-tree" aria-label="Структура пресета">
-        <div className="mayori-preset-tree-toolbar"><h3>Структура</h3><button type="button" className="mayori-preset-button" disabled={disabled} onClick={() => add('block')}>+ Блок</button><button type="button" className="mayori-preset-button" disabled={disabled} onClick={() => add('group')}>+ Группа</button></div>
-        <div ref={treeScrollerRef} className="mayori-preset-tree-scroll">{renderNodes(nodes)}{!nodes.length && <p className="mayori-preset-tree-empty">Нет блоков.</p>}
-          <div data-preset-root-drop className={`mayori-preset-root-drop${drag?.drop?.targetId === null ? ' drop-inside' : ''}`}>Конец основного списка</div>
+      <aside className="mayori-preset-structure-tree" aria-label={tr("Структура пресета")}>
+        <div className="mayori-preset-tree-toolbar"><h3>{tr("Структура")}</h3><button type="button" className="mayori-preset-button" disabled={disabled} onClick={() => add('block')}>{tr("+ Блок")}</button><button type="button" className="mayori-preset-button" disabled={disabled} onClick={() => add('group')}>{tr("+ Группа")}</button></div>
+        <div ref={treeScrollerRef} className="mayori-preset-tree-scroll">{renderNodes(nodes)}{!nodes.length && <p className="mayori-preset-tree-empty">{tr("Нет блоков.")}</p>}
+          <div data-preset-root-drop className={`mayori-preset-root-drop${drag?.drop?.targetId === null ? ' drop-inside' : ''}`}>{tr("Конец основного списка")}</div>
         </div>
       </aside>
-      <section className="mayori-preset-node-editor" aria-label="Редактирование выбранного элемента">
+      <section className="mayori-preset-node-editor" aria-label={tr("Редактирование выбранного элемента")}>
         {selected ? <>
           {!!selected.ancestors.length && <p className="mayori-preset-node-path">{selected.ancestors.map(parent => parent.title).join(' / ')}</p>}
-          <label className="mayori-preset-node-field">{selected.node.kind === 'group' ? 'Название группы' : 'Название блока'}<input ref={titleRef} name="presetNodeTitle" autoComplete="off" required maxLength={120} value={selected.node.title} disabled={disabled} onChange={event => editor.changeNode(selected.node.id, 'title', event.target.value)} /></label>
-          <label className="mayori-preset-node-toggle"><input type="checkbox" disabled={disabled} checked={selected.node.enabled} onChange={event => editor.changeNode(selected.node.id, 'enabled', event.target.checked)} />{selected.node.kind === 'group' ? 'Включить группу' : 'Включить блок'}</label>
-          {selected.node.enabled && selected.ancestors.some(parent => !parent.enabled) && <p className="mayori-preset-node-state">Выключена группа «{selected.ancestors.find(parent => !parent.enabled).title}».</p>}
-          {selected.node.kind === 'block' ? <div className="mayori-preset-node-field"><label htmlFor={`${id}-text`}>Текст инструкции</label><textarea id={`${id}-text`} name="presetInstructions" maxLength={MAX_PRESET_TEXT} value={selected.node.text} disabled={disabled} onChange={event => editor.changeNode(selected.node.id, 'text', event.target.value)} /></div>
-            : <div className="mayori-preset-group-content"><h3>Содержимое группы</h3>{selected.node.children.length ? <ul>{selected.node.children.map(node => <li key={node.id}><button type="button" className="mayori-preset-text-button" onClick={() => editor.selectNode(node.id)}>{node.title}{node.kind === 'group' ? ' · группа' : ''}</button></li>)}</ul> : <p>Пустая группа.</p>}</div>}
-          <div className="mayori-preset-node-actions"><button type="button" className="mayori-preset-button" disabled={disabled} onClick={() => editor.duplicateNode(selected.node.id)}>Дублировать</button><button type="button" className="mayori-preset-text-button mayori-preset-delete" disabled={disabled} onClick={() => editor.removeNode(selected.node.id)}>Удалить {selected.node.kind === 'group' ? 'группу' : 'блок'}</button></div>
-        </> : <p>Элемент не выбран.</p>}
+          <label className="mayori-preset-node-field">{selected.node.kind === 'group' ? tr("Название группы") : tr("Название блока")}<input ref={titleRef} name="presetNodeTitle" autoComplete="off" required maxLength={120} value={selected.node.title} disabled={disabled} onChange={event => editor.changeNode(selected.node.id, 'title', event.target.value)} /></label>
+          <label className="mayori-preset-node-toggle"><input type="checkbox" disabled={disabled} checked={selected.node.enabled} onChange={event => editor.changeNode(selected.node.id, 'enabled', event.target.checked)} />{selected.node.kind === 'group' ? tr("Включить группу") : tr("Включить блок")}</label>
+          {selected.node.enabled && selected.ancestors.some(parent => !parent.enabled) && <p className="mayori-preset-node-state">{tr("Выключена группа «{p1}».", { p1: selected.ancestors.find(parent => !parent.enabled).title })}</p>}
+          {selected.node.kind === 'block' ? <div className="mayori-preset-node-field"><label htmlFor={`${id}-text`}>{tr("Текст инструкции")}</label><textarea id={`${id}-text`} name="presetInstructions" maxLength={MAX_PRESET_TEXT} value={selected.node.text} disabled={disabled} onChange={event => editor.changeNode(selected.node.id, 'text', event.target.value)} /></div>
+            : <div className="mayori-preset-group-content"><h3>{tr("Содержимое группы")}</h3>{selected.node.children.length ? <ul>{selected.node.children.map(node => <li key={node.id}><button type="button" className="mayori-preset-text-button" onClick={() => editor.selectNode(node.id)}>{node.title}{node.kind === 'group' ? tr(" · группа") : ''}</button></li>)}</ul> : <p>{tr("Пустая группа.")}</p>}</div>}
+          <div className="mayori-preset-node-actions"><button type="button" className="mayori-preset-button" disabled={disabled} onClick={() => editor.duplicateNode(selected.node.id)}>{tr("Дублировать")}</button><button type="button" className="mayori-preset-text-button mayori-preset-delete" disabled={disabled} onClick={() => editor.removeNode(selected.node.id)}>{tr("Удалить {p1}", { p1: selected.node.kind === 'group' ? tr("группу") : tr("блок") })}</button></div>
+        </> : <p>{tr("Элемент не выбран.")}</p>}
       </section>
     </div>
-    {preview && <section className="mayori-preset-compiled" aria-label="Итоговые инструкции"><h3>Инструкции для модели</h3><pre>{draft.instructions || 'Нет включённых инструкций.'}</pre><details><summary>Из каких блоков собран текст</summary><ol>{active.map(({ node, ancestors }) => <li key={node.id}>{[...ancestors, node].map(node => node.title).join(' / ')}</li>)}</ol></details></section>}
-    <p className="mayori-dice-sr" role="status">{dragNotice}</p>
-    <div className="mayori-preset-structure-footer"><span className={total > MAX_PRESET_TEXT ? 'mayori-preset-error' : ''}>{total.toLocaleString('ru-RU')} / 64 000 символов во всех блоках</span>{undo && <button type="button" className="mayori-preset-text-button" disabled={disabled} onClick={() => editor.undo()}>Отменить действие</button>}</div>
+    {preview && <section className="mayori-preset-compiled" aria-label={tr("Итоговые инструкции")}><h3>{tr("Инструкции для модели")}</h3><pre>{draft.instructions || tr("Нет включённых инструкций.")}</pre><details><summary>{tr("Из каких блоков собран текст")}</summary><ol>{active.map(({ node, ancestors }) => <li key={node.id}>{[...ancestors, node].map(node => node.title).join(' / ')}</li>)}</ol></details></section>}
+    <p className="mayori-dice-sr" role="status">{noticeText(dragNotice)}</p>
+    <div className="mayori-preset-structure-footer"><span className={total > MAX_PRESET_TEXT ? 'mayori-preset-error' : ''}>{tr("{p1} / 64 000 символов во всех блоках", { p1: total.toLocaleString(formatLocale()) })}</span>{undo && <button type="button" className="mayori-preset-text-button" disabled={disabled} onClick={() => editor.undo()}>{tr("Отменить действие")}</button>}</div>
     {drag && <div className="mayori-preset-drag-ghost" aria-hidden="true" style={{ left: drag.x, top: drag.y }}>{drag.title}</div>}
     <dialog ref={dialogRef} className="mayori-preset-move-dialog" aria-labelledby={`${id}-move-title`} onCancel={event => { event.preventDefault(); closeMove() }}>
-      <h3 id={`${id}-move-title`}>Переместить элемент</h3>
-      <div className="mayori-preset-node-field"><label htmlFor={`${id}-target`}>Место назначения</label><Select id={`${id}-target`} aria-label="Место назначения" portal={false} value={targetId} onChange={value => {
+      <h3 id={`${id}-move-title`}>{tr("Переместить элемент")}</h3>
+      <div className="mayori-preset-node-field"><label htmlFor={`${id}-target`}>{tr("Место назначения")}</label><Select id={`${id}-target`} aria-label={tr("Место назначения")} portal={false} value={targetId} onChange={value => {
         setTargetId(value); setMoveError('')
         if (value === ':root') setPosition('inside')
         else if (position === 'inside' && entries.find(entry => entry.node.id === value)?.node.kind !== 'group') setPosition('before')
-      }} options={[{ value: ':root', label: 'Основной список' }, ...entries.filter(entry => canMovePresetNode(nodes, moveId, entry.node.id, entry.node.kind === 'group' ? 'inside' : 'before')).map(entry => ({ value: entry.node.id, label: [...entry.ancestors, entry.node].map(node => node.title).join(' / ') }))]} /></div>
-      <div className="mayori-preset-node-field"><label htmlFor={`${id}-position`}>Положение</label><Select id={`${id}-position`} aria-label="Положение" portal={false} value={position} onChange={setPosition} options={movePositions} /></div>
-      {moveError && <p role="alert" className="mayori-preset-error">{moveError}</p>}
-      <div className="mayori-preset-node-actions"><button type="button" className="mayori-preset-button" onClick={closeMove}>Отмена</button><button type="button" className="mayori-preset-button mayori-preset-primary" disabled={disabled} onClick={() => {
+      }} options={[{ value: ':root', label: tr("Основной список") }, ...entries.filter(entry => canMovePresetNode(nodes, moveId, entry.node.id, entry.node.kind === 'group' ? 'inside' : 'before')).map(entry => ({ value: entry.node.id, label: [...entry.ancestors, entry.node].map(node => node.title).join(' / ') }))]} /></div>
+      <div className="mayori-preset-node-field"><label htmlFor={`${id}-position`}>{tr("Положение")}</label><Select id={`${id}-position`} aria-label={tr("Положение")} portal={false} value={position} onChange={setPosition} options={movePositions} /></div>
+      {moveError && <p role="alert" className="mayori-preset-error">{noticeText(moveError)}</p>}
+      <div className="mayori-preset-node-actions"><button type="button" className="mayori-preset-button" onClick={closeMove}>{tr("Отмена")}</button><button type="button" className="mayori-preset-button mayori-preset-primary" disabled={disabled} onClick={() => {
         const target = targetId === ':root' ? null : targetId
-        if (!canMovePresetNode(nodes, moveId, target, position)) { setMoveError('Выберите группу для вложения или положение перед / после элемента.'); return }
+        if (!canMovePresetNode(nodes, moveId, target, position)) { setMoveError(tr("Выберите группу для вложения или положение перед / после элемента.")); return }
         if (editor.moveNode(moveId, target, position)) closeMove()
-      }}>Переместить</button></div>
+      }}>{tr("Переместить")}</button></div>
     </dialog>
   </div>
 }

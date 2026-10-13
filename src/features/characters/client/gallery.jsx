@@ -1,3 +1,4 @@
+import { tr, noticeText, formatLocale } from '../../localization/client/service.js'
 /** Full-screen Gallery Consumer for the Host-owned Character Library. */
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
@@ -73,14 +74,14 @@ function CardPortrait({ card, className = '', large = false }) {
   const source = useCardImage(card)
   return source === null
     ? <span className={`mayori-card-fallback ${className}`} aria-hidden="true">{card.name.slice(0, 1).toUpperCase()}</span>
-    : <img className={className} src={large ? originalImage(source) ?? source : source} alt={`Портрет: ${card.name}`} loading="lazy" decoding="async" />
+    : <img className={className} src={large ? originalImage(source) ?? source : source} alt={tr("Портрет: {p1}", { p1: card.name })} loading="lazy" decoding="async" />
 }
 
 function ImportControl({ busy, inputRef, onFiles, compact = false }) {
   return (
     <label className={`mayori-import-button${compact ? ' mayori-import-compact' : ''}`} aria-disabled={busy || undefined}>
       {icon('upload')}
-      <span>{busy ? 'Импорт…' : 'Импортировать'}</span>
+      <span>{busy ? tr("Импорт…") : tr("Импортировать")}</span>
       <input
         ref={inputRef}
         type="file"
@@ -102,19 +103,19 @@ export function CharacterCard({ card, onPlay, onEdit, playBusy, playDisabled }) 
         <div className="mayori-card-body">
           <div className="mayori-card-heading">
             <h3>{card.name}</h3>
-            <p>{text(card.data.creator) ?? 'Автор не указан'}</p>
+            <p>{text(card.data.creator) ?? tr("Автор не указан")}</p>
           </div>
           {tags.length > 0 && (
-            <ul className="mayori-tags" aria-label="Теги">
+            <ul className="mayori-tags" aria-label={tr("Теги")}>
               {tags.map((tag, index) => <li key={`${tag}-${index}`}>{tag}</li>)}
             </ul>
           )}
           <div className="mayori-card-actions">
             <button type="button" className="mayori-card-play" disabled={playDisabled} aria-busy={playBusy || undefined} onClick={() => { void onPlay(card, 0) }}>
-              {icon('play')}<span>{playBusy ? 'Открываем…' : 'Играть'}</span>
+              {icon('play')}<span>{playBusy ? tr("Открываем…") : tr("Играть")}</span>
             </button>
             <button type="button" className="mayori-card-edit" onClick={(event) => { onEdit(card, event.currentTarget) }}>
-              {icon('edit')}<span>Изменить</span>
+              {icon('edit')}<span>{tr("Изменить")}</span>
             </button>
           </div>
         </div>
@@ -141,12 +142,12 @@ export function CharacterInfoDialog({ card, onClose, onRemove, triggerRef, onPla
   if (card === null) return <dialog ref={dialogRef} className="mayori-character-dialog" onClose={finishClose} />
 
   const sections = [
-    ['Описание', text(card.data.description)],
-    ['Характер', text(card.data.personality)],
-    ['Сценарий', text(card.data.scenario)],
-    ['Первое сообщение', text(card.data.first_mes)],
-    ['Пример диалога', text(card.data.mes_example)],
-    ['Заметки автора', text(card.data.creator_notes)],
+    [tr("Описание"), text(card.data.description)],
+    [tr("Характер"), text(card.data.personality)],
+    [tr("Сценарий"), text(card.data.scenario)],
+    [tr("Первое сообщение"), text(card.data.first_mes)],
+    [tr("Пример диалога"), text(card.data.mes_example)],
+    [tr("Заметки автора"), text(card.data.creator_notes)],
   ].filter(([, value]) => value !== null)
   const tags = cardTags(card)
   const greetings = [card.data.first_mes ?? '', ...(card.data.alternate_greetings ?? [])]
@@ -162,40 +163,40 @@ export function CharacterInfoDialog({ card, onClose, onRemove, triggerRef, onPla
         <header className="mayori-character-header">
           <div>
             <h2 id="mayori-character-title">{card.name}</h2>
-            <p>{text(card.data.creator) ?? 'Автор не указан'}</p>
+            <p>{text(card.data.creator) ?? tr("Автор не указан")}</p>
           </div>
-          <IconButton portal={false} className="mayori-icon-action" label="Закрыть информацию" onClick={() => { dialogRef.current?.close() }}>
+          <IconButton portal={false} className="mayori-icon-action" label={tr("Закрыть информацию")} onClick={() => { dialogRef.current?.close() }}>
             {icon('close')}
           </IconButton>
         </header>
         <div className="mayori-character-content">
           <div className="mayori-character-portrait"><CardPortrait card={card} large /></div>
           <div className="mayori-character-details">
-            {tags.length > 0 && <ul className="mayori-tags" aria-label="Теги">{tags.map((tag, index) => <li key={`${tag}-${index}`}>{tag}</li>)}</ul>}
+            {tags.length > 0 && <ul className="mayori-tags" aria-label={tr("Теги")}>{tags.map((tag, index) => <li key={`${tag}-${index}`}>{tag}</li>)}</ul>}
             {card.warnings?.length > 0 && <p className="mayori-card-warning">{card.warnings.join(' ')}</p>}
             {onPlay && greetings.length > 1 && <div className="mayori-character-opening">
-              <div className="mayori-filter-control"><span>Начало истории</span><Select aria-label="Начало истории" value={greetingIndex} disabled={playDisabled} portal={false} onChange={value => setGreetingIndex(Number(value))}
-                options={greetings.map((greeting, index) => ({ value: index, label: index === 0 ? (greeting.trim() ? 'Основное приветствие' : 'Без приветствия') : `Альтернатива ${index}` }))} /></div>
-              <details className="mayori-greeting-preview"><summary>Приветствие</summary><p>{renderTemplate(greetings[greetingIndex] ?? '', card, persona, Date.now()) || 'История начнётся с вашего сообщения.'}</p></details>
+              <div className="mayori-filter-control"><span>{tr("Начало истории")}</span><Select aria-label={tr("Начало истории")} value={greetingIndex} disabled={playDisabled} portal={false} onChange={value => setGreetingIndex(Number(value))}
+                options={greetings.map((greeting, index) => ({ value: index, label: index === 0 ? (greeting.trim() ? tr("Основное приветствие") : tr("Без приветствия")) : tr("Альтернатива {p1}", { p1: index }) }))} /></div>
+              <details className="mayori-greeting-preview"><summary>{tr("Приветствие")}</summary><p>{renderTemplate(greetings[greetingIndex] ?? '', card, persona, Date.now()) || tr("История начнётся с вашего сообщения.")}</p></details>
             </div>}
             {sections.length > 0 ? (
               <dl>
                 {sections.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
               </dl>
-            ) : <p className="mayori-character-empty">У этой карточки нет дополнительного описания.</p>}
+            ) : <p className="mayori-character-empty">{tr("У этой карточки нет дополнительного описания.")}</p>}
             <dl className="mayori-character-meta">
-              <div><dt>Файл</dt><dd>{card.sourceName}</dd></div>
-              <div><dt>Добавлен</dt><dd>{new Intl.DateTimeFormat('ru', { dateStyle: 'medium', timeStyle: 'short' }).format(card.importedAt)}</dd></div>
+              <div><dt>{tr("Файл")}</dt><dd>{card.sourceName}</dd></div>
+              <div><dt>{tr("Добавлен")}</dt><dd>{new Intl.DateTimeFormat(formatLocale(), { dateStyle: 'medium', timeStyle: 'short' }).format(card.importedAt)}</dd></div>
             </dl>
           </div>
         </div>
         <footer className="mayori-character-footer">
           <button type="button" className="mayori-danger-button" onClick={() => { void onRemove(card, dialogRef.current) }}>
-            {icon('trash')}<span>Удалить персонажа</span>
+            {icon('trash')}<span>{tr("Удалить персонажа")}</span>
           </button>
           <div className="mayori-character-footer-actions">
-            <button type="button" className="mayori-secondary-button" onClick={() => { dialogRef.current?.close() }}>Закрыть</button>
-            {onPlay && <button type="button" className="mayori-secondary-button mayori-card-play" disabled={playDisabled} onClick={() => { dialogRef.current?.close(); void onPlay(card, greetingIndex) }}>Играть</button>}
+            <button type="button" className="mayori-secondary-button" onClick={() => { dialogRef.current?.close() }}>{tr("Закрыть")}</button>
+            {onPlay && <button type="button" className="mayori-secondary-button mayori-card-play" disabled={playDisabled} onClick={() => { dialogRef.current?.close(); void onPlay(card, greetingIndex) }}>{tr("Играть")}</button>}
           </div>
         </footer>
       </div>
@@ -212,22 +213,22 @@ function Filters({ facets, query, setQuery, sort, setSort, creator, setCreator, 
   return (
     <div className="mayori-filter-fields">
       <label className="mayori-search">
-        <span>Поиск</span>
-        <span className="mayori-search-control">{icon('search')}<input type="search" value={query} placeholder="Имя, автор, описание" onChange={event => { setQuery(event.currentTarget.value) }} /></span>
+        <span>{tr("Поиск")}</span>
+        <span className="mayori-search-control">{icon('search')}<input type="search" value={query} placeholder={tr("Имя, автор, описание")} onChange={event => { setQuery(event.currentTarget.value) }} /></span>
       </label>
-      <div className="mayori-filter-control"><span>Сортировка</span><Select aria-label="Сортировка" value={sort} onChange={setSort} options={[{ value: 'newest', label: 'Сначала новые' }, { value: 'name', label: 'По имени' }, { value: 'creator', label: 'По автору' }]} /></div>
-      <div className="mayori-filter-control"><span>Автор</span><Select aria-label="Автор" value={creator} onChange={setCreator} options={[{ value: 'all', label: 'Все авторы' }, ...creators.map(value => ({ value, label: value }))]} /></div>
+      <div className="mayori-filter-control"><span>{tr("Сортировка")}</span><Select aria-label={tr("Сортировка")} value={sort} onChange={setSort} options={[{ value: 'newest', label: tr("Сначала новые") }, { value: 'name', label: tr("По имени") }, { value: 'creator', label: tr("По автору") }]} /></div>
+      <div className="mayori-filter-control"><span>{tr("Автор")}</span><Select aria-label={tr("Автор")} value={creator} onChange={setCreator} options={[{ value: 'all', label: tr("Все авторы") }, ...creators.map(value => ({ value, label: value }))]} /></div>
       <fieldset className="mayori-filter-group">
-        <legend>Портрет</legend>
-        {[['all', 'Все'], ['with', 'С портретом'], ['without', 'Без портрета']].map(([value, label]) => <label key={value}><input type="radio" name="mayori-portrait" value={value} checked={portrait === value} onChange={() => { setPortrait(value) }} /><span>{label}</span></label>)}
+        <legend>{tr("Портрет")}</legend>
+        {[['all', tr("Все")], ['with', tr("С портретом")], ['without', tr("Без портрета")]].map(([value, label]) => <label key={value}><input type="radio" name="mayori-portrait" value={value} checked={portrait === value} onChange={() => { setPortrait(value) }} /><span>{label}</span></label>)}
       </fieldset>
       {tags.length > 0 && (
         <fieldset className="mayori-filter-group mayori-tag-filter">
-          <legend>Теги</legend>
+          <legend>{tr("Теги")}</legend>
           <div>{tags.map(([tag, count]) => <label key={tag}><input type="checkbox" checked={selectedTags.includes(tag)} onChange={() => { toggleTag(tag) }} /><span>{tag}</span><small>{count}</small></label>)}</div>
         </fieldset>
       )}
-      <button type="button" className="mayori-reset-button" onClick={onReset}>Сбросить фильтры</button>
+      <button type="button" className="mayori-reset-button" onClick={onReset}>{tr("Сбросить фильтры")}</button>
     </div>
   )
 }
@@ -274,8 +275,7 @@ export function CharacterGalleryPanel({ library, personas, startCharacter }) {
     setNotice(null)
     try {
       const result = await library.importFiles(fileList)
-      const rejected = result.rejected.map(item => `${item.name}: ${item.error}`)
-      setNotice({ kind: rejected.length > 0 ? 'error' : 'success', text: [result.imported > 0 ? `Импортировано: ${result.imported}.` : '', ...rejected].filter(Boolean).join(' ') })
+      setNotice({ kind: result.rejected.length > 0 ? 'error' : 'success', imported: result.imported, rejected: result.rejected })
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) })
     } finally {
@@ -284,11 +284,11 @@ export function CharacterGalleryPanel({ library, personas, startCharacter }) {
     }
   }
   const remove = async (card, infoDialog) => {
-    if (!window.confirm(`Удалить персонажа «${card.name}» из галереи?`)) return
+    if (!window.confirm(tr("Удалить персонажа «{p1}» из галереи?", { p1: card.name }))) return
     try {
       await library.remove(card.id)
       infoDialog?.close()
-      setNotice({ kind: 'success', text: `Персонаж «${card.name}» удалён.` })
+      setNotice({ kind: 'success', text: tr("Персонаж «{p1}» удалён.", { p1: card.name }) })
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) })
     }
@@ -324,36 +324,38 @@ export function CharacterGalleryPanel({ library, personas, startCharacter }) {
         <div className="mayori-gallery-shell">
           <header className="mayori-gallery-header">
             <div className="mayori-gallery-title">
-              <h2 id="mayori-gallery-title">Персонажи</h2>
-              <p>{snapshot.status === 'ready' ? `${snapshot.total} в галерее${snapshot.indexing ? ' · Обновляем каталог…' : ''}` : snapshot.status === 'error' ? 'Не удалось загрузить галерею' : 'Загрузка…'}</p>
+              <h2 id="mayori-gallery-title">{tr("Персонажи")}</h2>
+              <p>{snapshot.status === 'ready' ? tr("{p1} в галерее{p2}", { p1: snapshot.total, p2: snapshot.indexing ? tr(" · Обновляем каталог…") : '' }) : snapshot.status === 'error' ? tr("Не удалось загрузить галерею") : tr("Загрузка…")}</p>
             </div>
             <div className="mayori-gallery-header-actions">
-              <button type="button" className="mayori-filter-toggle" aria-controls="mayori-filter-panel" aria-expanded={filtersOpen} onClick={() => { setFiltersOpen(value => !value) }}>{icon('filter')}<span>Фильтры</span></button>
+              <button type="button" className="mayori-filter-toggle" aria-controls="mayori-filter-panel" aria-expanded={filtersOpen} onClick={() => { setFiltersOpen(value => !value) }}>{icon('filter')}<span>{tr("Фильтры")}</span></button>
               <ImportControl busy={busy} inputRef={inputRef} onFiles={importFiles} compact />
             </div>
           </header>
           <div className="mayori-gallery-workspace">
-            {filtersOpen && <button type="button" className="mayori-filter-scrim" aria-label="Закрыть фильтры" onClick={() => { setFiltersOpen(false) }} />}
-            <aside id="mayori-filter-panel" className={`mayori-filter-panel${filtersOpen ? ' is-open' : ''}`} aria-label="Фильтры персонажей">
-              <div className="mayori-filter-panel-header"><h3>Фильтры</h3><button type="button" className="mayori-icon-action" aria-label="Закрыть фильтры" onClick={() => { setFiltersOpen(false) }}>{icon('close')}</button></div>
+            {filtersOpen && <button type="button" className="mayori-filter-scrim" aria-label={tr("Закрыть фильтры")} onClick={() => { setFiltersOpen(false) }} />}
+            <aside id="mayori-filter-panel" className={`mayori-filter-panel${filtersOpen ? ' is-open' : ''}`} aria-label={tr("Фильтры персонажей")}>
+              <div className="mayori-filter-panel-header"><h3>{tr("Фильтры")}</h3><button type="button" className="mayori-icon-action" aria-label={tr("Закрыть фильтры")} onClick={() => { setFiltersOpen(false) }}>{icon('close')}</button></div>
               <ImportControl busy={busy} inputRef={inputRef} onFiles={importFiles} />
               <Filters facets={snapshot.facets} query={query} setQuery={setQuery} sort={sort} setSort={setSort} creator={creator} setCreator={setCreator} portrait={portrait} setPortrait={setPortrait} selectedTags={selectedTags} setSelectedTags={setSelectedTags} onReset={resetFilters} />
             </aside>
             <main ref={mainRef} className="mayori-gallery-main" id="mayori-gallery-content">
               <div className="mayori-gallery-results">
-                <p role="status" aria-live="polite">{snapshot.status === 'ready' ? `Найдено ${snapshot.filteredTotal} из ${snapshot.total}` : ''}</p>
-                <div className="mayori-column-control mayori-filter-control"><span>Карточек в ряд</span><Select aria-label="Карточек в ряд" value={preferences.columns} onChange={columns => setPreferences(previous => ({ ...previous, columns: Number(columns) }))} options={COLUMN_OPTIONS.map(columns => ({ value: columns, label: columns }))} /></div>
+                <p role="status" aria-live="polite">{snapshot.status === 'ready' ? tr("Найдено {p1} из {p2}", { p1: snapshot.filteredTotal, p2: snapshot.total }) : ''}</p>
+                <div className="mayori-column-control mayori-filter-control"><span>{tr("Карточек в ряд")}</span><Select aria-label={tr("Карточек в ряд")} value={preferences.columns} onChange={columns => setPreferences(previous => ({ ...previous, columns: Number(columns) }))} options={COLUMN_OPTIONS.map(columns => ({ value: columns, label: columns }))} /></div>
               </div>
               <div className="mayori-gallery-notice" role="status" aria-live="polite">
-                {notice !== null && <p className={notice.kind === 'error' ? 'mayori-error' : 'mayori-success'}>{notice.text}</p>}
+                {notice !== null && <p className={notice.kind === 'error' ? 'mayori-error' : 'mayori-success'}>{notice.text !== undefined ? noticeText(notice.text)
+                  : [notice.imported > 0 ? tr("Импортировано: {p1}.", { p1: notice.imported }) : '',
+                    ...notice.rejected.map(item => `${item.name}: ${noticeText(item.error)}`)].filter(Boolean).join(' ')}</p>}
               </div>
-              {snapshot.status === 'error' && <div role="alert" className="mayori-error">{snapshot.error} <button type="button" className="mayori-secondary-button" disabled={busy} onClick={() => { void catalog.refresh().catch(() => {}) }}>Повторить загрузку</button></div>}
-              {snapshot.status === 'loading' && <p className="mayori-empty">Загружаем галерею…</p>}
+              {snapshot.status === 'error' && <div role="alert" className="mayori-error">{noticeText(snapshot.error)} <button type="button" className="mayori-secondary-button" disabled={busy} onClick={() => { void catalog.refresh().catch(() => {}) }}>{tr("Повторить загрузку")}</button></div>}
+              {snapshot.status === 'loading' && <p className="mayori-empty">{tr("Загружаем галерею…")}</p>}
               {snapshot.status === 'ready' && cards.length === 0 && (
                 <div className="mayori-empty">
                   <span className="mayori-empty-icon">{icon('gallery')}</span>
-                  <h3>{snapshot.total === 0 ? 'Персонажей пока нет' : 'Ничего не найдено'}</h3>
-                  <p>{snapshot.total === 0 ? 'Импортируйте PNG или JSON, чтобы добавить первого персонажа.' : 'Измените запрос или сбросьте фильтры.'}</p>
+                  <h3>{snapshot.total === 0 ? tr("Персонажей пока нет") : tr("Ничего не найдено")}</h3>
+                  <p>{snapshot.total === 0 ? tr("Импортируйте PNG или JSON, чтобы добавить первого персонажа.") : tr("Измените запрос или сбросьте фильтры.")}</p>
                 </div>
               )}
               {cards.length > 0 && <>

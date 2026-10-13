@@ -1,3 +1,4 @@
+import { tr, noticeText } from '../../localization/client/service.js'
 import { createElement, useRef, useState, useSyncExternalStore } from 'react'
 
 /** Saved answers use the same compact, cyclic navigation as authored greetings. */
@@ -19,7 +20,7 @@ export function AnswerVariantNavigation({ revisions, group, useSession, IconButt
         if (document.activeElement !== document.body) return
         const controls = [...document.querySelectorAll(`[data-answer-variant-group="${group.groupId}"]`)]
           .find(node => node.dataset.answerVariantChat === revisions.sessionId)
-        controls?.querySelector(`button[aria-label="${direction < 0 ? 'Предыдущий' : 'Следующий'} вариант ответа"]`)?.focus()
+        controls?.querySelector(direction < 0 ? '[data-variant-action="previous"]' : '[data-variant-action="next"]')?.focus()
       })
     }
   }
@@ -27,11 +28,11 @@ export function AnswerVariantNavigation({ revisions, group, useSession, IconButt
   const busy = snapshot.busy || activity
   return createElement('div', { className: 'mayori-answer-variants', 'data-answer-variant-group': group.groupId,
     'data-answer-variant-chat': revisions.sessionId },
-    createElement('div', { className: 'mayori-greeting-swipes', 'aria-label': 'Варианты ответа' },
-      createElement(IconButton, { label: 'Предыдущий вариант ответа', disabled: busy, onClick: () => { void swipe(-1) } }, '‹'),
+    createElement('div', { className: 'mayori-greeting-swipes', 'aria-label': tr("Варианты ответа") },
+      createElement(IconButton, { label: tr("Предыдущий вариант ответа"), 'data-variant-action': 'previous', disabled: busy, onClick: () => { void swipe(-1) } }, '‹'),
       createElement('span', { role: 'status', 'aria-live': 'polite' }, `${group.index < 0 ? '—' : group.index + 1} / ${group.count}`),
-      createElement(IconButton, { label: 'Следующий вариант ответа', disabled: busy, onClick: () => { void swipe(1) } }, '›')),
-    error ? createElement('p', { role: 'alert', className: 'mayori-error' }, error) : null)
+      createElement(IconButton, { label: tr("Следующий вариант ответа"), 'data-variant-action': 'next', disabled: busy, onClick: () => { void swipe(1) } }, '›')),
+    error ? createElement('p', { role: 'alert', className: 'mayori-error' }, noticeText(error)) : null)
 }
 
 export function AnswerVariants({ revisions, seq, useSession, IconButton }) {

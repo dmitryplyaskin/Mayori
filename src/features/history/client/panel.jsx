@@ -1,3 +1,4 @@
+import { tr, noticeText, formatLocale, currentLanguage } from '../../localization/client/service.js'
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { Select } from '../../../client/components/select.jsx'
@@ -22,7 +23,7 @@ export function useHistoryDetails(history, rows, refreshKey = 0) {
     if (ids.length) Promise.resolve().then(() => history.details(ids)).then(value => {
       if (active) setResult({ key: requestKey, value, loading: false })
     }).catch(() => {
-      if (active) setResult({ key: requestKey, loading: false, value: Object.fromEntries(ids.map(id => [id, { error: 'Не удалось загрузить данные чата.' }])) })
+      if (active) setResult({ key: requestKey, loading: false, value: Object.fromEntries(ids.map(id => [id, { error: tr("Не удалось загрузить данные чата.") }])) })
     })
     return () => { active = false }
   }, [history, key, requestKey])
@@ -37,11 +38,11 @@ export function HistoryRow({ row, detail, loading, disabled, onOpen }) {
     <span className="mayori-history-avatar" aria-hidden="true">{avatar && failedImage !== avatar
       ? <img src={avatar} alt="" loading="lazy" onError={() => { setFailedImage(avatar) }} /> : Array.from(name)[0]?.toUpperCase()}</span>
     <span className="mayori-history-text"><strong>{name}</strong>
-      {detail?.characterName && row.title !== name && row.title !== 'Чат без названия' && <small>{row.title}</small>}
-      <span className="mayori-history-preview">{loading ? 'Загружаем сообщение…' : detail?.error || detail?.preview || 'Сообщений пока нет'}</span>
-      {row.current && <small>Открыт сейчас</small>}
+      {detail?.characterName && row.title !== name && row.title !== tr("Чат без названия") && <small>{row.title}</small>}
+      <span className="mayori-history-preview">{loading ? tr("Загружаем сообщение…") : noticeText(detail?.error) || detail?.preview || tr("Сообщений пока нет")}</span>
+      {row.current && <small>{tr("Открыт сейчас")}</small>}
     </span>
-    <time dateTime={new Date(row.updatedAt).toISOString()}>{new Date(row.updatedAt).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' })}</time>
+    <time dateTime={new Date(row.updatedAt).toISOString()}>{new Date(row.updatedAt).toLocaleString(formatLocale(), { dateStyle: 'medium', timeStyle: 'short' })}</time>
   </button>
 }
 
@@ -86,7 +87,7 @@ export function ChatHistoryPanel({ history }) {
     let active = true
     setRefreshing(true)
     Promise.resolve().then(() => history.ensureLoaded()).catch(() => {
-      if (active) setError('Не удалось загрузить историю. Попробуйте обновить список.')
+      if (active) setError(tr("Не удалось загрузить историю. Попробуйте обновить список."))
     }).finally(() => { if (active) setRefreshing(false) })
     return () => { active = false }
   }, [history])
@@ -94,17 +95,17 @@ export function ChatHistoryPanel({ history }) {
     setError(null)
     setRefreshing(true)
     try { await history.refresh() }
-    catch { setError('Не удалось загрузить историю. Попробуйте обновить список.') }
+    catch { setError(tr("Не удалось загрузить историю. Попробуйте обновить список.")) }
     finally { setRefreshing(false); setDetailsRevision(value => value + 1) }
   }
   const open = async id => {
     setError(null)
     try { await history.open(id) }
-    catch { setError('Не удалось открыть чат. Обновите список и попробуйте снова.') }
+    catch { setError(tr("Не удалось открыть чат. Обновите список и попробуйте снова.")) }
   }
   const changeArchive = async row => {
     if (changingRef.current) return
-    if (!row.archived && !window.confirm(`Убрать чат «${row.title}» в архив?`)) return
+    if (!row.archived && !window.confirm(tr("Убрать чат «{p1}» в архив?", { p1: row.title }))) return
     changingRef.current = true
     setChangingId(row.id)
     setError(null)
@@ -112,11 +113,11 @@ export function ChatHistoryPanel({ history }) {
     try {
       if (row.archived) await history.restore(row.id)
       else await history.archive(row.id)
-      setNotice(row.archived ? 'Чат восстановлен.' : 'Чат перемещён в архив.')
+      setNotice(row.archived ? tr("Чат восстановлен.") : tr("Чат перемещён в архив."))
     } catch (failure) {
       setError(failure?.rpcError?.code === 'workspace/session-active'
-        ? 'Чат ещё выполняет работу. Дождитесь завершения или остановите её в чате, затем повторите.'
-        : row.archived ? 'Не удалось восстановить чат.' : 'Не удалось переместить чат в архив.')
+        ? tr("Чат ещё выполняет работу. Дождитесь завершения или остановите её в чате, затем повторите.")
+        : row.archived ? tr("Не удалось восстановить чат.") : tr("Не удалось переместить чат в архив."))
     } finally {
       changingRef.current = false
       setChangingId(null)
@@ -129,69 +130,69 @@ export function ChatHistoryPanel({ history }) {
     setChangingId(removing.id); setError(null); setNotice('')
     try {
       await history.remove(removing.id)
-      setRemoving(null); setNotice('Чат удалён.')
+      setRemoving(null); setNotice(tr("Чат удалён."))
     } catch (failure) {
       setError(failure?.rpcError?.code === 'workspace/session-active'
-        ? 'Чат ещё выполняет работу. Дождитесь завершения.' : failure.message || 'Не удалось удалить чат.')
+        ? tr("Чат ещё выполняет работу. Дождитесь завершения.") : failure.message || tr("Не удалось удалить чат."))
     } finally { changingRef.current = false; setChangingId(null) }
   }
   const loading = refreshing || snapshot.phase === 'pending' || archiveSnapshot.phase === 'pending'
+  const language = currentLanguage()
   const rows = useMemo(() => archiveSnapshot.phase === 'ready'
     && archiveSnapshot.state !== 'error'
     ? historyRows(snapshot, query, archiveSnapshot.archivedSessionIds, archivedOnly, Infinity, {
       status, kind, sort, since: period === 'all' ? undefined : Date.now() - Number(period) * 86400000,
-    }) : [], [snapshot, query, archiveSnapshot, archivedOnly, status, kind, sort, period])
+    }) : [], [snapshot, query, archiveSnapshot, archivedOnly, status, kind, sort, period, language])
   const pagination = paginate(rows, page, pageSize)
   const details = useHistoryDetails(history, pagination.items, detailsRevision)
   return <section className="mayori-history-panel" aria-labelledby="mayori-history-title">
     <header className="mayori-history-header">
-      <h2 id="mayori-history-title">История чатов</h2>
+      <h2 id="mayori-history-title">{tr("История чатов")}</h2>
       <div className="mayori-history-controls">
-        <button ref={controlsRef} type="button" className="mayori-secondary-button" disabled={refreshing || changingId !== null} onClick={() => { void refresh() }}>Обновить</button>
+        <button ref={controlsRef} type="button" className="mayori-secondary-button" disabled={refreshing || changingId !== null} onClick={() => { void refresh() }}>{tr("Обновить")}</button>
       </div>
     </header>
-    <label className="mayori-search">Поиск по названию или ID чата
-      <input type="search" value={query} onChange={event => { setQuery(event.target.value) }} placeholder="Например, имя персонажа" />
+    <label className="mayori-search">{tr("Поиск по названию или ID чата ")}<input type="search" value={query} onChange={event => { setQuery(event.target.value) }} placeholder={tr("Например, имя персонажа")} />
     </label>
     <div className="mayori-history-filters">
-      <label>Статус<Select aria-label="Статус чатов" value={status} disabled={changingId !== null} onChange={setStatus} options={[
-        { value: 'active', label: 'Без архива' }, { value: 'archived', label: 'Архив' }, { value: 'all', label: 'Все чаты' },
+      <label>{tr("Статус")}<Select aria-label={tr("Статус чатов")} value={status} disabled={changingId !== null} onChange={setStatus} options={[
+        { value: 'active', label: tr("Без архива") }, { value: 'archived', label: tr("Архив") }, { value: 'all', label: tr("Все чаты") },
       ]} /></label>
-      <label>Чаты<Select aria-label="Тип чатов" value={kind} onChange={setKind} options={[
-        { value: 'all', label: 'Все' }, { value: 'current', label: 'Открытые' }, { value: 'running', label: 'В работе' },
-        { value: 'branches', label: 'Ветки' }, { value: 'originals', label: 'Без веток' },
+      <label>{tr("Чаты")}<Select aria-label={tr("Тип чатов")} value={kind} onChange={setKind} options={[
+        { value: 'all', label: tr("Все") }, { value: 'current', label: tr("Открытые") }, { value: 'running', label: tr("В работе") },
+        { value: 'branches', label: tr("Ветки") }, { value: 'originals', label: tr("Без веток") },
       ]} /></label>
-      <label>Активность<Select aria-label="Период активности" value={period} onChange={setPeriod} options={[
-        { value: 'all', label: 'За всё время' }, { value: '1', label: 'За 24 часа' }, { value: '7', label: 'За 7 дней' }, { value: '30', label: 'За 30 дней' },
+      <label>{tr("Активность")}<Select aria-label={tr("Период активности")} value={period} onChange={setPeriod} options={[
+        { value: 'all', label: tr("За всё время") }, { value: '1', label: tr("За 24 часа") }, { value: '7', label: tr("За 7 дней") }, { value: '30', label: tr("За 30 дней") },
       ]} /></label>
-      <label>Сортировка<Select aria-label="Сортировка чатов" value={sort} onChange={setSort} options={[
-        { value: 'recent', label: 'Сначала недавние' }, { value: 'oldest', label: 'Сначала давние' },
-        { value: 'title-asc', label: 'Название: А–Я' }, { value: 'title-desc', label: 'Название: Я–А' },
+      <label>{tr("Сортировка")}<Select aria-label={tr("Сортировка чатов")} value={sort} onChange={setSort} options={[
+        { value: 'recent', label: tr("Сначала недавние") }, { value: 'oldest', label: tr("Сначала давние") },
+        { value: 'title-asc', label: tr("Название: А–Я") }, { value: 'title-desc', label: tr("Название: Я–А") },
       ]} /></label>
     </div>
-    <p role="status">{loading ? 'Загружаем историю…' : notice || `Найдено чатов: ${rows.length}`}</p>
-    {archiveSnapshot.state === 'error' && <p role="alert" className="mayori-error">Не удалось загрузить состояние архива. Проверьте соединение и перезагрузите страницу.</p>}
-    {error && !removing && <p role="alert" className="mayori-error">{error}</p>}
-    {!loading && !error && archiveSnapshot.state !== 'error' && rows.length === 0 && <p>{query.trim() || kind !== 'all' || period !== 'all' ? 'Чаты не найдены. Измените фильтры или поиск.' : archivedOnly ? 'В архиве пока нет чатов.' : 'Чатов пока нет.'}</p>}
+    <p role="status">{loading ? tr("Загружаем историю…") : notice || tr("Найдено чатов: {p1}", { p1: rows.length })}</p>
+    {archiveSnapshot.state === 'error' && <p role="alert" className="mayori-error">{tr("Не удалось загрузить состояние архива. Проверьте соединение и перезагрузите страницу.")}</p>}
+    {error && !removing && <p role="alert" className="mayori-error">{noticeText(error)}</p>}
+    {!loading && !error && archiveSnapshot.state !== 'error' && rows.length === 0 && <p>{query.trim() || kind !== 'all' || period !== 'all' ? tr("Чаты не найдены. Измените фильтры или поиск.") : archivedOnly ? tr("В архиве пока нет чатов.") : tr("Чатов пока нет.")}</p>}
     <ul className="mayori-history-list">{pagination.items.map(row => <li key={row.id} className="mayori-history-item">
       <HistoryRow row={row} detail={details.value[row.id]} loading={details.loading} disabled={changingId === row.id} onOpen={open} />
       <div className="mayori-history-actions">
-        <button type="button" className="mayori-secondary-button" disabled={changingId !== null || archiveSnapshot.state === 'error'} aria-label={`${row.archived ? 'Восстановить чат' : 'В архив — чат'} «${row.title}»`} onClick={() => { void changeArchive(row) }}>
-          {changingId === row.id ? 'Сохраняем…' : row.archived ? 'Восстановить' : 'В архив'}
+        <button type="button" className="mayori-secondary-button" disabled={changingId !== null || archiveSnapshot.state === 'error'} aria-label={`${row.archived ? tr("Восстановить чат") : tr("В архив — чат")} «${row.title}»`} onClick={() => { void changeArchive(row) }}>
+          {changingId === row.id ? tr("Сохраняем…") : row.archived ? tr("Восстановить") : tr("В архив")}
         </button>
-        <button type="button" className="mayori-secondary-button" disabled={changingId !== null || archiveSnapshot.state === 'error'} aria-haspopup="dialog" aria-label={`Удалить чат «${row.title}»`}
-          onClick={event => { triggerRef.current = event.currentTarget; setError(null); setRemoving(row) }}>Удалить</button>
+        <button type="button" className="mayori-secondary-button" disabled={changingId !== null || archiveSnapshot.state === 'error'} aria-haspopup="dialog" aria-label={tr("Удалить чат «{p1}»", { p1: row.title })}
+          onClick={event => { triggerRef.current = event.currentTarget; setError(null); setRemoving(row) }}>{tr("Удалить")}</button>
       </div>
     </li>)}</ul>
     {rows.length > 0 && <Pagination pagination={pagination} total={rows.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />}
     {removing && createPortal(<dialog ref={dialogRef} className="mayori-message-editor mayori-message-confirm" aria-labelledby={dialogTitle}
       onCancel={event => { event.preventDefault(); closeRemoval() }} onKeyDown={event => event.stopPropagation()}>
       <form onSubmit={remove}>
-        <h2 id={dialogTitle}>Удалить чат «{removing.title}»?</h2>
-        {error && <p role="alert" className="mayori-error">{error}</p>}
+        <h2 id={dialogTitle}>{tr("Удалить чат «{p1}»?", { p1: removing.title })}</h2>
+        {error && <p role="alert" className="mayori-error">{noticeText(error)}</p>}
         <div className="mayori-message-editor-actions">
-          <button type="button" autoFocus disabled={changingId !== null} onClick={closeRemoval}>Отмена</button>
-          <button type="submit" disabled={changingId !== null}>{changingId !== null ? 'Удаляем…' : 'Удалить'}</button>
+          <button type="button" autoFocus disabled={changingId !== null} onClick={closeRemoval}>{tr("Отмена")}</button>
+          <button type="submit" disabled={changingId !== null}>{changingId !== null ? tr("Удаляем…") : tr("Удалить")}</button>
         </div>
       </form>
     </dialog>, document.body)}

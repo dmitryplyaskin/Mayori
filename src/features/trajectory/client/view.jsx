@@ -1,3 +1,4 @@
+import { tr, noticeText } from '../../localization/client/service.js'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { remapChildProps } from '../../../client/infrastructure/slot-mirror.js'
 import { Select } from '../../../client/components/select.jsx'
@@ -37,24 +38,24 @@ export function ContextTrajectory({ stock: Stock, stockChildren, childPrefix, co
   const journal = mode === 'journal' || props.viewRequest?.focus != null
   return <div className="mayori-trajectory">
     <div className="mayori-trajectory-controls">
-      <div className="mayori-trajectory-field"><span>Показывать</span><Select aria-label="Показывать" value={journal ? 'journal' : 'context'} onChange={value => {
+      <div className="mayori-trajectory-field"><span>{tr("Показывать")}</span><Select aria-label={tr("Показывать")} value={journal ? 'journal' : 'context'} onChange={value => {
         props.completeViewRequest?.(); setMode(value)
-      }} options={[{ value: 'context', label: 'Контекст запроса' }, { value: 'journal', label: 'Полный журнал' }]} /></div>
+      }} options={[{ value: 'context', label: tr("Контекст запроса") }, { value: 'journal', label: tr("Полный журнал") }]} /></div>
       {!journal && <>
-        <div className="mayori-trajectory-field"><span>Запрос</span><Select aria-label="Запрос" value={selection} onChange={setSelection}
-          options={[{ value: 'latest', label: 'Последний запрос' }, { value: 'current', label: 'Текущий сохранённый контекст' },
-            ...(snapshot.value?.requests ?? []).map(request => ({ value: request.seq, label: `№${request.number} · Ход ${request.turn}, шаг ${request.step}${request.failed ? ' · Неудачная попытка' : ''}` }))]} /></div>
-        <button type="button" onClick={refresh} disabled={snapshot.status === 'loading'}>Обновить</button>
+        <div className="mayori-trajectory-field"><span>{tr("Запрос")}</span><Select aria-label={tr("Запрос")} value={selection} onChange={setSelection}
+          options={[{ value: 'latest', label: tr("Последний запрос") }, { value: 'current', label: tr("Текущий сохранённый контекст") },
+            ...(snapshot.value?.requests ?? []).map(request => ({ value: request.seq, label: tr("№{p1} · Ход {p2}, шаг {p3}{p4}", { p1: request.number, p2: request.turn, p3: request.step, p4: request.failed ? tr(" · Неудачная попытка") : '' }) }))]} /></div>
+        <button type="button" onClick={refresh} disabled={snapshot.status === 'loading'}>{tr("Обновить")}</button>
       </>}
     </div>
     {journal ? <div className="mayori-trajectory-journal"><Stock {...mapped} /></div> : <div className="mayori-trajectory-context" aria-busy={snapshot.status === 'loading'}>
-      {snapshot.status === 'loading' && <p role="status">Загрузка контекста…</p>}
-      {snapshot.error && <p role="alert">{snapshot.error}</p>}
+      {snapshot.status === 'loading' && <p role="status">{tr("Загрузка контекста…")}</p>}
+      {snapshot.error && <p role="alert">{noticeText(snapshot.error)}</p>}
       {value && <>
         <p className="mayori-persona-hint">{value.selectedSeq === 'current'
-          ? 'Сохранённые сообщения для следующего запроса. Системный контекст обновится при отправке.'
-          : 'Вход модели на момент этого запроса. Заменённые сообщения и ответ на запрос исключены.'}</p>
-        {!value.messages.length && <p>В чате пока нет сохранённых сообщений.</p>}
+          ? tr("Сохранённые сообщения для следующего запроса. Системный контекст обновится при отправке.")
+          : tr("Вход модели на момент этого запроса. Заменённые сообщения и ответ на запрос исключены.")}</p>
+        {!value.messages.length && <p>{tr("В чате пока нет сохранённых сообщений.")}</p>}
         <div className="mayori-trajectory-table"><RequestTrajectory key={value.selectedSeq} stock={Stock} {...mapped} value={value} /></div>
       </>}
     </div>}

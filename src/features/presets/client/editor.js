@@ -1,3 +1,4 @@
+import { tr } from '../../localization/client/service.js'
 import { compilePresetNodes, MAX_PRESET_DEPTH, MAX_PRESET_NODES, movePresetNode, presetNodeEntries, presetNodes, PRESET_COMPILER_VERSION } from '../shared/tree.js'
 
 export const blankPreset = () => ({ name: '', instructions: '' })
@@ -39,8 +40,8 @@ export class PresetEditor {
       const nodes = structuredClone(presetNodes(this.#snapshot.draft))
       const result = operation(nodes) ?? nodes
       const entries = presetNodeEntries(result)
-      if (entries.length > MAX_PRESET_NODES) throw new TypeError(`В пресете может быть не больше ${MAX_PRESET_NODES} блоков и групп.`)
-      if (entries.some(entry => entry.ancestors.length >= MAX_PRESET_DEPTH)) throw new TypeError(`Используйте не больше ${MAX_PRESET_DEPTH} уровней вложенности.`)
+      if (entries.length > MAX_PRESET_NODES) throw new TypeError(tr("В пресете может быть не больше {p1} блоков и групп.", { p1: MAX_PRESET_NODES }))
+      if (entries.some(entry => entry.ancestors.length >= MAX_PRESET_DEPTH)) throw new TypeError(tr("Используйте не больше {p1} уровней вложенности.", { p1: MAX_PRESET_DEPTH }))
       this.update({ draft: { ...this.#snapshot.draft, nodes: result, instructions: compilePresetNodes(result), compilerVersion: PRESET_COMPILER_VERSION }, error: '', notice })
       return true
     } catch (error) { this.update({ error: error.message }); return false }
@@ -63,7 +64,7 @@ export class PresetEditor {
     if (this.#edit(nodes => {
       const entry = presetNodeEntries(nodes).find(entry => entry.node.id === this.#snapshot.selectedNodeId)
       const destination = entry?.node.kind === 'group' ? entry.node.children : entry?.siblings ?? nodes
-      destination.push({ id, kind, title: kind === 'group' ? 'Новая группа' : 'Новый блок', enabled: true,
+      destination.push({ id, kind, title: kind === 'group' ? tr("Новая группа") : tr("Новый блок"), enabled: true,
         ...(kind === 'group' ? { children: [] } : { text: '' }) })
     })) this.update({ selectedNodeId: id, preview: false, undo: previous,
       collapsed: this.#snapshot.collapsed.filter(id => id !== selection?.node.id) })
@@ -73,7 +74,7 @@ export class PresetEditor {
     if (this.#edit(nodes => {
       const entry = presetNodeEntries(nodes).find(entry => entry.node.id === id)
       if (entry) entry.siblings.splice(entry.siblings.indexOf(entry.node), 1)
-    }, 'Элемент удалён. Можно отменить действие.')) {
+    }, tr("Элемент удалён. Можно отменить действие."))) {
       const entries = presetNodeEntries(presetNodes(this.#snapshot.draft))
       this.update({ undo: previous, selectedNodeId: entries.some(entry => entry.node.id === this.#snapshot.selectedNodeId) ? this.#snapshot.selectedNodeId : entries[0]?.node.id ?? null })
     }
@@ -86,7 +87,7 @@ export class PresetEditor {
       if (!entry) return
       const copy = structuredClone(entry.node)
       for (const { node } of presetNodeEntries([copy])) node.id = crypto.randomUUID()
-      copy.title = `${copy.title} — копия`.slice(0, 120)
+      copy.title = tr("{p1} — копия", { p1: copy.title }).slice(0, 120)
       copyId = copy.id
       entry.siblings.splice(entry.siblings.indexOf(entry.node) + 1, 0, copy)
     })) this.update({ undo: previous, selectedNodeId: copyId ?? id })
@@ -95,13 +96,13 @@ export class PresetEditor {
     const previous = { draft: structuredClone(this.#snapshot.draft), selectedNodeId: this.#snapshot.selectedNodeId }
     const nodes = presetNodes(this.#snapshot.draft)
     const title = presetNodeEntries(nodes).find(entry => entry.node.id === sourceId)?.node.title
-    if (!this.#edit(() => movePresetNode(nodes, sourceId, targetId, position), `«${title}» перемещён. Можно отменить действие.`)) return false
+    if (!this.#edit(() => movePresetNode(nodes, sourceId, targetId, position), tr("«{p1}» перемещён. Можно отменить действие.", { p1: title }))) return false
     this.update({ undo: previous, selectedNodeId: sourceId,
       collapsed: position === 'inside' ? this.#snapshot.collapsed.filter(id => id !== targetId) : this.#snapshot.collapsed })
     return true
   }
   undo() {
     if (this.#snapshot.busy || !this.#snapshot.undo) return
-    this.update({ ...this.#snapshot.undo, undo: null, error: '', notice: 'Действие отменено.' })
+    this.update({ ...this.#snapshot.undo, undo: null, error: '', notice: tr("Действие отменено.") })
   }
 }

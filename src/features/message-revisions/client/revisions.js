@@ -1,16 +1,17 @@
+import { tr } from '../../localization/client/service.js'
 import { call } from '../../../client/infrastructure/rpc.js'
 
 /** A refreshed browser must never send a save to the older generating edit API. */
 export function assertSafeEdit(value) {
   if (value?.editRunsModel !== false || !Array.isArray(value.editModes)
     || !['current', 'branch'].every(mode => value.editModes.includes(mode))) {
-    throw new Error('Редактор обновлён, но Host использует старую версию. Перезапустите Mayori и обновите страницу перед редактированием.')
+    throw new Error(tr("Редактор обновлён, но Host использует старую версию. Перезапустите Mayori и обновите страницу перед редактированием."))
   }
 }
 
 export function assertCurrentRegeneration(value) {
-  if (value?.regenerateMode !== 'current') throw new Error('Host использует старый повтор с созданием ветки. Перезапустите Mayori и обновите страницу.')
-  if (value.regenerateKeepsVariants !== true) throw new Error('Для сохранения вариантов перезапустите Mayori и обновите страницу.')
+  if (value?.regenerateMode !== 'current') throw new Error(tr("Host использует старый повтор с созданием ветки. Перезапустите Mayori и обновите страницу."))
+  if (value.regenerateKeepsVariants !== true) throw new Error(tr("Для сохранения вариантов перезапустите Mayori и обновите страницу."))
 }
 
 export class MessageRevisionClient {
@@ -63,7 +64,7 @@ export class RemoteMessageRevisionProvider extends MessageRevisionClient {
     return value
   }
   async #change(endpoint, input) {
-    if (this.#snapshot.busy) throw new Error('Дождитесь сохранения текущей реплики.')
+    if (this.#snapshot.busy) throw new Error(tr("Дождитесь сохранения текущей реплики."))
     this.#publish({ busy: true, error: null })
     let submitted = false
     try {

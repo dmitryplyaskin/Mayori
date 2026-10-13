@@ -21,7 +21,7 @@ async function sourceGraph() {
   files.push(resolve(root, 'index.js'))
   return new Map(await Promise.all(files.map(async file => {
     const text = await readFile(file, 'utf8')
-    const imports = [...text.matchAll(/(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)(['"])([^'"]+)\1/g)].map(match => match[2])
+    const imports = [...text.matchAll(/(?:^\s*(?:import|export)\s+(?:\{[^}]*\}|\*\s*(?:as\s+\w+)?|\w+(?:\s*,\s*\{[^}]*\})?)\s+from\s*|^\s*import\s*|\bimport\s*\(\s*)(['"])([^'"]+)\1/gm)].map(match => match[2])
     return [file, imports]
   })))
 }

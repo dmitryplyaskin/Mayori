@@ -1,3 +1,4 @@
+import { tr, formatLocale } from '../../localization/client/service.js'
 /** History capability backed by the durable DSH session catalog and archive. */
 import { call } from '../../../client/infrastructure/rpc.js'
 import { ByteCache } from '../../../shared/resources.js'
@@ -47,7 +48,7 @@ export class SessionChatHistoryProvider extends ChatHistoryService {
     return () => { this.listeners.delete(listener); unsubscribe() }
   }
   publishDeleted = ids => {
-    if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string')) throw new Error('Некорректный список удалённых чатов.')
+    if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string')) throw new Error(tr("Некорректный список удалённых чатов."))
     this.deletedIds = [...new Set([...this.deletedIds, ...ids])]
     this.deletionPhase = 'ready'; this.listeners.forEach(listener => listener())
   }
@@ -62,7 +63,7 @@ export class SessionChatHistoryProvider extends ChatHistoryService {
     }
   }
   ensureLoaded = () => this.getSnapshot().phase === 'ready' && this.getSnapshot().state !== 'error' ? Promise.resolve() : this.refresh()
-  assertAvailable = id => { if (this.deletedIds.includes(id)) throw new Error('Чат удалён.') }
+  assertAvailable = id => { if (this.deletedIds.includes(id)) throw new Error(tr("Чат удалён.")) }
   open = async id => { this.assertAvailable(id); return this.uiWorkspace.openSession(id) }
   getArchiveSnapshot = () => this.workspaces.list.getSnapshot()
   subscribeArchive = listener => this.workspaces.list.subscribe(listener)
@@ -99,11 +100,11 @@ export class SessionChatHistoryProvider extends ChatHistoryService {
 
 /** Flatten all campaigns, retain ordinary forks, omit agent children and blanks. */
 export function historyRows(snapshot, query = '', archivedSessionIds = [], archivedOnly = false, limit = Infinity, options = {}) {
-  const needle = query.trim().toLocaleLowerCase('ru')
+  const needle = query.trim().toLocaleLowerCase(formatLocale())
   const archived = new Set(archivedSessionIds)
   const rows = []
   const order = (a, b) => (options.sort === 'oldest' ? a.updatedAt - b.updatedAt
-    : options.sort === 'title-asc' ? a.title.localeCompare(b.title, 'ru')
+    : options.sort === 'title-asc' ? a.title.localeCompare(b.title, formatLocale())
     : options.sort === 'title-desc' ? b.title.localeCompare(a.title, 'ru')
     : b.updatedAt - a.updatedAt) || a.id.localeCompare(b.id)
   for (const id of snapshot.ids) {
@@ -114,8 +115,8 @@ export function historyRows(snapshot, query = '', archivedSessionIds = [], archi
     if (options.kind === 'current' && !current || options.kind === 'branches' && !row.parentId
       || options.kind === 'originals' && row.parentId || options.kind === 'running' && !row.running) continue
     if (options.since !== undefined && row.updatedAt < options.since) continue
-    const title = row.title?.trim() || 'Чат без названия'
-    if (needle && !`${title}\n${id}`.toLocaleLowerCase('ru').includes(needle)) continue
+    const title = row.title?.trim() || tr("Чат без названия")
+    if (needle && !`${title}\n${id}`.toLocaleLowerCase(formatLocale()).includes(needle)) continue
     rows.push({ id, title, updatedAt: row.updatedAt, current, archived: archived.has(id) })
     if (Number.isFinite(limit)) { rows.sort(order); if (rows.length > limit) rows.pop() }
   }

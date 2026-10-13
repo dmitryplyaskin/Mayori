@@ -1,3 +1,4 @@
+import { tr, noticeText } from '../../localization/client/service.js'
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { Select } from '../../../client/components/select.jsx'
@@ -75,9 +76,9 @@ export function MessageRevisionControls({ revisions, seq, canRepeat, useSession 
       if (mode === 'edit') assertSafeEdit(value)
       if (mode === 'regenerate') {
         assertCurrentRegeneration(value)
-        if (!value.canRegenerate) throw new Error(value.regenerateError || 'У этой реплики нет хода игрока для повторной генерации.')
+        if (!value.canRegenerate) throw new Error(value.regenerateError || tr("У этой реплики нет хода игрока для повторной генерации."))
       }
-      if (mode === 'delete' && !value.canDelete) throw new Error('Перезапустите Mayori и обновите страницу для удаления сообщений.')
+      if (mode === 'delete' && !value.canDelete) throw new Error(tr("Перезапустите Mayori и обновите страницу для удаления сообщений."))
       if (mode === 'regenerate') await revisions.regenerate(seq)
       else { setText(mode === 'edit' ? value.text : ''); setEditor({ mode, ...value }) }
     } catch (failure) { if (revision === epoch.current) setError(failure.message) }
@@ -88,7 +89,7 @@ export function MessageRevisionControls({ revisions, seq, canRepeat, useSession 
     event.preventDefault()
     event.stopPropagation()
     if (busy || pending.current) return
-    if (editor.mode === 'edit' && !text.trim()) { setError('Введите текст сообщения.'); field.current?.focus(); return }
+    if (editor.mode === 'edit' && !text.trim()) { setError(tr("Введите текст сообщения.")); field.current?.focus(); return }
     pending.current = true; setError('')
     const revision = epoch.current
     try {
@@ -100,35 +101,35 @@ export function MessageRevisionControls({ revisions, seq, canRepeat, useSession 
   }
   return <>
     <span className="mayori-message-actions">
-      <IconButton label="Редактировать" aria-haspopup="dialog" aria-disabled={busy || undefined}
+      <IconButton label={tr("Редактировать")} aria-haspopup="dialog" aria-disabled={busy || undefined}
         onClick={event => { void open('edit', event.currentTarget) }}><RevisionIcon /></IconButton>
-      {canRepeat && <IconButton label="Повторить ответ" aria-disabled={busy || undefined}
+      {canRepeat && <IconButton label={tr("Повторить ответ")} aria-disabled={busy || undefined}
         onClick={event => { void open('regenerate', event.currentTarget) }}><RevisionIcon repeat /></IconButton>}
-      <IconButton label="Удалить сообщение" aria-haspopup="dialog" aria-disabled={busy || undefined}
+      <IconButton label={tr("Удалить сообщение")} aria-haspopup="dialog" aria-disabled={busy || undefined}
         onClick={event => { void open('delete', event.currentTarget) }}><RevisionIcon remove /></IconButton>
-      <span className="mayori-revision-status" role="status">{loading ? 'Загружаем реплику…' : snapshot.busy ? 'Сохраняем…' : ''}</span>
+      <span className="mayori-revision-status" role="status">{loading ? tr("Загружаем реплику…") : snapshot.busy ? tr("Сохраняем…") : ''}</span>
     </span>
-    {error && !editor && <p role="alert" className="mayori-error">{error}</p>}
+    {error && !editor && <p role="alert" className="mayori-error">{noticeText(error)}</p>}
     {editor && createPortal(<dialog ref={dialog} className={`mayori-message-editor${editor.mode === 'delete' ? ' mayori-message-confirm' : ''}`} aria-labelledby={titleId}
       onCancel={event => { if (snapshot.busy) event.preventDefault() }}
       onKeyDown={event => { event.stopPropagation() }}
       onClose={() => { setEditor(null); setError('') }}>
       <form onSubmit={submit}>
-        <h2 id={titleId}>{editor.mode === 'edit' ? 'Редактировать сообщение' : 'Удалить сообщение?'}</h2>
+        <h2 id={titleId}>{editor.mode === 'edit' ? tr("Редактировать сообщение") : tr("Удалить сообщение?")}</h2>
         {editor.mode === 'edit' && <>
-          <label htmlFor={textId}>{editor.role === 'user' ? 'Реплика игрока' : 'Реплика персонажа'}</label>
+          <label htmlFor={textId}>{editor.role === 'user' ? tr("Реплика игрока") : tr("Реплика персонажа")}</label>
           <textarea ref={field} id={textId} autoFocus value={text} disabled={snapshot.busy}
             aria-invalid={error && !text.trim() ? true : undefined} aria-describedby={error ? errorId : undefined}
             onChange={event => { setText(event.target.value); setError('') }}
             onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); event.currentTarget.form.requestSubmit() } }} />
         </>}
-        {error && <p id={errorId} role="alert" className="mayori-error">{error}</p>}
+        {error && <p id={errorId} role="alert" className="mayori-error">{noticeText(error)}</p>}
         <div className="mayori-message-editor-actions">
-          <button type="button" autoFocus={editor.mode === 'delete'} disabled={snapshot.busy} onClick={close}>Отмена</button>
+          <button type="button" autoFocus={editor.mode === 'delete'} disabled={snapshot.busy} onClick={close}>{tr("Отмена")}</button>
           {editor.mode === 'edit' ? <>
-            <button type="submit" value="current" disabled={busy}>Сохранить в чате</button>
-            <button type="submit" value="branch" disabled={busy}>Создать ветку</button>
-          </> : <button type="submit" disabled={busy}>{snapshot.busy ? 'Удаляем…' : 'Удалить'}</button>}
+            <button type="submit" value="current" disabled={busy}>{tr("Сохранить в чате")}</button>
+            <button type="submit" value="branch" disabled={busy}>{tr("Создать ветку")}</button>
+          </> : <button type="submit" disabled={busy}>{snapshot.busy ? tr("Удаляем…") : tr("Удалить")}</button>}
         </div>
       </form>
     </dialog>, document.body)}
@@ -141,6 +142,6 @@ export function RevisionBranchNavigation({ sessionId, sessions, open }) {
   const rows = branchRows(snapshot, sessionId)
   if (rows.length < 2) return null
   return <div className="mayori-revision-branches">
-    <span>Ветка чата</span><Select aria-label="Ветка чата" value={sessionId} onChange={open} options={rows.map(row => ({ value: row.id, label: row.label }))} />
+    <span>{tr("Ветка чата")}</span><Select aria-label={tr("Ветка чата")} value={sessionId} onChange={open} options={rows.map(row => ({ value: row.id, label: noticeText(row.label) }))} />
   </div>
 }

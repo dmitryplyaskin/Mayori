@@ -1,3 +1,4 @@
+import { tr, noticeText, currentLanguage } from '../../features/localization/client/service.js'
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { historyRows } from '../../features/history/client/history.js'
 import { recentCharacters } from '../../features/characters/client/catalog-view.js'
@@ -29,7 +30,8 @@ export function HomePanel({ history, library, personas, startCharacter, selectPa
   const snapshot = useSyncExternalStore(history.subscribe, history.getSnapshot, history.getSnapshot)
   const archive = useSyncExternalStore(history.subscribeArchive, history.getArchiveSnapshot, history.getArchiveSnapshot)
   const catalog = useSyncExternalStore(library.subscribe, library.getSnapshot, library.getSnapshot)
-  const rows = useMemo(() => archive.phase === 'ready' && archive.state !== 'error' ? historyRows(snapshot, '', archive.archivedSessionIds, false, 5) : [], [snapshot, archive])
+  const language = currentLanguage()
+  const rows = useMemo(() => archive.phase === 'ready' && archive.state !== 'error' ? historyRows(snapshot, '', archive.archivedSessionIds, false, 5) : [], [snapshot, archive, language])
   const cards = recentCharacters(catalog.cards)
   const details = useHistoryDetails(history, rows)
   const [error, setError] = useState('')
@@ -50,13 +52,13 @@ export function HomePanel({ history, library, personas, startCharacter, selectPa
     let active = true
     setRefreshing(true)
     Promise.resolve().then(() => history.ensureLoaded()).catch(() => {
-      if (active) setError('Не удалось загрузить последние чаты. Попробуйте открыть историю и обновить список.')
+      if (active) setError(tr("Не удалось загрузить последние чаты. Попробуйте открыть историю и обновить список."))
     }).finally(() => { if (active) setRefreshing(false) })
     return () => { active = false }
   }, [history])
   const open = async id => {
     setError('')
-    try { await history.open(id) } catch { setError('Не удалось открыть чат. Попробуйте ещё раз.') }
+    try { await history.open(id) } catch { setError(tr("Не удалось открыть чат. Попробуйте ещё раз.")) }
   }
   const play = async (card, greetingIndex) => {
     if (playingRef.current) return
@@ -67,32 +69,32 @@ export function HomePanel({ history, library, personas, startCharacter, selectPa
     finally { playingRef.current = false; setPlayingId(null) }
   }
   const remove = async (card, dialog) => {
-    if (!window.confirm(`Удалить персонажа «${card.name}» из галереи?`)) return
+    if (!window.confirm(tr("Удалить персонажа «{p1}» из галереи?", { p1: card.name }))) return
     try { await library.remove(card.id); dialog?.close() }
     catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)) }
   }
   return <section className="mayori-home-panel" aria-labelledby="mayori-home-title">
     <div className="mayori-home-content">
       <header className="mayori-home-welcome"><span className="mayori-home-mark"><MayoriMark /></span>
-        <h1 id="mayori-home-title">Добро пожаловать в Mayori</h1>
-        <p>Продолжите свою историю или выберите персонажа для нового приключения.</p>
+        <h1 id="mayori-home-title">{tr("Добро пожаловать в Mayori")}</h1>
+        <p>{tr("Продолжите свою историю или выберите персонажа для нового приключения.")}</p>
       </header>
-      {error && <p role="alert" className="mayori-error">{error}</p>}
+      {error && <p role="alert" className="mayori-error">{noticeText(error)}</p>}
       <section className="mayori-home-section" aria-labelledby="mayori-home-chats">
-        <h2 id="mayori-home-chats">Последние чаты</h2>
-        {(refreshing || snapshot.phase === 'pending' || archive.phase === 'pending') && <p role="status">Загружаем чаты…</p>}
-        {archive.state === 'error' && <p role="alert" className="mayori-error">Не удалось загрузить состояние архива.</p>}
-        {!refreshing && snapshot.phase === 'ready' && archive.phase === 'ready' && archive.state !== 'error' && rows.length === 0 && <p className="mayori-home-empty">Чатов пока нет. Выберите персонажа ниже, чтобы начать историю.</p>}
+        <h2 id="mayori-home-chats">{tr("Последние чаты")}</h2>
+        {(refreshing || snapshot.phase === 'pending' || archive.phase === 'pending') && <p role="status">{tr("Загружаем чаты…")}</p>}
+        {archive.state === 'error' && <p role="alert" className="mayori-error">{tr("Не удалось загрузить состояние архива.")}</p>}
+        {!refreshing && snapshot.phase === 'ready' && archive.phase === 'ready' && archive.state !== 'error' && rows.length === 0 && <p className="mayori-home-empty">{tr("Чатов пока нет. Выберите персонажа ниже, чтобы начать историю.")}</p>}
         <ul className="mayori-history-list">{rows.map(row => <li key={row.id}><HistoryRow row={row} detail={details.value[row.id]} loading={details.loading} onOpen={open} /></li>)}</ul>
-        <button type="button" className="mayori-secondary-button" onClick={() => { selectPanel('mayori-history') }}>Перейти в историю чатов <span aria-hidden="true">→</span></button>
+        <button type="button" className="mayori-secondary-button" onClick={() => { selectPanel('mayori-history') }}>{tr("Перейти в историю чатов ")}<span aria-hidden="true">→</span></button>
       </section>
       <section className="mayori-home-section" aria-labelledby="mayori-home-characters">
-        <h2 id="mayori-home-characters">Недавно загруженные персонажи</h2>
-        {catalog.status === 'loading' && <p role="status">Загружаем персонажей…</p>}
-        {catalog.status === 'error' && <p role="alert" className="mayori-error">{catalog.error}</p>}
-        {catalog.status === 'ready' && cards.length === 0 && <p className="mayori-home-empty">В галерее пока нет персонажей. Перейдите в персонажи и импортируйте карточку PNG или JSON.</p>}
+        <h2 id="mayori-home-characters">{tr("Недавно загруженные персонажи")}</h2>
+        {catalog.status === 'loading' && <p role="status">{tr("Загружаем персонажей…")}</p>}
+        {catalog.status === 'error' && <p role="alert" className="mayori-error">{noticeText(catalog.error)}</p>}
+        {catalog.status === 'ready' && cards.length === 0 && <p className="mayori-home-empty">{tr("В галерее пока нет персонажей. Перейдите в персонажи и импортируйте карточку PNG или JSON.")}</p>}
         <ul className="mayori-card-grid">{cards.map(card => <CharacterCard key={card.id} card={card} onPlay={play} playBusy={playingId === card.id} playDisabled={playingId !== null} onEdit={showDetails} />)}</ul>
-        <button type="button" className="mayori-secondary-button" onClick={() => { selectPanel('mayori-characters') }}>Перейти к персонажам <span aria-hidden="true">→</span></button>
+        <button type="button" className="mayori-secondary-button" onClick={() => { selectPanel('mayori-characters') }}>{tr("Перейти к персонажам ")}<span aria-hidden="true">→</span></button>
       </section>
     </div>
     <CharacterInfoDialog card={selectedCard} onClose={() => { setSelectedCard(null) }} onRemove={remove} triggerRef={triggerRef} persona={persona} onPlay={play} playDisabled={playingId !== null} />

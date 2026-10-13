@@ -43,6 +43,7 @@ Mayori/
 │   │   ├── compaction/           # игровое сжатие истории и настройки
 │   │   ├── plugins/              # persisted переключатели игровых возможностей
 │   │   ├── settings/             # отдельная browser-модалка настроек Mayori
+│   │   ├── localization/         # browser seam и ru/en словари через DSH locale
 │   │   └── roll-history/         # чтение сохранённых бросков текущего чата
 │   └── shared/
 │       └── templates.js           # воспроизводимые ST substitutions

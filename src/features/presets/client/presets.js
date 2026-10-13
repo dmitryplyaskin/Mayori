@@ -1,3 +1,4 @@
+import { tr } from '../../localization/client/service.js'
 import { call } from '../../../client/infrastructure/rpc.js'
 import { PresetEditor } from './editor.js'
 
@@ -70,7 +71,7 @@ export class RemoteSessionPresetProvider extends SessionPresetService {
     }
   }
   async select(presetId) {
-    if (this.#changing) throw new Error('Дождитесь сохранения текущего пресета.')
+    if (this.#changing) throw new Error(tr("Дождитесь сохранения текущего пресета."))
     this.#changing = true
     ++this.#revision
     this.#publish({ ...this.#snapshot, status: 'saving', error: null })

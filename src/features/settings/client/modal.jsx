@@ -1,25 +1,28 @@
+import { tr } from '../../localization/client/service.js'
 import { useEffect, useId, useRef, useState } from 'react'
 import { IconButton } from '../../../client/components/icon-button.jsx'
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconCloseOutlineRegular, IconPersonalizationOutlineMedium, IconSettingsOutlineMedium, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { MayoriSettings } from '../../plugins/client/panel.jsx'
+import { LanguageSelector } from '../../localization/client/selector.jsx'
 
-const tabs = [['general', 'Основные', IconSettingsOutlineMedium], ['plugins', 'Плагины', IconPersonalizationOutlineMedium]]
+const settingsTabs = () => [['general', tr("Основные"), IconSettingsOutlineMedium], ['plugins', tr("Плагины"), IconPersonalizationOutlineMedium]]
 
 /** Independent settings entry; the native DSH settings consumer keeps its own state. */
-export function MayoriSettingsLauncher({ wide, preferences }) {
+export function MayoriSettingsLauncher({ wide, preferences, localization }) {
   const [open, setOpen] = useState(false)
   return <>
-    <Tooltip label="Настройки Mayori" side="right" delayMs={500} disabled={wide}><button type="button" className="mayori-navigation-row mayori-settings-trigger" aria-label="Настройки Mayori"
+    <Tooltip label={tr("Настройки Mayori")} side="right" delayMs={500} disabled={wide}><button type="button" className="mayori-navigation-row mayori-settings-trigger" aria-label={tr("Настройки Mayori")}
       aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
       <span className="mayori-navigation-glyph" aria-hidden="true"><IconPersonalizationOutlineMedium size={wide ? 16 : 18} /></span>
-      {wide && <span className="mayori-navigation-label">Настройки Mayori</span>}
+      {wide && <span className="mayori-navigation-label">{tr("Настройки Mayori")}</span>}
     </button></Tooltip>
-    {open && <MayoriSettingsModal preferences={preferences} onClose={() => setOpen(false)} />}
+    {open && <MayoriSettingsModal preferences={preferences} localization={localization} onClose={() => setOpen(false)} />}
   </>
 }
 
-function MayoriSettingsModal({ preferences, onClose }) {
+function MayoriSettingsModal({ preferences, localization, onClose }) {
+  const tabs = settingsTabs()
   const [active, setActive] = useState('general')
   const [horizontal, setHorizontal] = useState(false)
   const tablist = useRef(null)
@@ -40,10 +43,10 @@ function MayoriSettingsModal({ preferences, onClose }) {
       : (index + (event.key === next ? 1 : -1) + tabs.length) % tabs.length
     setActive(tabs[target][0]); tablist.current?.querySelectorAll('[role="tab"]')[target]?.focus()
   }
-  return <Modal open headless title="Настройки Mayori" onClose={onClose} className="mayori-settings-modal">
+  return <Modal open headless title={tr("Настройки Mayori")} onClose={onClose} className="mayori-settings-modal">
     <div className="mayori-settings-nav">
-      <h1>Настройки Mayori</h1>
-      <div ref={tablist} className="mayori-settings-tabs" role="tablist" aria-label="Разделы настроек Mayori"
+      <h1>{tr("Настройки Mayori")}</h1>
+      <div ref={tablist} className="mayori-settings-tabs" role="tablist" aria-label={tr("Разделы настроек Mayori")}
         aria-orientation={horizontal ? 'horizontal' : 'vertical'} onKeyDown={navigate}>
         {tabs.map(([key, label, Icon]) => <button key={key} type="button" role="tab" id={`${id}-${key}-tab`}
           aria-selected={active === key} aria-controls={`${id}-${key}-panel`} tabIndex={active === key ? 0 : -1}
@@ -54,10 +57,12 @@ function MayoriSettingsModal({ preferences, onClose }) {
     </div>
     <div className="mayori-settings-content">
       <div className="mayori-settings-header">
-        <IconButton label="Закрыть настройки Mayori" onClick={onClose}><IconCloseOutlineRegular size={14} /></IconButton>
+        <IconButton label={tr("Закрыть настройки Mayori")} onClick={onClose}><IconCloseOutlineRegular size={14} /></IconButton>
       </div>
       <div className="mayori-settings-options">
-        <div role="tabpanel" id={`${id}-general-panel`} aria-labelledby={`${id}-general-tab`} hidden={active !== 'general'} tabIndex={0} />
+        <div role="tabpanel" id={`${id}-general-panel`} aria-labelledby={`${id}-general-tab`} hidden={active !== 'general'} tabIndex={0}>
+          <LanguageSelector localization={localization} />
+        </div>
         <div role="tabpanel" id={`${id}-plugins-panel`} aria-labelledby={`${id}-plugins-tab`} hidden={active !== 'plugins'} tabIndex={0}>
           <MayoriSettings preferences={preferences} />
         </div>
@@ -67,6 +72,8 @@ function MayoriSettingsModal({ preferences, onClose }) {
 }
 
 export const SETTINGS_MODAL_STYLE = `
+.mayori-language-setting { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(140px, 240px); align-items: center; gap: 16px; padding-block: 16px; }
+.mayori-language-setting [role="alert"] { grid-column: 1 / -1; }
 .mayori-settings-modal { inline-size: min(1200px, 100%); block-size: 800px; max-block-size: 100%; flex-direction: row; gap: 0; padding: 0; color: var(--dsw-alias-label-primary, CanvasText); }
 .mayori-settings-nav { flex: 0 0 188px; padding: 22px 12px 0; box-sizing: border-box; }
 .mayori-settings-nav h1 { margin: 0 0 18px; padding-inline: 12px; font-size: 16px; line-height: 24px; font-weight: 500; }

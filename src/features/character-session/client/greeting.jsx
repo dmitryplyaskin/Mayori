@@ -1,3 +1,4 @@
+import { tr, noticeText } from '../../localization/client/service.js'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { remapChildProps } from '../../../client/infrastructure/slot-mirror.js'
 import { AssistantRevisionActions } from '../../message-revisions/client/controls.jsx'
@@ -32,12 +33,12 @@ function AuthoredGreeting({ stock: Stock, chatFor, ...props }) {
   }
   return <div className="mayori-greeting-message">
     <Stock {...props} node={node} />
-    {greeting?.canSwipe && !props.node.data.mayoriEdited && greeting.count > 1 && !activity && !started && <div className="mayori-greeting-swipes" aria-label="Варианты приветствия">
-      <IconButton label="Предыдущее приветствие" disabled={snapshot.status === 'saving'} onClick={() => { void swipe(-1) }}>‹</IconButton>
+    {greeting?.canSwipe && !props.node.data.mayoriEdited && greeting.count > 1 && !activity && !started && <div className="mayori-greeting-swipes" aria-label={tr("Варианты приветствия")}>
+      <IconButton label={tr("Предыдущее приветствие")} disabled={snapshot.status === 'saving'} onClick={() => { void swipe(-1) }}>‹</IconButton>
       <span role="status" aria-live="polite">{greeting.index + 1} / {greeting.count}</span>
-      <IconButton label="Следующее приветствие" disabled={snapshot.status === 'saving'} onClick={() => { void swipe(1) }}>›</IconButton>
+      <IconButton label={tr("Следующее приветствие")} disabled={snapshot.status === 'saving'} onClick={() => { void swipe(1) }}>›</IconButton>
     </div>}
-    {(error || snapshot.error) && <p role="alert" className="mayori-error">{error || snapshot.error}</p>}
+    {(error || snapshot.error) && <p role="alert" className="mayori-error">{noticeText(error || snapshot.error)}</p>}
   </div>
 }
 

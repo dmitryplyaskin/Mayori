@@ -1,3 +1,4 @@
+import { tr } from '../../localization/client/service.js'
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { remapChildProps } from '../../../client/infrastructure/slot-mirror.js'
@@ -19,7 +20,7 @@ function Avatar({ name, image }) {
   const portrait = image && !failed
   const close = () => { dialog.current?.close(); setOpened(false); trigger.current?.focus() }
   return <>
-    <IconButton ref={trigger} className="mayori-message-avatar" label={`Открыть аватар: ${name}`}
+    <IconButton ref={trigger} className="mayori-message-avatar" label={tr("Открыть аватар: {p1}", { p1: name })}
       aria-haspopup="dialog" onClick={() => { setOpened(true) }} onKeyDown={event => {
         if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
       }}>
@@ -35,11 +36,11 @@ function Avatar({ name, image }) {
       }}>
       <div className="mayori-avatar-dialog-header">
         <h2 id={titleId}>{name}</h2>
-        <IconButton portal={false} autoFocus onClick={close} label="Закрыть аватар">×</IconButton>
+        <IconButton portal={false} autoFocus onClick={close} label={tr("Закрыть аватар")}>×</IconButton>
       </div>
       <div className="mayori-avatar-dialog-media">
-        {portrait ? <img src={originalImage(image)} alt={`Аватар: ${name}`} decoding="async" onError={() => { setFailed(true) }} />
-          : <p>Аватар пока не добавлен.</p>}
+        {portrait ? <img src={originalImage(image)} alt={tr("Аватар: {p1}", { p1: name })} decoding="async" onError={() => { setFailed(true) }} />
+          : <p>{tr("Аватар пока не добавлен.")}</p>}
       </div>
     </dialog>, document.body)}
   </>
@@ -112,7 +113,7 @@ export function CharacterMessage({ stock, stockChildren, childPrefix, chatFor, r
       && (block.kind !== 'text' || block.text.trim()))) return content
   }
   const person = assistant ? snapshot.value.character : snapshot.value.persona
-  const name = person?.name || (assistant ? 'Персонаж' : 'Игрок')
+  const name = person?.name || (assistant ? tr("Персонаж") : tr("Игрок"))
   const seq = assistant ? props.node.data.finalNode?.seq : props.node.data.seq
   const editable = !assistant && revisionFor && props.useSession && Number.isSafeInteger(seq) && seq > 0
     && props.node.data.content?.some(block => block.type === 'text' && block.text.trim())

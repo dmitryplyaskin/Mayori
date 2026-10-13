@@ -1,3 +1,5 @@
+import { tr } from '../features/localization/client/service.js'
+import { registerLocalization } from '../features/localization/client/provider.js'
 /** Mayori browser plugin: custom RPG sidebar plus the Character Library UI. */
 
 import { RemoteCharacterLibraryProvider } from '../features/characters/client/library.js'
@@ -37,14 +39,15 @@ export { DiceToolCard } from '../features/dice/client/card.jsx'
 export { CheckToolCard } from '../features/rules/client/card.jsx'
 export { BRAND_STYLE } from './styles.js'
 
-export const inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout', 'commandUi']
+export const inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout', 'commandUi', 'locale']
 
 /** Register reversible browser contributions through Cordis. */
 export function apply(ctx) {
+  const localization = registerLocalization(ctx)
   registerComposerPresentation(ctx)
   const preferences = new PluginSettingsClient()
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
-    name: 'sidebar.footer.action', id: 'mayori-settings', order: 35, inject: () => ({ preferences }),
+    name: 'sidebar.footer.action', id: 'mayori-settings', order: 35, inject: () => ({ preferences, localization }),
   }, MayoriSettingsLauncher))
   const library = new RemoteCharacterLibraryProvider()
   ctx.effect(() => () => library.dispose(), 'mayori: catalog requests')
@@ -149,7 +152,7 @@ export function apply(ctx) {
     name: 'main', key: 'mayori-home', inject: homeProps,
   }, HomePanel))
   ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-    name: 'sidebar.panellist', id: 'mayori-home', order: -30, label: 'Главная',
+    name: 'sidebar.panellist', id: 'mayori-home', order: -30, label: () => tr("Главная"),
   }, HomeIcon))
   ctx.slots.inject('main.conversation', () => ctx.effect(() => {
     let installed = false
@@ -192,16 +195,16 @@ export function apply(ctx) {
     name: 'main', key: 'mayori-presets', inject: () => ({ presets, sessions: ctx.sessions, presetFor }),
   }, PresetPanel))
   ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-    name: 'sidebar.panellist', id: 'mayori-characters', order: -20, label: 'Персонажи',
+    name: 'sidebar.panellist', id: 'mayori-characters', order: -20, label: () => tr("Персонажи"),
   }, CharacterGalleryIcon))
   ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-    name: 'sidebar.panellist', id: 'mayori-history', order: -10, label: 'История чатов',
+    name: 'sidebar.panellist', id: 'mayori-history', order: -10, label: () => tr("История чатов"),
   }, ChatHistoryIcon))
   ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-    name: 'sidebar.panellist', id: 'mayori-personas', order: -15, label: 'Персоны',
+    name: 'sidebar.panellist', id: 'mayori-personas', order: -15, label: () => tr("Персоны"),
   }, PersonaIcon))
   ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-    name: 'sidebar.panellist', id: 'mayori-presets', order: -12, label: 'Пресеты',
+    name: 'sidebar.panellist', id: 'mayori-presets', order: -12, label: () => tr("Пресеты"),
   }, PresetIcon))
   ctx.slots.inject('conversation.chat.node', () => ctx.effect(() => {
     const installed = new Set()

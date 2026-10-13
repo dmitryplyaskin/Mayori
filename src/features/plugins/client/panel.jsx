@@ -1,27 +1,29 @@
+import { tr, noticeText, formatLocale } from '../../localization/client/service.js'
 import { useEffect, useRef, useState } from 'react'
 import { CompactionSettings } from '../../compaction/client/panel.jsx'
 
-const entries = [
-  { id: 'dice', title: 'Кости и проверки',
-    description: 'Даёт ведущему реальные случайные броски для исходов, где есть риск: попадание в цель, проверка навыка, урон. В чате видны выпавшие грани и итог расчёта.',
+const pluginEntries = () => [
+  { id: 'dice', title: tr("Кости и проверки"),
+    description: tr("Даёт ведущему реальные случайные броски для исходов, где есть риск: попадание в цель, проверка навыка, урон. В чате видны выпавшие грани и итог расчёта."),
     settings: [
-      ['dice', 'Свободные броски', 'Броски по формулам вроде 2d6+3, с поддержкой пулов, перебросов и взрывающихся костей.'],
-      ['rules', 'Проверки по правилам', 'Определяет успех или провал, критический исход, урон и последствия по настроенному профилю правил.'],
-      ['rollHistory', 'Разбор прошлых бросков', 'Ведущий может объяснить, какие грани, перебросы и модификаторы дали итог сохранённого броска.'],
+      ['dice', tr("Свободные броски"), tr("Броски по формулам вроде 2d6+3, с поддержкой пулов, перебросов и взрывающихся костей.")],
+      ['rules', tr("Проверки по правилам"), tr("Определяет успех или провал, критический исход, урон и последствия по настроенному профилю правил.")],
+      ['rollHistory', tr("Разбор прошлых бросков"), tr("Ведущий может объяснить, какие грани, перебросы и модификаторы дали итог сохранённого броска.")],
     ] },
-  { id: 'compaction', title: 'Сжатие истории',
-    description: 'Освобождает место в контексте модели, чтобы продолжать длинный чат. Старые сцены заменяются кратким изложением, последние реплики остаются целиком. Мелкие детали старых сцен могут не попасть в изложение.',
-    settings: [['compaction', 'Сжимать историю', '']] },
+  { id: 'compaction', title: tr("Сжатие истории"),
+    description: tr("Освобождает место в контексте модели, чтобы продолжать длинный чат. Старые сцены заменяются кратким изложением, последние реплики остаются целиком. Мелкие детали старых сцен могут не попасть в изложение."),
+    settings: [['compaction', tr("Сжимать историю"), '']] },
 ]
 
 export function MayoriSettings({ preferences }) {
+  const entries = pluginEntries()
   const [value, setValue] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
-  const search = query.trim().toLocaleLowerCase('ru')
-  const matches = ({ id, title, description, settings }) => [id, title, description, ...settings.flat()].join(' ').toLocaleLowerCase('ru').includes(search)
+  const search = query.trim().toLocaleLowerCase(formatLocale())
+  const matches = ({ id, title, description, settings }) => [id, title, description, ...settings.flat()].join(' ').toLocaleLowerCase(formatLocale()).includes(search)
   const count = entries.filter(matches).length
   const mounted = useRef(false)
   const saving = useRef(false)
@@ -40,21 +42,20 @@ export function MayoriSettings({ preferences }) {
     saving.current = true; setBusy(true); setError(''); setNotice('')
     try {
       const next = await preferences.update(plugins, value.revision, compaction)
-      if (mounted.current) { setValue(next); setNotice('Настройки сохранены.') }
+      if (mounted.current) { setValue(next); setNotice(tr("Настройки сохранены.")) }
     } catch (failure) {
-      if (mounted.current) setError(failure.message || 'Не удалось сохранить настройки. Попробуйте ещё раз.')
+      if (mounted.current) setError(failure.message || tr("Не удалось сохранить настройки. Попробуйте ещё раз."))
     } finally { saving.current = false; if (mounted.current) setBusy(false) }
   }
   return <section className="mayori-settings" aria-labelledby="mayori-settings-title">
-    <h2 id="mayori-settings-title">Плагины</h2>
-    <label className="mayori-plugin-search">Поиск по плагинам
-      <input type="search" value={query} placeholder="Название или описание" onChange={event => setQuery(event.target.value)} />
+    <h2 id="mayori-settings-title">{tr("Плагины")}</h2>
+    <label className="mayori-plugin-search">{tr("Поиск по плагинам ")}<input type="search" value={query} placeholder={tr("Название или описание")} onChange={event => setQuery(event.target.value)} />
     </label>
-    {!value && !error && <p role="status">Загрузка настроек…</p>}
-    {error && <div role="alert"><p>{error}</p><button type="button" disabled={busy} onClick={() => { setError(''); void read() }}>Обновить настройки</button></div>}
+    {!value && !error && <p role="status">{tr("Загрузка настроек…")}</p>}
+    {error && <div role="alert"><p>{noticeText(error)}</p><button type="button" disabled={busy} onClick={() => { setError(''); void read() }}>{tr("Обновить настройки")}</button></div>}
     {value && <div className="mayori-plugin-list" aria-busy={busy}>
       {entries.map(entry => <details className="mayori-plugin" key={entry.id} hidden={!matches(entry)}>
-        <summary><span className="mayori-plugin-title">{entry.title}</span><span className="mayori-plugin-state">{entry.settings.some(([key]) => value.plugins[key]) ? 'Включён' : 'Выключен'}</span></summary>
+        <summary><span className="mayori-plugin-title">{entry.title}</span><span className="mayori-plugin-state">{entry.settings.some(([key]) => value.plugins[key]) ? tr("Включён") : tr("Выключен")}</span></summary>
         <div className="mayori-plugin-body">
           <p className="mayori-plugin-description" id={`mayori-plugin-${entry.id}-help`}>{entry.description}</p>
           {entry.settings.map(([key, title, description]) => <label className="mayori-plugin-row" key={key}>
@@ -66,9 +67,9 @@ export function MayoriSettings({ preferences }) {
           {entry.id === 'compaction' && value.compaction && <CompactionSettings settings={value.compaction} busy={busy} onSave={options => save(value.plugins, options)} />}
         </div>
       </details>)}
-      {count === 0 && <p role="status">Плагины не найдены. Попробуйте другое название или описание.</p>}
+      {count === 0 && <p role="status">{tr("Плагины не найдены. Попробуйте другое название или описание.")}</p>}
     </div>}
-    <p role="status" aria-live="polite">{value?.pending ? 'Настройки сохранены. Они применятся после завершения текущего ответа.' : notice}</p>
+    <p role="status" aria-live="polite">{value?.pending ? tr("Настройки сохранены. Они применятся после завершения текущего ответа.") : noticeText(notice)}</p>
   </section>
 }
 

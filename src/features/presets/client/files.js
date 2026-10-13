@@ -1,7 +1,8 @@
+import { tr } from '../../localization/client/service.js'
 import { exportPreset, parsePresetFile, MAX_PRESET_FILE_BYTES } from '../shared/transfer.js'
 
 export async function readPresetFile(file) {
-  if (file.size > MAX_PRESET_FILE_BYTES) throw new TypeError('Размер файла пресета не должен превышать 1 МБ.')
+  if (file.size > MAX_PRESET_FILE_BYTES) throw new TypeError(tr("Размер файла пресета не должен превышать 1 МБ."))
   return parsePresetFile(await file.text(), { filename: file.name })
 }
 

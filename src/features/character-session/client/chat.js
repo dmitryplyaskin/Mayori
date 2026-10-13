@@ -1,3 +1,4 @@
+import { tr } from '../../localization/client/service.js'
 import { call } from '../../../client/infrastructure/rpc.js'
 
 /** Observable per-chat consumer of the Host Character Session capability. */
@@ -37,7 +38,7 @@ export class RemoteCharacterChatProvider extends CharacterChatService {
     }
   }
   async #change(endpoint, input) {
-    if (this.#changing) throw new Error('Дождитесь сохранения текущего выбора.')
+    if (this.#changing) throw new Error(tr("Дождитесь сохранения текущего выбора."))
     this.#changing = true
     ++this.#revision
     this.#publish({ ...this.#snapshot, status: 'saving', error: null })

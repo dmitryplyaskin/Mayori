@@ -1,3 +1,4 @@
+import { tr } from '../../localization/client/service.js'
 import { call } from '../../../client/infrastructure/rpc.js'
 
 /** Browser proxy for the Host-owned Character Library Service. */
@@ -64,7 +65,7 @@ export class RemoteCharacterLibraryProvider extends CharacterLibraryService {
     for (let offset = 0; offset < inputs.length; offset += 2) {
       const prepared = []
       for (const file of inputs.slice(offset, offset + 2)) {
-        if (file.size > 16 * 1024 * 1024) { result.rejected.push({ name: file.name, error: 'Файл превышает 16 МБ.' }); continue }
+        if (file.size > 16 * 1024 * 1024) { result.rejected.push({ name: file.name, error: tr("Файл превышает 16 МБ.") }); continue }
         prepared.push({ name: file.name || 'character-card', type: file.type || '', base64: toBase64(new Uint8Array(await file.arrayBuffer())) })
       }
       if (!prepared.length) continue

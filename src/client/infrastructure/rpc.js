@@ -1,7 +1,8 @@
+import { tr } from '../../features/localization/client/service.js'
 /** Same-origin transport for Host capability consumers. */
 function unwrap(result) {
   if (result.ok) return result.value
-  throw new Error(typeof result.error === 'string' ? result.error : 'Не удалось выполнить операцию с библиотекой.')
+  throw new Error(typeof result.error === 'string' ? result.error : tr("Не удалось выполнить операцию с библиотекой."))
 }
 
 export async function call(endpoint, payload, options = {}) {

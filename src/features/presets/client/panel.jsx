@@ -1,3 +1,4 @@
+import { tr, noticeText } from '../../localization/client/service.js'
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { filterPresets, presetChanged } from './presentation.js'
 import { Select } from '../../../client/components/select.jsx'
@@ -70,11 +71,11 @@ export function PresetPanel({ presets, sessions, presetFor }) {
     if (editor.getSnapshot().busy) return
     editor.update({ busy: true, error: '', notice: '' })
     try { const result = await operation(); editor.update({ notice: result === false ? '' : typeof success === 'function' ? success(result) : success }) }
-    catch (failure) { editor.update({ error: failure.message || 'Не удалось выполнить действие. Попробуйте ещё раз.' }) }
+    catch (failure) { editor.update({ error: failure.message || tr("Не удалось выполнить действие. Попробуйте ещё раз.") }) }
     finally { editor.update({ busy: false }) }
   }
   const choose = preset => {
-    if (dirty && !window.confirm('Перейти к другому пресету? Несохранённые изменения будут потеряны.')) return false
+    if (dirty && !window.confirm(tr("Перейти к другому пресету? Несохранённые изменения будут потеряны."))) return false
     editor.choose(preset)
     if (menuRef.current) menuRef.current.open = false
     if (libraryRef.current) libraryRef.current.open = false
@@ -88,7 +89,7 @@ export function PresetPanel({ presets, sessions, presetFor }) {
     if (file) void run(async () => {
       const imported = await readPresetFile(file)
       return choose(imported.preset) ? imported : false
-    }, imported => ['Пресет импортирован.', ...imported.warnings].join(' '))
+    }, imported => [tr("Пресет импортирован."), ...imported.warnings].join(' '))
   }
   const save = async () => {
     const value = await presets.save(draft)
@@ -100,92 +101,92 @@ export function PresetPanel({ presets, sessions, presetFor }) {
     void run(async () => {
       const value = dirty || !draft.id ? await save() : draft
       await presetFor(currentId).select(value.id)
-    }, 'Инструкции применены к текущему чату.')
+    }, tr("Инструкции применены к текущему чату."))
   }
   const remove = () => {
     menuRef.current.open = false
-    if (!window.confirm(`Удалить пресет «${saved.name}»? В созданных чатах его инструкции сохранятся.`)) return
+    if (!window.confirm(tr("Удалить пресет «{p1}»? В созданных чатах его инструкции сохранятся.", { p1: saved.name }))) return
     void run(async () => {
       await presets.remove(draft.id)
       const next = presets.getSnapshot().presets[0] ?? blank()
       editor.choose(next)
-    }, 'Пресет удалён из библиотеки.')
+    }, tr("Пресет удалён из библиотеки."))
   }
 
   return <section className="mayori-presets-panel" aria-labelledby={`${id}-title`}>
     <div className="mayori-presets-content">
       <header className="mayori-presets-header">
-        <h1 id={`${id}-title`}>Пресеты</h1>
+        <h1 id={`${id}-title`}>{tr("Пресеты")}</h1>
         <div className="mayori-presets-header-actions">
-          <input ref={importRef} type="file" hidden accept=".json,application/json" aria-label="Файл пресета" onChange={importFile} />
-          <button type="button" className="mayori-preset-button" disabled={disabled} onClick={() => importRef.current.click()}>Импорт</button>
-          <button type="button" className="mayori-preset-button" disabled={disabled} onClick={() => choose(blank())}><Glyph kind="plus" />Создать пресет</button>
+          <input ref={importRef} type="file" hidden accept=".json,application/json" aria-label={tr("Файл пресета")} onChange={importFile} />
+          <button type="button" className="mayori-preset-button" disabled={disabled} onClick={() => importRef.current.click()}>{tr("Импорт")}</button>
+          <button type="button" className="mayori-preset-button" disabled={disabled} onClick={() => choose(blank())}><Glyph kind="plus" />{tr("Создать пресет")}</button>
         </div>
       </header>
 
-      <div className="mayori-presets-usage" aria-label="Выбор пресетов для чатов">
+      <div className="mayori-presets-usage" aria-label={tr("Выбор пресетов для чатов")}>
         <div className="mayori-preset-usage">
-          <label htmlFor={`${id}-default`}>Для новых чатов</label>
-          <Select id={`${id}-default`} aria-label="Для новых чатов" value={snapshot.defaultId ?? ''} disabled={disabled} onChange={value => { void run(() => presets.setDefault(value || null), 'Выбор для новых чатов сохранён.') }}
-            options={[{ value: '', label: 'Без пресета' }, ...snapshot.presets.map(preset => ({ value: preset.id, label: preset.name }))]} />
+          <label htmlFor={`${id}-default`}>{tr("Для новых чатов")}</label>
+          <Select id={`${id}-default`} aria-label={tr("Для новых чатов")} value={snapshot.defaultId ?? ''} disabled={disabled} onChange={value => { void run(() => presets.setDefault(value || null), tr("Выбор для новых чатов сохранён.")) }}
+            options={[{ value: '', label: tr("Без пресета") }, ...snapshot.presets.map(preset => ({ value: preset.id, label: preset.name }))]} />
         </div>
         <div className="mayori-preset-usage">
-          <label htmlFor={`${id}-current`}>Текущий чат</label>
+          <label htmlFor={`${id}-current`}>{tr("Текущий чат")}</label>
           <div className="mayori-preset-current-control">
-            <Select id={`${id}-current`} aria-label="Текущий чат" value={current?.preset?.id ?? ''} disabled={disabled || !currentReady} aria-describedby={currentId ? `${id}-current-help` : undefined} onChange={value => { void run(() => presetFor(currentId).select(value || null), 'Инструкции применены к текущему чату.') }}
-              options={[{ value: '', label: !currentId ? 'Нет открытого чата' : !current || current.status === 'loading' ? 'Загружаем…' : 'Без пресета' },
-                ...(current?.preset && !currentLibrary ? [{ value: current.preset.id, label: `${current.preset.name} · копия из чата` }] : []),
+            <Select id={`${id}-current`} aria-label={tr("Текущий чат")} value={current?.preset?.id ?? ''} disabled={disabled || !currentReady} aria-describedby={currentId ? `${id}-current-help` : undefined} onChange={value => { void run(() => presetFor(currentId).select(value || null), tr("Инструкции применены к текущему чату.")) }}
+              options={[{ value: '', label: !currentId ? tr("Нет открытого чата") : !current || current.status === 'loading' ? tr("Загружаем…") : tr("Без пресета") },
+                ...(current?.preset && !currentLibrary ? [{ value: current.preset.id, label: tr("{p1} · копия из чата", { p1: current.preset.name }) }] : []),
                 ...snapshot.presets.map(preset => ({ value: preset.id, label: preset.name }))]} />
-            {currentOutdated && <button type="button" className="mayori-preset-button" disabled={disabled || !currentReady} onClick={() => { void run(() => presetFor(currentId).select(currentLibrary.id), 'Инструкции в чате обновлены.') }}>Обновить инструкции</button>}
+            {currentOutdated && <button type="button" className="mayori-preset-button" disabled={disabled || !currentReady} onClick={() => { void run(() => presetFor(currentId).select(currentLibrary.id), tr("Инструкции в чате обновлены.")) }}>{tr("Обновить инструкции")}</button>}
           </div>
-          {currentId && <p id={`${id}-current-help`}>{currentOutdated ? 'В чате действует прежняя версия.' : 'Применяется со следующего хода.'}</p>}
-          {current?.error && <p role="alert">{current.error} <button type="button" className="mayori-preset-text-button" onClick={() => { void presetFor(currentId).refresh() }}>Повторить загрузку</button></p>}
+          {currentId && <p id={`${id}-current-help`}>{currentOutdated ? tr("В чате действует прежняя версия.") : tr("Применяется со следующего хода.")}</p>}
+          {current?.error && <p role="alert">{noticeText(current.error)} <button type="button" className="mayori-preset-text-button" onClick={() => { void presetFor(currentId).refresh() }}>{tr("Повторить загрузку")}</button></p>}
         </div>
       </div>
 
-      {snapshot.error && <div role="alert" className="mayori-preset-error">{snapshot.error} <button type="button" className="mayori-preset-button" disabled={busy} onClick={() => { void run(() => presets.refresh(), 'Список обновлён.') }}>Обновить список</button></div>}
+      {snapshot.error && <div role="alert" className="mayori-preset-error">{noticeText(snapshot.error)} <button type="button" className="mayori-preset-button" disabled={busy} onClick={() => { void run(() => presets.refresh(), tr("Список обновлён.")) }}>{tr("Обновить список")}</button></div>}
       <details ref={libraryRef} className="mayori-preset-library-disclosure">
-        <summary>Библиотека пресетов · {snapshot.presets.length}{draft.id ? ` · ${saved.name}` : ' · Новый пресет'}</summary>
-        <div className="mayori-preset-library" aria-label="Библиотека пресетов">
-          <label className="mayori-preset-search"><span className="mayori-dice-sr">Поиск пресетов</span><Glyph kind="search" /><input type="search" placeholder="Найти пресет…" value={query} onChange={event => setQuery(event.target.value)} /></label>
+        <summary>{tr("Библиотека пресетов · {p1}{p2}", { p1: snapshot.presets.length, p2: draft.id ? ` · ${saved.name}` : tr(" · Новый пресет") })}</summary>
+        <div className="mayori-preset-library" aria-label={tr("Библиотека пресетов")}>
+          <label className="mayori-preset-search"><span className="mayori-dice-sr">{tr("Поиск пресетов")}</span><Glyph kind="search" /><input type="search" placeholder={tr("Найти пресет…")} value={query} onChange={event => setQuery(event.target.value)} /></label>
           <ul className="mayori-preset-list">{matches.map(preset => <li key={preset.id}>
             <button type="button" className="mayori-preset-row" aria-pressed={draft.id === preset.id} disabled={busy} onClick={() => choose(preset)}>
               <span className="mayori-preset-row-title"><PresetIcon size={18} /><strong>{preset.name}</strong></span>
               <span className="mayori-preset-preview">{preset.instructions}</span>
-              {(snapshot.defaultId === preset.id || current?.preset?.id === preset.id) && <span className="mayori-preset-tags">{snapshot.defaultId === preset.id && <span>Новые чаты</span>}{current?.preset?.id === preset.id && <span>Текущий чат</span>}</span>}
+              {(snapshot.defaultId === preset.id || current?.preset?.id === preset.id) && <span className="mayori-preset-tags">{snapshot.defaultId === preset.id && <span>{tr("Новые чаты")}</span>}{current?.preset?.id === preset.id && <span>{tr("Текущий чат")}</span>}</span>}
             </button></li>)}</ul>
-          {snapshot.status === 'loading' && <p className="mayori-preset-empty">Загружаем пресеты…</p>}
-          {snapshot.status === 'ready' && !snapshot.presets.length && <p className="mayori-preset-empty">Нет пресетов.</p>}
-          {query && !matches.length && !!snapshot.presets.length && <div className="mayori-preset-empty"><p>По запросу «{query}» ничего не найдено.</p><button type="button" className="mayori-preset-text-button" onClick={() => setQuery('')}>Сбросить поиск</button></div>}
+          {snapshot.status === 'loading' && <p className="mayori-preset-empty">{tr("Загружаем пресеты…")}</p>}
+          {snapshot.status === 'ready' && !snapshot.presets.length && <p className="mayori-preset-empty">{tr("Нет пресетов.")}</p>}
+          {query && !matches.length && !!snapshot.presets.length && <div className="mayori-preset-empty"><p>{tr("По запросу «{p1}» ничего не найдено.", { p1: query })}</p><button type="button" className="mayori-preset-text-button" onClick={() => setQuery('')}>{tr("Сбросить поиск")}</button></div>}
         </div>
       </details>
       <div className="mayori-presets-workspace">
-        <form ref={formRef} className="mayori-preset-editor" onSubmit={event => { event.preventDefault(); void run(save, 'Пресет сохранён.') }} onKeyDown={event => {
+        <form ref={formRef} className="mayori-preset-editor" onSubmit={event => { event.preventDefault(); void run(save, tr("Пресет сохранён.")) }} onKeyDown={event => {
           if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); if (!disabled) formRef.current.requestSubmit() }
         }}>
           <div className="mayori-preset-editor-heading">
-            <div><h2>{draft.id ? saved.name : 'Новый пресет'}</h2>{(dirty || draft.id) && <span className="mayori-preset-save-state">{dirty ? 'Есть несохранённые изменения' : 'Сохранён в библиотеке'}</span>}</div>
+            <div><h2>{draft.id ? saved.name : tr("Новый пресет")}</h2>{(dirty || draft.id) && <span className="mayori-preset-save-state">{dirty ? tr("Есть несохранённые изменения") : tr("Сохранён в библиотеке")}</span>}</div>
             <details ref={menuRef} className="mayori-preset-menu" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false }} onKeyDown={event => {
               if (event.key === 'Escape') { event.currentTarget.open = false; event.currentTarget.querySelector('summary').focus(); event.stopPropagation() }
-            }}><Tooltip label="Действия с пресетом" side="top" portal><summary aria-label="Действия с пресетом"><Glyph kind="more" /></summary></Tooltip><div>
-              {draft.id && <button type="button" disabled={busy} onClick={() => choose({ ...draft, id: undefined, name: `${draft.name} — копия`.slice(0, 120) })}>Дублировать пресет</button>}
+            }}><Tooltip label={tr("Действия с пресетом")} side="top" portal><summary aria-label={tr("Действия с пресетом")}><Glyph kind="more" /></summary></Tooltip><div>
+              {draft.id && <button type="button" disabled={busy} onClick={() => choose({ ...draft, id: undefined, name: tr("{p1} — копия", { p1: draft.name }).slice(0, 120) })}>{tr("Дублировать пресет")}</button>}
               <button type="button" disabled={disabled} onClick={() => {
                 menuRef.current.open = false
                 menuRef.current.querySelector('summary').focus()
-                void run(() => downloadPreset(draft), 'Пресет экспортирован.')
-              }}>Экспорт</button>
-              {draft.id && <button type="button" className="mayori-preset-delete" disabled={busy} onClick={remove}>Удалить пресет</button>}
+                void run(() => downloadPreset(draft), tr("Пресет экспортирован."))
+              }}>{tr("Экспорт")}</button>
+              {draft.id && <button type="button" className="mayori-preset-delete" disabled={busy} onClick={remove}>{tr("Удалить пресет")}</button>}
             </div></details>
           </div>
-          <div className="mayori-preset-name-field"><label htmlFor={`${id}-name`}>Название</label><input id={`${id}-name`} ref={nameRef} name="presetName" autoComplete="off" placeholder="Например, камерное фэнтези" required maxLength={120} value={draft.name} disabled={disabled} onChange={event => field('name', event.target.value)} /></div>
+          <div className="mayori-preset-name-field"><label htmlFor={`${id}-name`}>{tr("Название")}</label><input id={`${id}-name`} ref={nameRef} name="presetName" autoComplete="off" placeholder={tr("Например, камерное фэнтези")} required maxLength={120} value={draft.name} disabled={disabled} onChange={event => field('name', event.target.value)} /></div>
           <PresetStructureEditor editor={editor} disabled={disabled} />
-          {error && <p role="alert" className="mayori-preset-error">{error}</p>}
+          {error && <p role="alert" className="mayori-preset-error">{noticeText(error)}</p>}
           <footer className="mayori-preset-editor-footer">
-            <div className="mayori-preset-feedback"><p role="status">{busy ? 'Подождите…' : notice}</p></div>
+            <div className="mayori-preset-feedback"><p role="status">{busy ? tr("Подождите…") : noticeText(notice)}</p></div>
             <div className="mayori-preset-editor-actions">
-              {dirty && draft.id && <button type="button" className="mayori-preset-text-button" disabled={disabled} onClick={() => { editor.reset() }}>Отменить изменения</button>}
-              {currentId && <button type="button" className="mayori-preset-button" disabled={disabled || !currentReady} onClick={apply}>{dirty || !draft.id ? 'Сохранить и применить' : 'Применить к чату'}</button>}
-              <button className="mayori-preset-button mayori-preset-primary" type="submit" disabled={disabled} aria-busy={busy}>Сохранить пресет</button>
+              {dirty && draft.id && <button type="button" className="mayori-preset-text-button" disabled={disabled} onClick={() => { editor.reset() }}>{tr("Отменить изменения")}</button>}
+              {currentId && <button type="button" className="mayori-preset-button" disabled={disabled || !currentReady} onClick={apply}>{dirty || !draft.id ? tr("Сохранить и применить") : tr("Применить к чату")}</button>}
+              <button className="mayori-preset-button mayori-preset-primary" type="submit" disabled={disabled} aria-busy={busy}>{tr("Сохранить пресет")}</button>
             </div>
           </footer>
         </form>

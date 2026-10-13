@@ -1,3 +1,4 @@
+import { createLocale } from '../features/localization/fixture.js'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import * as React from 'react'
@@ -74,7 +75,7 @@ test('registers reversible Mayori client contributions', async () => {
   }
 
   try {
-    client.apply({
+    client.apply({ locale: createLocale(),
       commandUi: { register(command) { commands.push(command); return () => unregistered.push(command.name) }, dismiss(name) { dismissed.push(name) } },
       sessions: {
         list: { getSnapshot: () => ({ ids: ['old-session'], byId: { 'old-session': { id: 'old-session', retainedBy: { mainView: 1 } } } }) },
@@ -95,6 +96,7 @@ test('registers reversible Mayori client contributions', async () => {
       effect(factory, label) {
         if (label === 'mayori: client styles') dispose = factory()
         else if (label === 'mayori: chat command') commandDisposers.push(factory())
+        else if (label.startsWith('mayori: Russian') || label === 'mayori: English copy' || label === 'mayori: locale binding') return factory()
         else { assert.ok(['mayori: composer presentation', 'mayori: greeting renderer', 'mayori: revision chat flow', 'mayori: trajectory context', 'mayori: trajectory header', 'mayori: home conversation', 'mayori: home navigation', 'mayori: catalog requests', 'mayori: session provider caches', 'mayori: history cache'].includes(label)); return factory() }
       },
       slots: {
@@ -138,7 +140,7 @@ test('registers reversible Mayori client contributions', async () => {
     assert.equal(typeof slotRegistration.component, 'function')
     const sidebar = registrations.find(item => item.options.key === 'mayori-characters').options.inject()
     assert.equal(registrations.find(item => item.options.key === 'mayori-history').options.inject().history, provided.mayoriHistory)
-    assert.deepEqual(registrations.filter(item => item.options.name === 'sidebar.panellist').map(item => [item.options.id, item.options.label]), [['mayori-home', 'Главная'], ['mayori-characters', 'Персонажи'], ['mayori-history', 'История чатов'], ['mayori-personas', 'Персоны'], ['mayori-presets', 'Пресеты']])
+    assert.deepEqual(registrations.filter(item => item.options.name === 'sidebar.panellist').map(item => [item.options.id, item.options.label()]), [['mayori-home', 'Главная'], ['mayori-characters', 'Персонажи'], ['mayori-history', 'История чатов'], ['mayori-personas', 'Персоны'], ['mayori-presets', 'Пресеты']])
     assert.equal(registrations.find(item => item.options.key === 'mayori-presets').options.inject().presets, provided.mayoriPresets)
     assert.equal(registrations.find(item => item.options.key === 'mayori-presets').options.inject().presetFor('session'), provided.mayoriSessionPresets.forSession('session'))
     assert.equal(registrations.find(item => item.options.key === 'mayori-home').options.inject().history, provided.mayoriHistory)
@@ -186,7 +188,7 @@ test('built message wrappers place portraits on each side and retain native cont
   const previousDocument = globalThis.document
   globalThis.document = { createElement: () => ({ dataset: {}, remove() {} }), head: { appendChild() {} } }
   try {
-    client.apply({ commandUi: { register: () => () => {}, dismiss() {} }, sessions: {}, workspaces: {}, uiWorkspace: {}, provide() {}, effect: factory => factory(),
+    client.apply({ locale: createLocale(), commandUi: { register: () => () => {}, dismiss() {} }, sessions: {}, workspaces: {}, uiWorkspace: {}, provide() {}, effect: factory => factory(),
       slots: { inject(name, factory) { if (name === 'conversation.chat.node') factory() }, subscribe: () => () => {},
         entries: name => name === 'conversation.chat.node' ? ['assistant-step', 'user', 'steering', 'turn-tail'].map(key => ({ options: { key },
           children: { 'message.detail': { kind: 'single', scope: 'session' } },
@@ -273,7 +275,7 @@ test('built client artifact registers a lazy DSH module factory', async () => {
   const { handoff, exports, required } = await loadBuiltClient()
   assert.equal(handoff.id, 'dsh-mayori')
   assert.equal(typeof exports.apply, 'function')
-  assert.deepEqual(exports.inject, ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout', 'commandUi'])
+  assert.deepEqual(exports.inject, ['slots', 'sessions', 'workspaces', 'uiWorkspace', 'layout', 'commandUi', 'locale'])
   assert.deepEqual(required.sort(), ['@deepseek-ai/dsh-client-ui-primitives', 'react', 'react-dom', 'react/jsx-runtime'])
 })
 
@@ -394,7 +396,7 @@ test('sidebar omits New Session while preserving home, panels, toggle, settings 
   const previousDocument = globalThis.document
   globalThis.document = { createElement: () => ({ dataset: {}, remove() {} }), head: { appendChild() {} } }
   try {
-    client.apply({ commandUi: { register: () => () => {}, dismiss() {} }, sessions: {}, workspaces: {}, uiWorkspace: {}, layout: { selectPanel: id => selected.push(id) }, provide() {},
+    client.apply({ locale: createLocale(), commandUi: { register: () => () => {}, dismiss() {} }, sessions: {}, workspaces: {}, uiWorkspace: {}, layout: { selectPanel: id => selected.push(id) }, provide() {},
       effect(factory, label) { const dispose = factory(); if (label === 'mayori: home navigation') disposeNavigation.push(dispose) },
       slots: {
         inject(name, factory) { if (['sidebar', 'shell.leading'].includes(name)) factory() },
@@ -460,7 +462,7 @@ test('empty conversation shows home while named empty chats and existing session
   const previousDocument = globalThis.document
   globalThis.document = { createElement: () => ({ dataset: {}, remove() {} }), head: { appendChild() {} } }
   try {
-    client.apply({ commandUi: { register: () => () => {}, dismiss() {} }, sessions: {}, workspaces: {}, uiWorkspace: {}, provide() {}, effect: factory => factory(),
+    client.apply({ locale: createLocale(), commandUi: { register: () => () => {}, dismiss() {} }, sessions: {}, workspaces: {}, uiWorkspace: {}, provide() {}, effect: factory => factory(),
       slots: { inject(name, factory) { if (name === 'main.conversation') factory() }, subscribe: () => () => {},
         entries: name => name === 'main.conversation' ? [{ options: {}, children: { 'conversation.header': { kind: 'single', scope: 'session-maybe' } },
           component: props => React.createElement('div', null, 'Native conversation', props.renderSlot('conversation.header'), React.createElement('textarea')) }] : [],
@@ -489,4 +491,47 @@ test('empty conversation shows home while named empty chats and existing session
       assert.doesNotMatch(html, /Добро пожаловать/)
     }
   } finally { globalThis.document = previousDocument }
+})
+
+test('built consumers change labels, commands, dice and rules copy live without translating recorded content', async () => {
+  const { exports: client } = await loadBuiltClient({ react: React, jsx: jsxRuntime })
+  const locale = createLocale('en'), disposers = [], registrations = [], commands = []
+  const previousDocument = globalThis.document
+  globalThis.document = { createElement: () => ({ dataset: {}, remove() {} }), head: { appendChild() {} } }
+  try {
+    client.apply({ locale, commandUi: { register: command => { commands.push(command); return () => {} }, dismiss() {} },
+      sessions: {}, workspaces: {}, uiWorkspace: {}, provide() {}, effect: callback => { disposers.push(callback()) },
+      slots: { inject(name, callback) { if (['sidebar.panellist', 'tool.call.toolview'].includes(name)) callback() },
+        register(options, component) { registrations.push({ options, component }); return () => {} } },
+    })
+    const labels = () => registrations.filter(item => item.options.name === 'sidebar.panellist').map(item => item.options.label())
+    assert.deepEqual(labels(), ['Home', 'Characters', 'Chat history', 'Personas', 'Presets'])
+    assert.deepEqual(commands.map(command => command.label()), ['Change preset', 'Change persona', 'New chat'])
+    const recorded = { schemaVersion: 1, purpose: 'Проверка скрытности', values: { stealth: 17 }, details: [{
+      path: ['stealth'], expression: 'd20', value: 17, dice: [{ sides: 20, results: [17] }],
+    }] }
+    const renderDice = () => renderToStaticMarkup(React.createElement(client.DiceToolCard, {
+      phase: 'result', block: { content: [{ type: 'text', text: JSON.stringify(recorded) }] },
+      useDisclosure: () => ({ expanded: true, toggle() {} }), inspect() {},
+    }))
+    const english = renderDice()
+    assert.match(english, /Dice rolls/)
+    assert.match(english, /Total: <\/span>17/)
+    assert.match(english, /Show raw result/)
+    assert.match(english, /Проверка скрытности/)
+    assert.match(english, /aria-label="Dice rolls"/)
+    const ruleCard = () => renderToStaticMarkup(React.createElement(client.CheckToolCard, {
+      phase: 'preparing', block: { args: { textPrefix: () => 'Авторский текст' } },
+      useDisclosure: () => ({ expanded: false, toggle() {} }),
+    }))
+    assert.match(ruleCard(), /Preparing check/)
+    await locale.setLocale('ru')
+    assert.deepEqual(labels(), ['Главная', 'Персонажи', 'История чатов', 'Персоны', 'Пресеты'])
+    assert.deepEqual(commands.map(command => command.label()), ['Сменить пресет', 'Сменить персону', 'Новый чат'])
+    assert.match(renderDice(), /Итог: <\/span>17/)
+    assert.match(ruleCard(), /Готовится проверка/)
+    await locale.setLocale('en')
+    assert.match(renderDice(), /Total: <\/span>17/)
+    assert.equal(recorded.purpose, 'Проверка скрытности')
+  } finally { disposers.reverse().forEach(dispose => dispose?.()); globalThis.document = previousDocument }
 })
