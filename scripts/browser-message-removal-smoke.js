@@ -54,7 +54,7 @@ const open = async () => {
 try {
   await page.goto(url.href)
   await page.getByRole('button', { name: 'История чатов', exact: true }).waitFor()
-  try { await page.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 2000 }) } catch {}
+  try { await page.getByRole('button', { name: /^(?:Continue|Продолжить)$/ }).click({ timeout: 10000 }) } catch {}
   await open()
   if (!restore) {
     const before = await settle(fixture.sessionId)

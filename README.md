@@ -24,14 +24,14 @@ Mayori — движок для ролевых игр, отыгрыша, твор
 ## Установка
 
 Нужны Node.js **^22.19.0 или >=24** и pnpm. Поддерживаемая версия DSH —
-**0.2.1-alpha.2**. Клонировать Mayori, создавать папки и редактировать
+**0.2.1-rc.2**. Клонировать Mayori, создавать папки и редактировать
 конфигурационные файлы для обычной установки не требуется.
 
 При первой установке выполните две команды:
 
 ```sh
-pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2 --profile mayori --from-default-profile web --dump-config
-pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2 plugin --profile mayori add github:dmitryplyaskin/Mayori
+pnpm dlx @deepseek-ai/dsh@0.2.1-rc.2 --profile mayori --from-default-profile web --dump-config
+pnpm dlx @deepseek-ai/dsh@0.2.1-rc.2 plugin --profile mayori add github:dmitryplyaskin/Mayori
 ```
 
 Первая создаёт профиль из встроенной Web-композиции и выводит конфигурацию;
@@ -41,7 +41,7 @@ pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2 plugin --profile mayori add github:dmitr
 Каждый последующий запуск — одна команда:
 
 ```sh
-pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2 --profile mayori
+pnpm dlx @deepseek-ai/dsh@0.2.1-rc.2 --profile mayori
 ```
 
 Откроется интерфейс на `http://127.0.0.1:3081`. Доступ к модели настраивается
@@ -65,7 +65,7 @@ credentials и игровые каталоги используют этот к�
 её штатной командой:
 
 ```sh
-pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2 plugin --profile web remove dsh-mayori
+pnpm dlx @deepseek-ai/dsh@0.2.1-rc.2 plugin --profile web remove dsh-mayori
 ```
 
 При переходе с общего хранилища старые чаты и карточки автоматически не
@@ -145,7 +145,13 @@ pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2 plugin --profile web remove dsh-mayori
 
 ### Миграция с прежней версии
 
-Переустановите локальный пакет через `pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2 plugin --profile mayori add C:\pet_projects\Mayori` и полностью перезапустите DSH. В профильном `cordis.patch.yml` проверьте переопределения `system-prompt`: поле `persona` заменено на `personaPrefix` и `personaSuffix`. Профильные overrides применяются последними и могут перекрыть новый preset; для игры выбирайте `mayori`. Browser вкладку перезагрузите после перезапуска.
+Текущая версия проверена с DSH `0.2.1-rc.2`. Обновлены зависимости и browser
+контракты; запуск персонажа и `/new` сохраняют ID чата с подготовленным
+приветствием. Новый штатный `harness-dev-context` отключён в bundle, чтобы
+инструкции о разработке DSH не попадали в творческие сессии. Данные Mayori
+сохраняют прежний формат. Подробности — в [руководстве разработки](docs/development.md#совместимость-с-dsh-021-rc2).
+
+Переустановите локальный пакет через `pnpm dlx @deepseek-ai/dsh@0.2.1-rc.2 plugin --profile mayori add C:\pet_projects\Mayori` и полностью перезапустите DSH. В профильном `cordis.patch.yml` проверьте переопределения `system-prompt`: поле `persona` заменено на `personaPrefix` и `personaSuffix`. Профильные overrides применяются последними и могут перекрыть новый preset; для игры выбирайте `mayori`. Browser вкладку перезагрузите после перезапуска.
 
 Карточки галереи сохраняются без изменений. Старые сессии с обязательными событиями `mayori/character-selected`, созданные пропатченным DSH, не конвертируются автоматически: штатный DSH может отказаться читать такие журналы. Не удаляйте и не редактируйте их вручную; перед отдельной конвертацией сохраните резервную копию всего DSH home. Обычные сессии без этих событий мигрирует сам DSH.
 

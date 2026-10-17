@@ -80,7 +80,7 @@ const repeat = async text => {
 try {
   await page.goto(url.href)
   await page.getByRole('button', { name: 'История чатов', exact: true }).waitFor()
-  try { await page.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 1500 }) } catch {}
+  try { await page.getByRole('button', { name: /^(?:Continue|Продолжить)$/ }).click({ timeout: 10000 }) } catch {}
   await open()
   const sessions = await rpc('/_mayori-smoke', { action: 'active-sessions' })
   if (!restore) {

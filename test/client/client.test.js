@@ -80,6 +80,7 @@ test('registers reversible Mayori client contributions', async () => {
       sessions: {
         list: { getSnapshot: () => ({ ids: ['old-session'], byId: { 'old-session': { id: 'old-session', retainedBy: { mainView: 1 } } } }) },
         async create(input) { created.push(input); return 'character-session' },
+        async refresh() {},
         async using(id, _options, operation) {
           return operation({ ready: Promise.resolve({ session: {
             rename: async title => { renamed.push([id, title]); return { ok: true } },
@@ -160,7 +161,7 @@ test('registers reversible Mayori client contributions', async () => {
     assert.equal(sidebar.library, provided.mayoriCharacters)
     provided.mayoriCharacters.start = async (characterId, workspaceId) => { played.push([characterId, workspaceId]); return { sessionId: 'character-session' } }
     await sidebar.startCharacter({ id: 'a'.repeat(64), name: 'Aster' })
-    assert.deepEqual(created, [{ workspaceId: 'campaign', sessionId: 'character-session' }])
+    assert.deepEqual(created, [], 'The saved greeting must be resumed without DSH create replacing its identity')
     assert.deepEqual(played, [['a'.repeat(64), 'campaign']])
     assert.deepEqual(renamed, [['character-session', 'Aster']])
     assert.deepEqual(opened, ['character-session'])
@@ -182,7 +183,7 @@ test('registers reversible Mayori client contributions', async () => {
   }
 })
 
-test('built message wrappers place portraits on each side and retain native content and image seats', async () => {
+test('built message wrappers retain rc.2 user content factories and output image seats', async () => {
   const { exports: client } = await loadBuiltClient({ react: React, jsx: jsxRuntime })
   const registrations = []
   const previousDocument = globalThis.document
@@ -191,8 +192,13 @@ test('built message wrappers place portraits on each side and retain native cont
     client.apply({ locale: createLocale(), commandUi: { register: () => () => {}, dismiss() {} }, sessions: {}, workspaces: {}, uiWorkspace: {}, provide() {}, effect: factory => factory(),
       slots: { inject(name, factory) { if (name === 'conversation.chat.node') factory() }, subscribe: () => () => {},
         entries: name => name === 'conversation.chat.node' ? ['assistant-step', 'user', 'steering', 'turn-tail'].map(key => ({ options: { key },
-          children: { 'message.detail': { kind: 'single', scope: 'session' } },
-          component: props => React.createElement('p', null, props.node.data.text, props.renderSlot('message.detail')),
+          children: key === 'assistant-step' ? { 'conversation.chat.message.images': { kind: 'single', scope: 'session' } } : {},
+          component: props => React.createElement('p', null, props.node.data.text,
+            key === 'assistant-step'
+              ? props.renderSlot('conversation.chat.message.images', { loadImage: props.loadImage })
+              : props.renderFactorySlot?.('conversation.chat.user.content', {
+                content: props.node.data.content, loadImage: props.loadImage, facts: {}, interactive: true,
+              })),
         })) : [], register(options, component) { registrations.push({ options, component }); return () => {} },
       },
     })
@@ -202,16 +208,27 @@ test('built message wrappers place portraits on each side and retain native cont
     for (const key of ['assistant-step', 'user', 'steering']) {
       const renderer = registrations.find(item => item.options.key === key)
       const called = []
+      const factories = []
+      const loadImage = async () => new Blob()
+      const content = [{ type: 'text', text: 'Native message and attachments' }]
       const html = renderToStaticMarkup(React.createElement(renderer.component, {
         ...renderer.options.inject(), sessionId: 'session', chatFor: () => chat,
-        node: { kind: key, data: { turn: 2, text: 'Native message and attachments', blocks: [{ kind: 'text', text: 'Native message and attachments' }] } },
-        renderSlot: name => { called.push(name); return React.createElement('span', null, 'native images') },
+        node: { kind: key, data: { turn: 2, text: 'Native message and attachments', content, blocks: [{ kind: 'text', text: 'Native message and attachments' }] } },
+        loadImage,
+        renderSlot: (name, owner) => { called.push([name, owner]); return React.createElement('span', null, 'native images') },
+        renderFactorySlot: (name, owner) => { factories.push([name, owner]); return React.createElement('span', null, 'native images') },
       }))
       const image = key === 'assistant-step' ? value.character.image : value.persona.avatar
       assert.ok(html.includes(image))
       assert.match(html, /Native message and attachments/)
       assert.match(html, /native images/)
-      assert.equal(called[0], `mayori.greeting.${key}.message.detail`)
+      if (key === 'assistant-step') {
+        assert.deepEqual(called, [[`mayori.greeting.${key}.conversation.chat.message.images`, { loadImage }]])
+        assert.deepEqual(factories, [])
+      } else {
+        assert.deepEqual(called, [])
+        assert.deepEqual(factories, [['conversation.chat.user.content', { content, loadImage, facts: {}, interactive: true }]])
+      }
       assert.match(html, /aria-haspopup="dialog"/)
       assert.equal((html.match(/class="mayori-message-avatar"/g) ?? []).length, 1)
       assert.doesNotMatch(html, /<dialog/, 'Closed avatars do not embed dialog images inside message rows')

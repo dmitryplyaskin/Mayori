@@ -40,13 +40,20 @@ else {
 const browser = await chromium.launch({ headless: true,
   ...(process.env.MAYORI_CHROMIUM_PATH ? { executablePath: process.env.MAYORI_CHROMIUM_PATH } : {}) })
 let page
+const catalog = []
 try {
   page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
+  page.on('response', async response => {
+    if (response.url().includes('/session/list')) {
+      const value = await response.json().catch(() => null)
+      catalog.push({ status: response.status(), ids: value?.result?.value?.items?.map(item => item.sessionId), error: value?.result?.error })
+    }
+  })
   await page.goto(url.href)
   await page.getByRole('button', { name: 'История чатов', exact: true }).waitFor()
-  try { await page.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 2000 }) } catch {}
+  try { await page.getByRole('button', { name: /^(?:Continue|Продолжить)$/ }).click({ timeout: 10000 }) } catch {}
   const openChat = async id => {
     await page.getByRole('button', { name: 'История чатов', exact: true }).click()
     await page.getByRole('searchbox', { name: 'Поиск по названию или ID чата' }).fill(id)
@@ -66,7 +73,7 @@ try {
   const settle = id => rpc('/_mayori-smoke', { action: 'settle', sessionId: id })
   const editor = page.getByRole('dialog', { name: 'Редактировать сообщение', exact: true })
   await openChat(fixture.source)
-  await page.getByText('Trajectory', { exact: true }).click()
+  await page.getByText(/^(?:Trajectory|Контекст)$/).click()
   await page.getByRole('button', { name: 'Показывать', exact: true }).waitFor()
   await chooseMenu(page, 'Запрос', 'Текущий сохранённый контекст')
   assert.equal(await page.getByRole('button', { name: 'Запрос', exact: true }).getAttribute('data-value'), 'current')
@@ -78,7 +85,7 @@ try {
   await page.setViewportSize({ width: 320, height: 900 })
   assert.equal(await page.locator('.mayori-trajectory-controls').evaluate(element => element.scrollWidth <= element.clientWidth + 1), true)
   await page.setViewportSize({ width: 1280, height: 900 })
-  await page.getByText('Chat', { exact: true }).click()
+  await page.getByText(/^(?:Chat|Чат)$/).click()
   if (process.argv[4] === '--restore') {
     await choose(fixture.manual)
     assert.ok((await settle(fixture.manual)).messages.some(message => message.content.some(block => block.text === 'The archive door remains shut.')))
@@ -215,6 +222,7 @@ try {
 } catch (error) {
   await page?.screenshot({ path: join(output, 'failure.png') })
   console.error(JSON.stringify({ fixture, alerts: await page?.getByRole('alert').allTextContents(),
+    catalog,
     pickers: await page?.locator('.mayori-select-trigger').evaluateAll(nodes => nodes.map(node => ({ value: node.dataset.value, text: node.textContent }))) }))
   throw error
 } finally { await browser.close() }

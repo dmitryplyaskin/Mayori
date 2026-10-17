@@ -40,7 +40,7 @@ try {
   page.on('dialog', dialog => dialog.dismiss())
   await page.goto(url.href)
   await page.getByRole('button', { name: 'Персоны', exact: true }).waitFor()
-  try { await page.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 1500 }) } catch {}
+  try { await page.getByRole('button', { name: /^(?:Continue|Продолжить)$/ }).click({ timeout: 10000 }) } catch {}
   const openPersonas = () => page.getByRole('button', { name: 'Персоны', exact: true }).click()
   const status = text => page.getByRole('status').filter({ hasText: text }).waitFor()
   const tab = name => page.getByRole('tab', { name, exact: true }).click()

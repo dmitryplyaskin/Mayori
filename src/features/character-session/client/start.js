@@ -18,8 +18,8 @@ export async function startCharacterSession({ sessions, workspaces, uiWorkspace,
     workspaceId = workspace.workspaceId
   }
 
-  const prepared = await library.start(card.id, workspaceId, greetingIndex)
-  const sessionId = await sessions.create({ workspaceId, sessionId: prepared.sessionId })
+  const { sessionId } = await library.start(card.id, workspaceId, greetingIndex)
+  await sessions.refresh()
   await sessions.using(sessionId, { source: 'mayoriGallery' }, async (reference) => {
     const binding = await reference.ready
     const renamed = await binding.session.rename(card.name)

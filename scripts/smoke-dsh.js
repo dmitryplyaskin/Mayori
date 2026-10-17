@@ -38,6 +38,7 @@ if (sessionId === undefined) {
   const prepared = await call('/mayori/characters/start', { characterId: card.id, workspaceId: created.workspaceId, greetingIndex })
   sessionId = prepared.sessionId
   const adopted = await call('/_mayori-smoke', { action: 'adopt', sessionId, workspaceId: created.workspaceId })
+  assert.equal(adopted.sessionId, sessionId, 'Resume must preserve the seeded character chat identity')
   assert.equal(adopted.agentPreset, expectedPreset)
   const beforeTurn = await call('/_mayori-smoke', { action: 'inspect', sessionId })
   assert.equal(beforeTurn.requestCount, created.requestCount, 'Greeting must not call an LLM')

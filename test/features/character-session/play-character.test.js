@@ -7,7 +7,8 @@ function harness(workspace = true) {
   const services = {
     sessions: {
       list: { getSnapshot: () => ({ ids: ['current'], byId: { current: { id: 'current', retainedBy: { mainView: 1 } } } }) },
-      create: async input => { calls.push(['create', input]); return 'new' },
+      create: async () => { assert.fail('DSH create would replace the seeded chat with a blank session') },
+      refresh: async () => { calls.push(['refresh']) },
       async using(id, options, callback) {
         calls.push(['retain', id, options])
         try {
@@ -30,11 +31,11 @@ function harness(workspace = true) {
   return { calls, services }
 }
 
-test('retains and awaits the new session, selects the NPC, names and opens it before releasing', async () => {
+test('opens the exact seeded session through retention without creating a replacement blank', async () => {
   const h = harness()
   assert.equal(await startCharacterSession(h.services, { id: 'aster', name: 'Aster' }), 'new')
   assert.deepEqual(h.calls, [
-    ['start', 'aster', 'campaign', 0], ['create', { workspaceId: 'campaign', sessionId: 'new' }], ['retain', 'new', { source: 'mayoriGallery' }],
+    ['start', 'aster', 'campaign', 0], ['refresh'], ['retain', 'new', { source: 'mayoriGallery' }],
     ['rename', 'Aster'], ['open', 'new'], ['release', 'new'],
   ])
 })
@@ -42,8 +43,8 @@ test('retains and awaits the new session, selects the NPC, names and opens it be
 test('prepares and registers a campaign automatically when there is no workspace', async () => {
   const h = harness(false)
   await startCharacterSession(h.services, { id: 'aster', name: 'Aster' })
-  assert.deepEqual(h.calls.slice(0, 4), [
-    ['prepare'], ['workspace', { path: '/campaigns/default' }], ['start', 'aster', 'default', 0], ['create', { workspaceId: 'default', sessionId: 'new' }],
+  assert.deepEqual(h.calls.slice(0, 3), [
+    ['prepare'], ['workspace', { path: '/campaigns/default' }], ['start', 'aster', 'default', 0],
   ])
 })
 
@@ -67,7 +68,14 @@ test('history opening is awaited before selection', async () => {
   const h = harness()
   h.services.sessions.using = async (_id, _options, callback) => callback({ ready: Promise.reject(new Error('history unavailable')) })
   await assert.rejects(startCharacterSession(h.services, { id: 'aster', name: 'Aster' }), /history unavailable/)
-  assert.deepEqual(h.calls, [['start', 'aster', 'campaign', 0], ['create', { workspaceId: 'campaign', sessionId: 'new' }]])
+  assert.deepEqual(h.calls, [['start', 'aster', 'campaign', 0], ['refresh']])
+})
+
+test('a catalog refresh failure leaves navigation unchanged and does not retain an unknown session', async () => {
+  const h = harness()
+  h.services.sessions.refresh = async () => { throw new Error('catalog unavailable') }
+  await assert.rejects(startCharacterSession(h.services, { id: 'aster', name: 'Aster' }), /catalog unavailable/)
+  assert.deepEqual(h.calls, [['start', 'aster', 'campaign', 0]])
 })
 
 test('with no main-view reference, uses a registered workspace without the retired current or recent fields', async () => {
@@ -84,5 +92,6 @@ test('a new-chat command keeps its source workspace even if navigation has chang
   ] })
   await startCharacterSession({ ...h.services, sourceSessionId: 'source' }, { id: 'aster', name: 'Aster' })
   assert.deepEqual(h.calls[0], ['start', 'aster', 'source-campaign', 0])
-  assert.deepEqual(h.calls[1], ['create', { workspaceId: 'source-campaign', sessionId: 'new' }])
+  assert.deepEqual(h.calls[1], ['refresh'])
+  assert.deepEqual(h.calls[2], ['retain', 'new', { source: 'mayoriGallery' }])
 })

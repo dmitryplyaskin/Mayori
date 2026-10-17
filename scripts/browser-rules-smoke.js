@@ -29,7 +29,7 @@ try {
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(url.href)
   await page.getByRole('button', { name: 'История чатов', exact: true }).waitFor()
-  try { await page.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 2000 }) } catch {}
+  try { await page.getByRole('button', { name: /^(?:Continue|Продолжить)$/ }).click({ timeout: 10000 }) } catch {}
   await page.getByRole('button', { name: 'История чатов', exact: true }).click()
   await page.getByRole('searchbox', { name: 'Поиск по названию или ID чата' }).fill(sessionId)
   await page.locator('.mayori-history-row').first().click()

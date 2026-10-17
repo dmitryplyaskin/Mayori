@@ -9,6 +9,7 @@ export function apply(ctx) {
     providerInfo: id => ({ id, name: 'Mayori smoke' }),
     providerRetryPolicy: () => undefined,
     imageRequestPricing: () => undefined,
+    imageRequestTarget: (_provider, _model, image) => ({ width: image.width, height: image.height, maxBytes: image.bytes }),
     listModels: async provider => [{ provider, id: 'smoke', name: 'Smoke' }],
     resolveModel: async (provider, id) => ({ provider, id, name: id, context: { contextWindow: 32000 }, defaultMaxTokens: 512 }),
     async prepareCall(provider, id) {
@@ -93,7 +94,9 @@ export function apply(ctx) {
           const workspace = await ctx.workspaceRegistry.create(campaign.path)
           value = { workspaceId: workspace.id, requestCount: requests.length }
         } else if (input.action === 'adopt') {
-          value = await ctx.sessionController.create({ sessionId: input.sessionId, workspaceId: input.workspaceId })
+          const resolved = await ctx.sessionController.resolveAgent(input.sessionId)
+          if (resolved.error) throw resolved.error
+          value = { sessionId: resolved.agent.id, agentPreset: resolved.agent.session.header.agentPreset }
         } else if (input.action === 'inspect' || input.action === 'settle') {
           let agent = ctx.agents.get(input.sessionId)
           if (!agent) {

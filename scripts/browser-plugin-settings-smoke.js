@@ -16,7 +16,7 @@ try {
   page.setDefaultTimeout(15000)
   page.on('pageerror', error => errors.push(error.message))
   const dismissOnboarding = async () => {
-    const previewNotice = page.getByRole('button', { name: 'Continue', exact: true })
+    const previewNotice = page.getByRole('button', { name: /^(?:Continue|Продолжить)$/ })
     if (await previewNotice.isVisible()) await previewNotice.click()
     const later = page.getByRole('button', { name: 'Configure later', exact: true })
     try { await later.waitFor({ timeout: 2000 }); await later.click() } catch {}

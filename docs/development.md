@@ -10,7 +10,44 @@
 
 - Node.js `^22.19.0` или `>=24.0.0`;
 - pnpm 11;
-- DeepSeek Harness `0.2.1-alpha.2` для интеграционного smoke test; полный форк не нужен.
+- DeepSeek Harness `0.2.1-rc.2` для интеграционного smoke test; полный форк не нужен.
+
+## Совместимость с DSH 0.2.1-rc.2
+
+Пакеты DSH в peer/dev dependencies закреплены на `0.2.1-rc.2`; Cordis и
+Schemastery используют стабильные версии `4.0.5` и `3.18.5`. `engines.dsh`
+объявляет проверенную версию для штатной проверки совместимости плагинов.
+
+В rc.2 пользовательское содержимое отображается через factory
+`conversation.chat.user.content`, а изображения ответа — через child slot
+`conversation.chat.message.images`. Обёртки сообщений Mayori передают
+`renderFactorySlot` и `loadImage` штатному renderer без изменений и зеркалят
+только объявленные child slots. Проверка built client покрывает оба контракта.
+Новый штатный `harness-dev-context` выключен в bundle: технические инструкции
+о разработке DSH не должны попадать в творческую сессию. Keyless smoke
+проверяет фактический system prompt и runtime context тестовой модели.
+Browser smoke закрывает штатное окно предварительной версии по русской или
+английской подписи кнопки, прежде чем переходить к действиям Mayori.
+
+`sessions.create` в новой версии переиспользует только сессии без начатого
+хода. Host Mayori уже записал приветствие, поэтому gallery и `/new` открывают
+его точный ID через `sessions.using`, без повторного create. Перед retention
+`sessions.refresh()` добавляет сохранённый чат в клиентский каталог: один
+reference не регистрирует неизвестные Session IDs. Keyless probe
+возобновляет такой чат через `sessionController.resolveAgent`. Проверка
+`browser-chat-commands-smoke.js` сверяет ID, карточку, приветствие и отсутствие
+запросов модели при `/new`.
+
+Для существующего локального профиля достаточно переустановить checkout:
+
+```sh
+pnpm dlx @deepseek-ai/dsh@0.2.1-rc.2 plugin --profile mayori add C:/pet_projects/Mayori
+pnpm dlx @deepseek-ai/dsh@0.2.1-rc.2 --profile mayori
+```
+
+Перед запуском завершите прежний Host. `--from-default-profile` применяется
+только при создании профиля: повторное применение заменяет его настройки.
+Каталоги Mayori и форматы её snapshots при этой миграции не меняются.
 
 ## Быстрый цикл
 
@@ -64,13 +101,15 @@ Mayori рядом с обычной Web-композицией. Оба проф�
 проверяет разрешённые Config paths журналов, registry, attachments, credentials
 и поискового индекса. Для опубликованного CLI используйте
 `node scripts/storage-isolation-smoke.js <pnpm.js> --published`: этот режим
-выполняет реальные команды `pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2`.
+выполняет реальные команды `pnpm dlx @deepseek-ai/dsh@0.2.1-rc.2`.
 Сценарий не вызывает модель и печатает путь к временным данным для инспекции.
+Холодный запуск опубликованного CLI ожидается до двух минут; итоговый
+`mayori.dump.yml` сохраняется рядом с временными данными.
 
 Для сжатия истории выполните `node scripts/compaction-smoke.js <URL-test-Host>` в изолированном профиле с probe. Сценарий проверяет порог, инструмент compactHistory ниже порога, отсутствие служебного текста, точную сохранённую инструкцию, исходные события, изоляцию, обновление, отключение и native fork. `node scripts/browser-plugin-settings-smoke.js <URL-test-Host> <output-directory>` дополнительно проверяет отдельную модалку Mayori: пустую вкладку «Основные», клавиатурное переключение вкладок, сворачиваемые разделы, поиск по названию и описанию, форму, валидацию, сохранение черновика при фильтрации и навигации, ошибки записи и сохранение после перезагрузки. Сценарий проверяет отсутствие раздела Mayori в штатных настройках DSH, Escape и возврат фокуса, светлую/тёмную тему и ширины 1280/390/320 px. Настройки и устройство журнала описаны в [руководстве](compaction.md).
 
 Обычный пользователь устанавливает bundle с GitHub и запускает
-`pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2 --profile mayori`; ручной выбор
+`pnpm dlx @deepseek-ai/dsh@0.2.1-rc.2 --profile mayori`; ручной выбор
 хранилища не нужен. Bundle направляет игровые данные в `~/.dsh-mayori`
 через отдельный `mayoriStorage` service и Config native DSH providers.
 `DSH_HOME` по-прежнему выбирает место установки профиля; сам по себе он
@@ -115,7 +154,7 @@ pnpm dsh --profile mayori --no-open --port 3094
 [Руководства по пресетам](presets.md) и [плагинам](plugins.md).
 
 Для проверки опубликованного DSH вместо source launcher используйте
-`pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2`. Каждая проверка использует отдельный
+`pnpm dlx @deepseek-ai/dsh@0.2.1-rc.2`. Каждая проверка использует отдельный
 `DSH_HOME` **и** тестовый `mayori-storage.root`. Реальный профиль игрока
 для smoke не переустанавливается.
 
@@ -123,7 +162,7 @@ pnpm dsh --profile mayori --no-open --port 3094
 `includeHarnessIdentity` и `includeRuntimeContext`, `web-runtime` отключает
 `surfaceContext`, `tools` использует `mode: native`, а `ui-deliverables`
 отключён. Web runtime сохраняет `openBrowser`, `printUrl`, `publicUrl` и
-`trustedHosts`. Keyless smoke подтверждает agency, карточку, отсутствие
+`trustedHosts`; отдельный `harness-dev-context` выключен. Keyless smoke подтверждает agency, карточку, отсутствие
 coding tools и необязательных технических snapshots. Обязательный
 `working-directory:current` сохраняется в session log.
 
@@ -143,7 +182,7 @@ coding tools и необязательных технических snapshots. �
       name: C:/pet_projects/Mayori/scripts/dsh-smoke-probe.js
 ```
 
-После установки checkout и сборки browser half запустите `pnpm dlx @deepseek-ai/dsh@0.2.1-alpha.2 --patch <absolute-smoke-overlay.yml> --profile mayori --no-open --port 3090`. Launcher-параметры, включая `--patch`, должны находиться перед app-параметрами `--no-open` / `--port`.
+После установки checkout и сборки browser half запустите `pnpm dlx @deepseek-ai/dsh@0.2.1-rc.2 --patch <absolute-smoke-overlay.yml> --profile mayori --no-open --port 3090`. Launcher-параметры, включая `--patch`, должны находиться перед app-параметрами `--no-open` / `--port`.
 
 `node scripts/plugin-settings-smoke.js http://127.0.0.1:3090` проверяет все восемь сочетаний переключателей в одном уже начатом чате реального тестового Host: фактические schemas игровых запросов, одинаковые системные инструкции, изоляцию от root и чтение старого результата без повторного броска. Выбор восстанавливается в finally. `browser-plugin-settings-smoke.js` проверяет страницу, клавиатуру, размеры и сохранение через UI. Используйте только временный профиль с probe.
 

@@ -43,7 +43,7 @@ try {
   page.on('dialog', dialog => acceptDialog ? dialog.accept() : dialog.dismiss())
   await page.goto(url.href)
   await page.getByRole('button', { name: 'Пресеты', exact: true }).waitFor()
-  try { await page.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 2000 }) } catch {}
+  try { await page.getByRole('button', { name: /^(?:Continue|Продолжить)$/ }).click({ timeout: 10000 }) } catch {}
   await page.getByRole('button', { name: 'Пресеты', exact: true }).click()
   await page.getByRole('heading', { name: 'Пресеты', exact: true }).waitFor()
   await page.waitForFunction(() => document.querySelector('[name=presetName]')?.value.length > 0)

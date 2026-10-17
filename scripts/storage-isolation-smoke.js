@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 if (!process.argv[2]) throw new Error('Usage: node scripts/storage-isolation-smoke.js <dsh-cli-bin.js> (or <pnpm.js> --published)')
 const entry = resolve(process.argv[2])
 const published = process.argv[3] === '--published'
-const prefix = published ? [entry, 'dlx', '@deepseek-ai/dsh@0.2.1-alpha.2'] : [entry]
+const prefix = published ? [entry, 'dlx', '@deepseek-ai/dsh@0.2.1-rc.2'] : [entry]
 const project = resolve(fileURLToPath(new URL('../', import.meta.url)))
 const home = await mkdtemp(join(tmpdir(), 'mayori-native-isolation-'))
 const dataRoot = join(home, 'rpg-data')
@@ -74,7 +74,7 @@ async function boot(profile) {
   processes.push(child)
   let output = ''
   const origin = await new Promise((accept, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Startup timeout: ${output.slice(-4000)}`)), 45000)
+    const timer = setTimeout(() => reject(new Error(`Startup timeout: ${output.slice(-4000)}`)), 120000)
     const collect = data => {
       output += String(data).replace(/([?&]token=)[A-Za-z0-9_-]+/g, '$1[redacted]')
       const match = output.match(/http:\/\/127\.0\.0\.1:\d+/)
@@ -123,8 +123,11 @@ try {
     '- id: mayori-storage\n  config:\n    root: ' + JSON.stringify(dataRoot) + '\n' + probePatch)
   await writeFile(join(home, 'profiles', 'coding', 'cordis.patch.yml'), probePatch)
   const dump = await command(['--profile', 'mayori', '--dump-config'])
+  await writeFile(join(home, 'mayori.dump.yml'), dump)
   assert.match(dump, /mayoriStorage\.path\('sessions'\)/)
   assert.match(dump, /name: dsh-mayori\/storage/)
+  const developerContext = dump.match(/- id: harness-dev-context\b[\s\S]*?(?=\r?\n- id:|$)/)?.[0]
+  assert.match(developerContext ?? '', /\bdisabled: true/, 'Mayori disables the rc.2 coding-context provider')
   const [mayori, coding] = await Promise.all([boot('mayori'), boot('coding')])
   const historyRpc = async (server, endpoint, payload = {}) => {
     const response = await fetch(new URL(`/mayori/characters/${endpoint}`, server.url), {

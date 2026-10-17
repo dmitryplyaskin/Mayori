@@ -56,6 +56,9 @@
     surfaceContext: false
     trustedHosts: !!js ctx.webStartup.trustedHosts
 
+- id: harness-dev-context
+  disabled: true
+
 - id: tools
   config:
     mode: native

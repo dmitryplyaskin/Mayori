@@ -22,7 +22,7 @@ try {
   await page.addLocatorHandler(page.getByRole('button', { name: /^(Configure later|Настроить позже)$/ }), async button => { await button.click() })
   await page.goto(url.href)
   await page.getByRole('button', { name: 'Mayori settings', exact: true }).waitFor()
-  try { await page.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 2000 }) } catch {}
+  try { await page.getByRole('button', { name: /^(?:Continue|Продолжить)$/ }).click({ timeout: 10000 }) } catch {}
   try { await page.getByRole('button', { name: 'Configure later', exact: true }).click({ timeout: 5000 }) } catch {}
 
   const switchLanguage = async (from, to) => {

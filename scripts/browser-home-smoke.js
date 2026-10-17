@@ -49,7 +49,7 @@ try {
     : route.continue())
   await retryPage.goto(url.href)
   await retryPage.getByRole('button', { name: 'Персонажи', exact: true }).waitFor()
-  try { await retryPage.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 2000 }) } catch {}
+  try { await retryPage.getByRole('button', { name: /^(?:Continue|Продолжить)$/ }).click({ timeout: 10000 }) } catch {}
   await retryPage.getByRole('button', { name: 'Персонажи', exact: true }).click()
   const retry = retryPage.getByRole('button', { name: 'Повторить загрузку', exact: true })
   await retry.waitFor()
@@ -72,7 +72,7 @@ try {
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(url.href)
   await page.getByRole('button', { name: 'Главная', exact: true }).waitFor()
-  try { await page.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 2000 }) } catch {}
+  try { await page.getByRole('button', { name: /^(?:Continue|Продолжить)$/ }).click({ timeout: 10000 }) } catch {}
   await page.getByRole('button', { name: 'Главная', exact: true }).click()
   await page.getByRole('heading', { name: 'Добро пожаловать в Mayori' }).waitFor()
   await page.locator('.mayori-home-panel .mayori-history-row').nth(4).waitFor()

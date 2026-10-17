@@ -28,13 +28,19 @@ await call('/_mayori-smoke', { action: 'adopt', sessionId, workspaceId: campaign
 const before = await call('/_mayori-smoke', { action: 'inspect', sessionId })
 const browser = await chromium.launch({ headless: true,
   ...(process.env.MAYORI_CHROMIUM_PATH ? { executablePath: process.env.MAYORI_CHROMIUM_PATH } : {}) })
+let page
+const errors = []
+const responses = []
 try {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
-  const errors = []
+  page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   page.on('pageerror', error => errors.push(error.message))
+  page.on('response', response => {
+    const path = new URL(response.url()).pathname
+    if (path.startsWith('/mayori/characters/')) responses.push({ path, input: response.request().postDataJSON() })
+  })
   await page.goto(url.href)
   await page.getByRole('button', { name: 'Главная', exact: true }).waitFor()
-  try { await page.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 2000 }) } catch {}
+  try { await page.getByRole('button', { name: /^(?:Continue|Продолжить)$/ }).click({ timeout: 10000 }) } catch {}
   await page.getByRole('button', { name: 'Главная', exact: true }).click()
   await page.locator('.mayori-history-row').filter({ hasText: name }).first().click()
   const composer = page.locator('[contenteditable="true"]').first()
@@ -92,12 +98,13 @@ try {
   assert.equal(after.requestCount, before.requestCount, 'Commands must not start a model request')
   const defaults = await rpc('preset-list')
   const started = page.waitForResponse(response => new URL(response.url()).pathname === '/mayori/characters/start')
+  const nextState = page.waitForResponse(response => new URL(response.url()).pathname === '/mayori/characters/session-state'
+    && response.request().postDataJSON().sessionId !== sessionId)
   await typeCommand('new')
   await composer.press('Enter')
   const newSessionId = (await (await started).json()).value.sessionId
   assert.notEqual(newSessionId, sessionId)
-  await page.waitForResponse(response => new URL(response.url()).pathname === '/mayori/characters/session-state'
-    && response.request().postDataJSON().sessionId === newSessionId)
+  assert.equal((await nextState).request().postDataJSON().sessionId, newSessionId)
   const newState = await rpc('session-state', { sessionId: newSessionId })
   assert.equal(newState.character.id, character.id)
   assert.equal(newState.greeting.index, 0)
@@ -108,6 +115,9 @@ try {
     'Creating a chat must preserve the source journal')
   assert.deepEqual(errors, [])
   console.log(JSON.stringify({ ok: true, sessionId, newSessionId }))
+} catch (error) {
+  console.error(JSON.stringify({ errors, responses: responses.slice(-15), body: await page?.locator('body').innerText() }))
+  throw error
 } finally {
   await browser.close()
   await rpc('preset-remove', { id: preset.id })

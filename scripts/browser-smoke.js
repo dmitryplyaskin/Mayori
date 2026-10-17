@@ -81,7 +81,7 @@ try {
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(url.href)
   await page.getByRole('button', { name: 'История чатов', exact: true }).waitFor()
-  try { await page.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 2000 }) } catch {}
+  try { await page.getByRole('button', { name: /^(?:Continue|Продолжить)$/ }).click({ timeout: 10000 }) } catch {}
   const openChat = async () => {
     await page.getByRole('button', { name: 'История чатов', exact: true }).click()
     await page.getByRole('searchbox', { name: 'Поиск по названию или ID чата' }).fill(session.sessionId)
@@ -106,8 +106,8 @@ try {
   await page.reload()
   await openChat()
   await assertPortraits()
-  const chat = page.getByText('Chat', { exact: true })
-  const trajectory = page.getByText('Trajectory', { exact: true })
+  const chat = page.getByText(/^(?:Chat|Чат)$/)
+  const trajectory = page.getByText(/^(?:Trajectory|Контекст)$/)
   assert.ok((await chat.boundingBox()).x < (await trajectory.boundingBox()).x)
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => {

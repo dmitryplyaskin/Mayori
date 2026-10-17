@@ -141,7 +141,7 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
     return { sessionId: safeSessionId, character: { id: character.id, name: character.name } }
   }
 
-  /** Prepare and persist a seeded chat before the browser adopts it through sessions.create. */
+  /** Persist a seeded chat for the browser to open through a retained Session reference. */
   async create(characterId, workspaceId, greetingIndex = 0) {
     validateCardId(characterId)
     if (!Number.isSafeInteger(greetingIndex) || greetingIndex < 0) throw new TypeError('Некорректный вариант приветствия.')
