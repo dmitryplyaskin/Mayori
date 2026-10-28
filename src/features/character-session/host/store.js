@@ -1,10 +1,9 @@
-import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, rm, stat, readdir } from 'node:fs/promises'
 import { linkSync, renameSync } from 'node:fs'
 import { createHash, randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
-import { validateSessionId, characterSnapshot } from '../domain/character.js'
-import { mediaId } from '../../media/shared/image.js'
-import { validatePersonaExtensions } from '../../personas/shared/persona.js'
+import { validateSessionId, buildCharacterContext } from '../domain/character.js'
+import { validateCharacterSelection } from '../domain/snapshot.js'
 
 /** Selection store; source cards stay fixed, persona changes are explicit. */
 export class FileSystemCharacterSessionStore {
@@ -31,46 +30,34 @@ export class FileSystemCharacterSessionStore {
       || !record.character?.data || typeof record.character.data.description !== 'string') {
       throw new Error('Сохранённый выбор персонажа повреждён. Восстановите файл из резервной копии.')
     }
-    const snapshot = characterSnapshot(record.character)
-    if (snapshot.image !== undefined && snapshot.image !== null
-      && !mediaId(snapshot.image) && (typeof snapshot.image !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(snapshot.image))) {
-      throw new Error('Snapshot аватара персонажа повреждён.')
+    return validateCharacterSelection(record.character)
+  }
+
+  /** One-time recovery for pre-migration forks whose inherited cut predates logged selections. */
+  async inheritedSelection(events) {
+    const greetings = new Set(events.filter(event => event.type === 'assistant/message'
+      && event.data.message.source?.provider === 'mayori-character-card').map(event => event.data.message.id))
+    if (!greetings.size) return null
+    let entries
+    try { entries = await readdir(this.root) } catch (error) { if (error.code === 'ENOENT') return null; throw error }
+    const context = events.filter(event => event.type === 'system/message').map(event =>
+      event.data.message.content.filter(block => block.type === 'text').map(block => block.text).join(''))
+      .findLast(text => text.includes('<mayori-character-card>'))
+    const matches = []
+    for (const entry of entries.filter(entry => entry.endsWith('.json'))) {
+      const text = await readFile(resolve(this.root, entry), 'utf8')
+      if (![...greetings].some(id => text.includes(id))) continue
+      const record = JSON.parse(text)
+      if (!greetings.has(record.character?.greeting?.messageId)) continue
+      const character = await this.read(record.sessionId)
+      const rendered = buildCharacterContext(character)
+      if (!context || context.includes(rendered)) matches.push({ character, originSessionId: record.sessionId })
     }
-    for (const [field, value] of Object.entries(snapshot.data)) {
-      const stored = record.character.data[field]
-      if (Array.isArray(value) ? !Array.isArray(stored) || stored.some(item => typeof item !== 'string')
-        : typeof stored !== 'string') {
-        throw new Error('Сохранённый выбор персонажа повреждён. Восстановите файл из резервной копии.')
-      }
+    if (matches.length !== 1) {
+      throw new Error('Не удалось восстановить персонажа старой ветки. Откройте исходный чат.')
     }
-    const greeting = record.character.greeting
-    if (record.character.persona !== undefined) {
-      const persona = record.character.persona
-      if (!persona || typeof persona.name !== 'string' || !persona.name.trim() || typeof persona.description !== 'string') {
-        throw new Error('Snapshot персоны повреждён.')
-      }
-      validatePersonaExtensions(persona)
-      if (persona.promptSnapshot !== undefined && (!persona.promptSnapshot
-        || typeof persona.promptSnapshot.description !== 'string' || persona.promptSnapshot.description.length > 256000
-        || !Array.isArray(persona.promptSnapshot.activeIds) || persona.promptSnapshot.activeIds.some(id => typeof id !== 'string')
-        || persona.promptSnapshot.sessionId !== null && typeof persona.promptSnapshot.sessionId !== 'string'
-        || persona.promptSnapshot.characterId !== null && typeof persona.promptSnapshot.characterId !== 'string')) {
-        throw new Error('Snapshot описания персоны повреждён.')
-      }
-      snapshot.persona = { ...persona }
-    }
-    if (record.character.templateTime !== undefined) {
-      if (!Number.isSafeInteger(record.character.templateTime) || record.character.templateTime < 0) throw new Error('Snapshot времени повреждён.')
-      snapshot.templateTime = record.character.templateTime
-    }
-    if (greeting !== undefined) {
-      if (!greeting || !Number.isSafeInteger(greeting.index) || greeting.index < 0
-        || typeof greeting.messageId !== 'string' || !greeting.messageId || typeof greeting.text !== 'string') {
-        throw new Error('Snapshot приветствия повреждён.')
-      }
-      snapshot.greeting = { index: greeting.index, messageId: greeting.messageId, text: greeting.text }
-    }
-    return snapshot
+    const { character, originSessionId } = matches[0]
+    return { character, originSessionId }
   }
 
   /** Prepare off-path, then publish without an await after the liveness check. */

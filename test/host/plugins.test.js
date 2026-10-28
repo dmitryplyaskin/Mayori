@@ -3,13 +3,15 @@ import test from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as Dice from '../../src/host/dice-plugin.js'
 import * as Rules from '../../src/host/rules-plugin.js'
 import * as RollHistory from '../../src/host/roll-history-plugin.js'
 
 async function runtime(t) {
   const ctx = new Context(); t.after(() => ctx.fiber.dispose())
-  await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime)
+  await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime); await ctx.plugin(NativeToolExecutor)
   return ctx
 }
 const tools = ctx => ctx.tools.schemas().map(tool => tool.name).sort()
@@ -23,7 +25,7 @@ test('Dice and history are independent plugins; disabling history leaves rolls a
   assert.deepEqual(tools(ctx), ['getRollDetails', 'rollDice'])
   await history.dispose()
   assert.deepEqual(tools(ctx), ['rollDice'])
-  const rolled = await ctx.tools.execute({ name: 'rollDice', callId: 'only-dice', arguments: { rolls: ['d1'] }, signal: new AbortController().signal })
+  const rolled = await executeModelToolFixture(ctx, { name: 'rollDice', callId: 'only-dice', arguments: { rolls: ['d1'] }, signal: new AbortController().signal })
   assert.equal(rolled.isError, false)
   assert.deepEqual(JSON.parse(rolled.content[0].text), { rollId: 'only-dice', values: [1] })
   assert.deepEqual(rolled.meta.result.details[0].dice[0].results, [1])
@@ -38,7 +40,7 @@ test('Rules consumes the Dice service without adding rollDice, and unloading dep
   const dice = ctx.plugin(Dice, { exposeTool: false }); await dice; await rules
   assert.ok(ctx.mayoriDice)
   assert.deepEqual(tools(ctx), ['resolveCheck'])
-  const checked = await ctx.tools.execute({ name: 'resolveCheck', callId: 'only-check',
+  const checked = await executeModelToolFixture(ctx, { name: 'resolveCheck', callId: 'only-check',
     arguments: { profile: 'test', target: 1 }, signal: new AbortController().signal })
   assert.equal(checked.isError, false)
   assert.equal(JSON.parse(checked.content[0].text).check.outcome, 'success')

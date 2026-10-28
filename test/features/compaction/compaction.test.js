@@ -7,6 +7,8 @@ import SessionProjections from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as Compaction from '../../../src/host/compaction-plugin.js'
 import { DEFAULT_COMPACTION, validateCompaction } from '../../../src/features/compaction/shared/settings.js'
 
@@ -15,7 +17,7 @@ const instructions = 'Сохрани обещания и {{user}} букваль
 async function runtime(t, options = {}) {
   const ctx = new Context(); t.after(() => ctx.fiber.dispose())
   await ctx.plugin(LlmRuntime); await ctx.plugin(SessionStore); await ctx.plugin(SessionProjections); await ctx.plugin(TokenMeter)
-  await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime)
+  await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime); await ctx.plugin(NativeToolExecutor)
   const requests = []
   let output = [{ type: 'text', text: 'Герой у ворот. Марта обещала помочь. Проверка уже выполнена: успех.' }], finish = { kind: 'stop' }
   class Adapter extends LlmAdapter {
@@ -203,7 +205,7 @@ test('compactHistory is a real scoped tool that condenses below the pressure thr
   await prepare(h.ctx, session)
   assert.equal(h.requests.length, 0, 'Automatic threshold has not been reached')
   const current = session.snapshotEvents().filter(event => event.seq >= call.seq - 3)
-  const result = await h.ctx.tools.execute({ name: 'compactHistory', callId: 'compact-call', arguments: {}, agent: agentFor(session), signal })
+  const result = await executeModelToolFixture(h.ctx, { name: 'compactHistory', callId: 'compact-call', arguments: {}, agent: agentFor(session), signal })
   assert.equal(result.isError, false)
   assert.equal(JSON.parse(result.content[0].text).status, 'compacted')
   assert.equal(h.requests.length, 1)
@@ -219,7 +221,7 @@ test('compactHistory makes no summary call when the retained budget covers all c
   const h = await runtime(t, { thresholdPercent: 95, retainPercent: 90 })
   const { session } = toolConversation()
   await prepare(h.ctx, session)
-  const result = await h.ctx.tools.execute({ name: 'compactHistory', callId: 'compact-call', arguments: {}, agent: agentFor(session), signal })
+  const result = await executeModelToolFixture(h.ctx, { name: 'compactHistory', callId: 'compact-call', arguments: {}, agent: agentFor(session), signal })
   assert.equal(JSON.parse(result.content[0].text).status, 'unchanged')
   assert.equal(h.requests.length, 0)
   assert.ok(!session.snapshotEvents().some(event => event.type === 'compaction/start'))
@@ -230,7 +232,7 @@ test('the tool retention boundary never separates a previous dice call from its 
   const { session, pair } = toolConversation(true)
   await prepare(h.ctx, session)
   assert.equal(h.requests.length, 0)
-  const result = await h.ctx.tools.execute({ name: 'compactHistory', callId: 'compact-call', arguments: {}, agent: agentFor(session), signal })
+  const result = await executeModelToolFixture(h.ctx, { name: 'compactHistory', callId: 'compact-call', arguments: {}, agent: agentFor(session), signal })
   assert.equal(result.isError, false)
   assert.equal(JSON.parse(result.content[0].text).status, 'compacted')
   assert.ok(pair.every(seq => session.surface.nodes.includes(seq)), 'The oversized retained result keeps the entire tool pair')

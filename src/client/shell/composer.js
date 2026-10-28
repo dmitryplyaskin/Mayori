@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { mirroredChildren, mirrorSlot, remapChildProps } from '../infrastructure/slot-mirror.js'
 
-const shortenHint = text => text.replace(/ or run (?:a )?task\b/, '').replace(/ or sessions\b/, '')
+const shortenHint = text => text.replace(/ or run (?:a )?task\b| или запустите задачу/, '').replace(/ or sessions\b| или сеансы/, '')
 
 /** Keep the native editor and its state-specific guidance. */
 export function MayoriComposer({ stock: Stock, stockChildren, childPrefix, ...props }) {

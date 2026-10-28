@@ -11,6 +11,8 @@ import { FileSystemCharacterSessionStore } from './store.js'
 import { greetingSeed } from './greeting.js'
 import { PRESET_SOURCE } from '../../presets/shared/preset.js'
 import { imageSource } from '../../media/shared/image.js'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { CHARACTER_SELECTION_SOURCE, characterSelectionMessage, readCharacterSelection, readCharacterOrigin, seedCharacterSelection } from '../domain/snapshot.js'
 
 const CHARACTER_CONTEXT_NAME = 'mayori:active-character'
 const CHARACTER_CONTEXT_VARIABLE = 'mayori_active_character_text'
@@ -49,6 +51,11 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
 
   async _restore(agent) {
     let character = await this._store.read(agent.id)
+    const logged = readCharacterSelection(agent.session.snapshotEvents())
+    if (character === null && logged !== undefined) {
+      await this._store.save(agent.id, logged, () => this._assertLive(agent))
+      character = logged
+    }
     if (character === null && agent.session.header.parentSession !== undefined) {
       character = await this._store.read(agent.session.header.parentSession)
       if (character !== null) {
@@ -56,6 +63,14 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
           if (error.code !== 'EEXIST') throw error
           character = await this._store.read(agent.id)
         }
+      }
+    }
+    if (character === null && agent.session.header.isSeeded) {
+      const inherited = await this._store.inheritedSelection(agent.session.snapshotEvents())
+      if (inherited) {
+        character = inherited.character
+        await this._store.save(agent.id, character, () => this._assertLive(agent))
+        this._recordSelection(agent, character, inherited.originSessionId)
       }
     }
     if (character !== null) {
@@ -105,7 +120,7 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
     if (agent.status !== 'idle') throw new Error('Дождитесь окончания ответа перед выбором персонажа.')
     const events = agent.session.snapshotEvents()
     if (agent.session.surface.nodes.some(seq => events[seq]?.type !== 'system/message'
-      && !(events[seq]?.type === 'user/message' && [PRESET_SOURCE, 'runtime-context'].includes(events[seq].data.source?.kind)))) {
+      && !(events[seq]?.type === 'user/message' && [PRESET_SOURCE, CHARACTER_SELECTION_SOURCE, 'runtime-context'].includes(events[seq].data.source?.kind)))) {
       throw new Error('Для другого персонажа создайте новый чат из галереи.')
     }
   }
@@ -163,7 +178,7 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
     await this._store.save(sessionId, character, () => {})
     const handle = await this.ctx.agents.create({
       sessionId, meta: { cwd: workspace.path, agentPreset: preset.id },
-      seed: greetingSeed(character.greeting),
+      seed: seedCharacterSelection(greetingSeed(character.greeting), character, randomUUID(), sessionId),
       setup: async agentCtx => { await this.ctx.agentPresets.mount(agentCtx, preset.id) },
     })
     try {
@@ -191,7 +206,7 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
   _canSwipe(agent, character) {
     if (!character.greeting || agent.status !== 'idle') return false
     const events = agent.session.snapshotEvents()
-    return !events.some(event => event.type === 'user/message' && !['mayori-greeting', 'runtime-context', PRESET_SOURCE].includes(event.data.source?.kind)
+    return !events.some(event => event.type === 'user/message' && !['mayori-greeting', 'runtime-context', PRESET_SOURCE, CHARACTER_SELECTION_SOURCE].includes(event.data.source?.kind)
       || event.type === 'turn/start' && event.data.turn > 1)
       && !(agent.inbox?.nextTurn.length || agent.inbox?.nextStep.length)
   }
@@ -284,14 +299,15 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
       this._assertLive(agent)
       await this._store.update(sessionId, character, () => { signal.throwIfAborted(); this._assertLive(agent) })
       const state = this._state(agent, character)
-      if (state.greeting?.canSwipe) this._replaceGreeting(agent, character, state.greeting.index)
       this._bind(agent, character)
+      if (state.greeting?.canSwipe) this._replaceGreeting(agent, character, state.greeting.index)
       await this.ctx.sessions.flush(agent.session)
       return this._state(agent, character)
     })
   }
 
   _bind(agent, character) {
+    this._recordSelection(agent, character)
     this._bindings.get(agent)?.()
     const text = buildCharacterContext(character)
     // DSH interpolates contexts strictly but variable values are literal, single-pass
@@ -323,6 +339,18 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
       `mayori: active character context (${agent.id})`,
     )
     this._bindings.set(agent, dispose)
+  }
+
+  _recordSelection(agent, character, inheritedOrigin) {
+    const events = agent.session.snapshotEvents()
+    const origin = readCharacterOrigin(events)
+    if (origin && JSON.stringify(readCharacterSelection(events)) === JSON.stringify(character)) return
+    const message = createUserMessage(characterSelectionMessage(character, undefined,
+      origin ?? inheritedOrigin ?? agent.session.header.parentSession ?? agent.id))
+    if (agent.session.surface.nodes.length === 0) {
+      const index = agent.inbox.nextStep.findIndex(message => message.source?.kind === CHARACTER_SELECTION_SOURCE)
+      agent.inbox.splice('next-step', index < 0 ? agent.inbox.nextStep.length : index, index < 0 ? 0 : 1, [message])
+    } else agent.session.append('user/message', message, { surfaceOp: 'append' })
   }
 
   /** Keep old request inputs intact; retire only the card's former runtime seat. */

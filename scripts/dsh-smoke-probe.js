@@ -110,8 +110,11 @@ export function apply(ctx) {
         } else if (input.action === 'details') {
           const agent = ctx.agents.get(input.sessionId)
           if (!agent) throw new Error('Expected live session')
-          const result = await agent.ctx.tools.execute({ name: 'getRollDetails', callId: randomUUID(),
-            arguments: { rollIds: input.rollIds }, agent, signal: new AbortController().signal })
+          const batch = await agent.ctx.tools.execute({
+            calls: [{ type: 'tool-call', id: randomUUID(), name: 'getRollDetails', arguments: JSON.stringify({ rollIds: input.rollIds }) }],
+            agent, signal: new AbortController().signal,
+          })
+          const result = batch.results[0].result
           if (result.isError) throw new Error(result.content[0].text)
           value = JSON.parse(result.content[0].text)
         } else if (input.action === 'fork') {

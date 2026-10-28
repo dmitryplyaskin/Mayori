@@ -11,12 +11,20 @@ import { FileSystemCharacterSessionStore } from '../../../src/features/character
 import { characterSnapshot, buildCharacterContext } from '../../../src/features/character-session/domain/character.js'
 import { greetingSeed } from '../../../src/features/character-session/host/greeting.js'
 import { FileSystemPersonaStore } from '../../../src/features/personas/host/store.js'
+import { characterSelectionMessage, readCharacterSelection, seedCharacterSelection } from '../../../src/features/character-session/domain/snapshot.js'
 
 const CARD_ID = 'a'.repeat(64)
 const card = {
   id: CARD_ID, spec: 'chara_card_v3', specVersion: '3.0', name: 'Aster',
   data: { name: 'Aster', description: 'A patient archivist.', first_mes: 'You came back.',
     extensions: { hidden: 'must not enter model context' } },
+}
+
+function inboxFor(events) {
+  return { nextStep: [], nextTurn: [], splice(queue, index, count, inserted) {
+    this.nextStep.splice(index, count, ...inserted)
+    events.push({ type: 'agent/inbox/spliced', seq: events.length, data: { queue, index, deleteCount: count, inserted } })
+  } }
 }
 
 async function harness(t) {
@@ -41,7 +49,7 @@ async function harness(t) {
       }
     },
   }
-  const agent = { id: 'session-1', status: 'idle', session,
+  const agent = { id: 'session-1', status: 'idle', session, inbox: inboxFor(events),
     runMaintenance: operation => operation(new AbortController().signal),
     ctx: { on(name, listener) {
       agentListeners.set(name, listener)
@@ -204,8 +212,9 @@ async function creationHarness(t) {
   h.ctx.agentPresets = { resolve: async () => ({ id: 'mayori' }), mount: async () => { calls.push(['mount']); return () => {} } }
   h.ctx.agents.create = async options => {
     created.push(options)
-    const agent = { ...h.agent, id: options.sessionId, session: { header: options.meta, seed: options.seed,
-      snapshotEvents: () => options.seed, surface: { nodes: options.seed.filter(event => event.surfaceOp).map(event => event.seq) } } }
+    const events = [...options.seed]
+    const agent = { ...h.agent, id: options.sessionId, inbox: inboxFor(events), session: { header: options.meta, seed: events,
+      snapshotEvents: () => events, surface: { nodes: events.filter(event => event.surfaceOp).map(event => event.seq) } } }
     h.agents.set(agent.id, agent)
     assert.equal(await options.setup(agent.ctx), undefined, 'Preset disposer is not an AgentSetupCommit')
     await h.listeners.get('agent/created')({ agent })
@@ -224,25 +233,26 @@ test('creates a durable closed greeting seed before releasing the temporary agen
   const result = await h.provider.create(CARD_ID, 'campaign')
   const options = h.created[0]
   const seed = options.seed
-  assert.deepEqual(seed.map(event => event.type), ['turn/start', 'step/start', 'system/message', 'assistant/message', 'step/end', 'turn/end'])
-  assert.deepEqual(seed.map(event => event.seq), [0, 1, 2, 3, 4, 5])
-  assert.equal(seed[3].data.message.content[0].text, 'You came back.')
-  assert.equal(seed[3].data.message.role, 'assistant')
-  assert.equal((await h.store.read(result.sessionId)).greeting.messageId, seed[3].data.message.id)
+  assert.deepEqual(seed.map(event => event.type), ['turn/start', 'step/start', 'system/message', 'user/message', 'assistant/message', 'step/end', 'turn/end'])
+  assert.deepEqual(seed.map(event => event.seq), [0, 1, 2, 3, 4, 5, 6])
+  assert.equal(seed[4].data.message.content[0].text, 'You came back.')
+  assert.equal(seed[4].data.message.role, 'assistant')
+  assert.deepEqual(readCharacterSelection(seed), await h.store.read(result.sessionId))
+  assert.equal((await h.store.read(result.sessionId)).greeting.messageId, seed[4].data.message.id)
   assert.equal(options.meta.agentPreset, 'mayori')
   assert.deepEqual(h.calls.map(call => call[0]), ['mount', 'attach', 'flush', 'dispose'])
   assert.equal(h.agents.has(result.sessionId), false)
   const resumed = { ...h.agent, id: result.sessionId }
   h.agents.set(resumed.id, resumed)
   await h.listeners.get('agent/created')({ agent: resumed })
-  assert.equal(h.events.length, 0, 'Resume binds context without appending any greeting')
+  assert.ok(!h.events.some(event => event.type === 'assistant/message'), 'Resume binds context without appending any greeting')
 })
 
 test('alternate seed expands player identity and contains only the selected opening', async t => {
   const h = await creationHarness(t)
   h.library.list = async () => [{ ...card, data: { ...card.data, alternate_greetings: ['{{char}}: Alternative, {{user}}.'] } }]
   const result = await h.provider.create(CARD_ID, 'campaign', 1)
-  assert.equal(h.created[0].seed[3].data.message.content[0].text, 'Aster: Alternative, Игрок.')
+  assert.equal(h.created[0].seed[4].data.message.content[0].text, 'Aster: Alternative, Игрок.')
   assert.equal((await h.store.read(result.sessionId)).greeting.index, 1)
   assert.doesNotMatch(buildCharacterContext(await h.store.read(result.sessionId)), /You came back|Alternative|opening_message|alternate_greetings/)
 })
@@ -272,7 +282,8 @@ test('legacy selections are restored without adding a new opening', async t => {
   const h = await harness(t)
   await h.provider.select(h.agent.id, CARD_ID)
   await h.listeners.get('agent/created')({ agent: h.agent })
-  assert.equal(h.events.length, 0)
+  assert.ok(!h.events.some(event => event.type === 'assistant/message'))
+  assert.deepEqual(readCharacterSelection(h.events), await h.store.read(h.agent.id))
 })
 
 test('the provider works through a real Cordis traced service, not just a raw instance', async (t) => {
@@ -299,8 +310,10 @@ async function openingHarness(t) {
   const selected = await h.store.read(h.agent.id)
   selected.greeting = { index: 0, messageId: 'opening', text: 'Aster: Hello, Игрок.' }
   await h.store.update(h.agent.id, selected, () => {})
-  h.events.push(...greetingSeed(selected.greeting))
-  h.agent.session.surface.nodes.push(2, 3)
+  h.events.length = 0
+  h.agent.inbox.nextStep.length = 0
+  h.events.push(...seedCharacterSelection(greetingSeed(selected.greeting), selected, 'selection'))
+  h.agent.session.surface.nodes.push(2, 3, 4)
   return h
 }
 
@@ -309,9 +322,9 @@ test('swiping replaces the current model surface and is reconstructed from the l
   const swiped = await h.provider.swipe(h.agent.id, 1)
   assert.equal(swiped.greeting.text, 'Игрок visits Aster.')
   assert.equal(swiped.greeting.index, 1)
-  assert.deepEqual(h.agent.session.surface.nodes, [2, 6])
-  assert.deepEqual(h.events[6].surfaceOp, { op: 'replace', startSeq: 3, endSeq: 3 })
-  assert.deepEqual(h.events[6].sourceEventSeqs, [3])
+  assert.deepEqual(h.agent.session.surface.nodes, [2, 3, 7])
+  assert.deepEqual(h.events[7].surfaceOp, { op: 'replace', startSeq: 4, endSeq: 4 })
+  assert.deepEqual(h.events[7].sourceEventSeqs, [4])
   h.listeners.get('agent/disposed')({ agent: h.agent })
   await h.listeners.get('agent/created')({ agent: h.agent })
   assert.equal((await h.provider.state(h.agent.id)).greeting.index, 1)
@@ -365,7 +378,7 @@ test('new chats snapshot the default persona and render it without avatar or tit
   h.provider._personas = { resolve: async () => ({ ...persona }) }
   h.library.list = async () => [{ ...card, data: { ...card.data, first_mes: '{{char}}: {{user}}. {{persona}}' } }]
   const { sessionId } = await h.provider.create(CARD_ID, 'campaign')
-  assert.equal(h.created[0].seed[3].data.message.content[0].text, 'Aster: Алекс. Алекс — путешественник.')
+  assert.equal(h.created[0].seed[4].data.message.content[0].text, 'Aster: Алекс. Алекс — путешественник.')
   const saved = await h.store.read(sessionId)
   persona.name = 'Changed'
   assert.equal(saved.persona.name, 'Алекс')
@@ -384,7 +397,7 @@ test('extended personas bind using real chat context, update authored openings a
   const saved = await h.store.read(sessionId)
   assert.equal(saved.persona.id, persona.id)
   assert.equal(saved.persona.promptSnapshot.sessionId, sessionId)
-  assert.equal(h.created[0].seed[3].data.message.content[0].text, 'Base Alex\n\nWith Aster.')
+  assert.equal(h.created[0].seed[4].data.message.content[0].text, 'Base Alex\n\nWith Aster.')
   assert.doesNotMatch(buildCharacterContext(saved), /private-title|private-block|hidden-text|promptSnapshot/)
   await personas.remove(persona.id)
   assert.equal((await h.store.read(sessionId)).persona.promptSnapshot.description, 'Base {{user}}\n\nWith {{char}}.')
@@ -489,4 +502,60 @@ test('old chat snapshots acquire an available portrait once and retain it indepe
   assert.equal((await h.store.read(h.agent.id)).image, image)
   h.library.list = () => { assert.fail('Migration must not repeat') }
   await h.listeners.get('agent/created')({ agent: h.agent })
+})
+
+test('native forks restore the exact inherited character and persona without parentSession or the source catalog', async t => {
+  const h = await openingHarness(t)
+  const inherited = JSON.parse(JSON.stringify(h.events))
+  const original = readCharacterSelection(inherited)
+  h.provider._personas = { resolve: async () => ({ id: 'changed', name: 'Другой игрок', description: 'New parent-only persona.' }) }
+  await h.provider.setPersona(h.agent.id, 'changed')
+  h.listeners.get('agent/disposed')({ agent: h.agent })
+  h.library.list = () => { assert.fail('A fork must not consult the current character catalog') }
+  const session = Session.create('independent-fork', inherited, {
+    version: 4, id: 'independent-fork', createdAt: 1, isSeeded: true, delegationDepth: 0,
+  }, inherited.length)
+  const child = { ...h.agent, id: session.id, session }
+  h.agents.set(child.id, child)
+  await h.listeners.get('agent/created')({ agent: child, source: 'create' })
+  assert.equal(session.header.parentSession, undefined)
+  assert.deepEqual(await h.store.read(child.id), original)
+  assert.equal((await h.provider.state(child.id)).persona.name, 'Игрок')
+  assert.equal((await h.store.read(h.agent.id)).persona.name, 'Другой игрок')
+  assert.match(h.render(), /Игрок/)
+})
+
+test('a corrupt or unsupported logged character selection fails instead of using a new default', () => {
+  const character = characterSnapshot(card)
+  const message = characterSelectionMessage(character, 'snapshot')
+  const events = [{ type: 'user/message', data: message }]
+  assert.deepEqual(readCharacterSelection(events), character)
+  for (const value of [{ version: 2, character }, { version: 1, character: { name: 'Broken' } }]) {
+    const changed = structuredClone(message)
+    changed.source.sections[0].text = JSON.stringify(value)
+    assert.throws(() => readCharacterSelection([{ type: 'user/message', data: changed }]))
+  }
+})
+
+test('pre-migration native forks recover through their durable authored greeting identity', async t => {
+  const h = await openingHarness(t)
+  const source = await h.store.read(h.agent.id)
+  h.listeners.get('agent/disposed')({ agent: h.agent })
+  const legacy = greetingSeed(source.greeting)
+  const session = Session.create('legacy-independent-fork', legacy, {
+    version: 4, id: 'legacy-independent-fork', createdAt: 1, isSeeded: true, delegationDepth: 0,
+  }, legacy.length)
+  const child = { ...h.agent, id: session.id, session }
+  h.agents.set(child.id, child)
+  h.library.list = () => { assert.fail('Recovery must use durable selections') }
+  await h.listeners.get('agent/created')({ agent: child })
+  assert.deepEqual(await h.store.read(child.id), source)
+  assert.deepEqual(readCharacterSelection(session.snapshotEvents()), source)
+})
+
+test('legacy recovery rejects ambiguous snapshots even when their model-visible text matches', async t => {
+  const h = await openingHarness(t)
+  const source = await h.store.read(h.agent.id)
+  await h.store.save('another-old-branch', { ...source, persona: { ...source.persona, title: 'Different persona identity' } }, () => {})
+  await assert.rejects(h.store.inheritedSelection(greetingSeed(source.greeting)), /Не удалось восстановить/)
 })

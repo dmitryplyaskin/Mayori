@@ -6,6 +6,7 @@ import { authoredReply, authoredInput, editedContent, humanMessage, regeneration
 import { readMessageEdits, revisedMessage, revisionMessage, revisionSurface, removalMessage, restorationMessage } from '../domain/edits.js'
 import { readAnswerVariants, variantSnapshot, variantMessage } from '../domain/variants.js'
 import { presetSelectionMessage, readPresetSelection } from '../../presets/shared/preset.js'
+import { readCharacterSelection, readCharacterOrigin, seedCharacterSelection } from '../../character-session/domain/snapshot.js'
 
 /** Logged corrections and optional native forks preserve original events and never generate on edit. */
 export class SessionMessageRevisionProvider extends MessageRevisionService {
@@ -141,11 +142,13 @@ export class SessionMessageRevisionProvider extends MessageRevisionService {
     const presetId = events.findLast(event => event.type === 'agent-preset/selected')?.data.agentPreset
       ?? agent.session.header.agentPreset
     const preset = await this.ctx.agentPresets.resolve(presetId)
+    const character = readCharacterSelection(events)
+    if (opening && character) seed.splice(0, seed.length, ...seedCharacterSelection(seed, character, randomUUID(), readCharacterOrigin(events) ?? agent.id))
     signal.throwIfAborted()
     const sessionId = `session-${randomUUID()}`
     const handle = await this.ctx.agents.create({ sessionId, seed, inheritedEventCount,
       meta: { ...(agent.session.header.cwd === undefined ? {} : { cwd: agent.session.header.cwd }),
-        parentSession: agent.id, isSeeded: true, agentPreset: preset.id },
+        isSeeded: true, agentPreset: preset.id },
       agentOptions: selection,
       setup: async agentCtx => { await this.ctx.agentPresets.mount(agentCtx, preset.id) },
     })

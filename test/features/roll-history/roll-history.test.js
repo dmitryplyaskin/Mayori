@@ -3,6 +3,8 @@ import test from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { Session, foldSurface } from '@deepseek-ai/dsh-session'
 import { CryptoDiceProvider } from '../../../src/features/dice/host/provider.js'
 import { NumericRulesProvider } from '../../../src/features/rules/host/provider.js'
@@ -15,14 +17,14 @@ import { readCheckResult, compactCheckResult } from '../../../src/features/rules
 
 async function harness(t, faces = [], config = {}) {
   const ctx = new Context(); t.after(() => ctx.fiber.dispose())
-  await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime)
+  await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime); await ctx.plugin(NativeToolExecutor)
   let draws = 0
   new CryptoDiceProvider(ctx, {}, sides => { draws++; return faces.length ? faces.shift() : Math.min(3, sides) })
   new NumericRulesProvider(ctx, ctx.mayoriDice, config)
   new SessionRollHistoryProvider(ctx)
   registerDiceTool(ctx); registerRulesTool(ctx); registerRollHistoryTool(ctx)
   const session = Session.create('current')
-  const execute = (name, callId, args, active = session) => ctx.tools.execute({ name, callId,
+  const execute = (name, callId, args, active = session) => executeModelToolFixture(ctx, { name, callId,
     arguments: args, agent: active ? { session: active } : undefined, signal: new AbortController().signal })
   const log = (callId, result) => session.append('tool/result', { turn: 1, step: 1, message: {
     id: `result-${session.snapshotEvents().length}`, role: 'tool', toolCallId: callId,

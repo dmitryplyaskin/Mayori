@@ -35,6 +35,8 @@ test('composer shortens ordinary hints and preserves special guidance and native
   }
   assert.equal(MayoriComposer({ ...hero, placeholder: 'Custom guidance' }).props.placeholder, 'Custom guidance')
   assert.equal(MayoriComposer({ ...props, t: () => 'Напишите сообщение' }).props.t('placeholder.default'), 'Напишите сообщение')
+  assert.equal(MayoriComposer({ ...props, t: () => 'Отправьте сообщение или запустите задачу, /команды, @файлы или сеансы' }).props.t('placeholder.default'),
+    'Отправьте сообщение, /команды, @файлы')
 })
 
 test('composer presentation hides only feedback and permission controls and restores them on unload', async () => {

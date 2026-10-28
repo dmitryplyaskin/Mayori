@@ -50,8 +50,11 @@ test('registers a user-owned preset catalog without global role-playing instruct
       provide(name, service) { provided.push({ name, service }) },
     },
     inject(services, callback) {
-      assert.deepEqual(services, ['webServer', 'agents', 'sessions', 'workspaceRegistry', 'agentPresets', 'sessionQuery', 'sessionController', 'sessionPersistence'])
+      assert.deepEqual(services, ['webServer', 'agents', 'sessions', 'workspaceRegistry', 'agentPresets', 'sessionQuery', 'sessionController', 'sessionPersistence', 'sessionProjections'])
       registrationReady = callback({
+        sessionProjections: { register: async definition => {
+          assert.equal(definition.key, 'mayoriCharacterLineage')
+        } },
         reflect: {
           provide(name, service) { provided.push({ name, service }) },
         },

@@ -1,6 +1,5 @@
 import { en } from '../shared/en.js'
 import { ru } from '../shared/messages.js'
-import { nativeRu } from '../shared/native-ru.js'
 import { bindLocalization, LocalizationService } from './service.js'
 
 export class DshLocalizationProvider extends LocalizationService {
@@ -24,9 +23,6 @@ export function registerLocalization(ctx) {
   }
   ctx.effect(() => ctx.locale.register('mayori', 'en', en), 'mayori: English copy')
   ctx.effect(() => ctx.locale.register('mayori', 'ru', ru), 'mayori: Russian copy')
-  for (const [namespace, dictionary] of Object.entries(nativeRu)) {
-    ctx.effect(() => ctx.locale.register(namespace, 'ru', dictionary), `mayori: Russian ${namespace}`)
-  }
   const provider = new DshLocalizationProvider(ctx.locale)
   ctx.provide('mayoriLocale', provider)
   ctx.effect(() => bindLocalization(provider), 'mayori: locale binding')

@@ -3,6 +3,8 @@ import test from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { PersistentPluginSettingsProvider } from '../../../src/features/plugins/host/provider.js'
 import { DEFAULT_PLUGINS, validatePlugins } from '../../../src/features/plugins/shared/settings.js'
 import * as OptionalPlugins from '../../../src/host/optional-plugins.js'
@@ -10,7 +12,7 @@ import { DEFAULT_COMPACTION } from '../../../src/features/compaction/shared/sett
 
 async function runtime(t) {
   const ctx = new Context(); t.after(() => ctx.fiber.dispose())
-  await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime)
+  await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime); await ctx.plugin(NativeToolExecutor)
   let values = { ...DEFAULT_PLUGINS, compactionSettings: DEFAULT_COMPACTION }, revision = 0, busy = false
   const config = Object.fromEntries(Object.keys(values).map(key => [key, { get: () => values[key] }]))
   ctx.provide('settings', { describe: () => [{ ns: 'mayori-plugin-settings', revision }],
@@ -36,7 +38,7 @@ test('saved preferences independently add/remove tools in the same Mayori scope'
   assert.equal(ctx.mayoriDice, undefined)
   await provider.update({ dice: true, rules: false, rollHistory: false }, 2)
   assert.deepEqual(names(ctx), ['rollDice'])
-  const result = await ctx.tools.execute({ name: 'rollDice', callId: 'still-same-scope', arguments: { rolls: ['d1'] }, signal: new AbortController().signal })
+  const result = await executeModelToolFixture(ctx, { name: 'rollDice', callId: 'still-same-scope', arguments: { rolls: ['d1'] }, signal: new AbortController().signal })
   assert.deepEqual(JSON.parse(result.content[0].text), { rollId: 'still-same-scope', values: [1] })
   await provider.update({ dice: false, rules: false, rollHistory: false }, 3)
   assert.deepEqual(names(ctx), [])

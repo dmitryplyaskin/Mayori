@@ -34,6 +34,7 @@ import { newChatCommand } from '../features/character-session/client/command.js'
 import { registerComposerPresentation } from './shell/composer.js'
 import { RevisionContextMessage, RevisionChatFlow } from '../features/message-revisions/client/message.js'
 import { IconButton } from './components/icon-button.jsx'
+import { usePreparedSession } from './infrastructure/prepared-session.js'
 
 export { DiceToolCard } from '../features/dice/client/card.jsx'
 export { CheckToolCard } from '../features/rules/client/card.jsx'
@@ -83,7 +84,7 @@ export function apply(ctx) {
   const contextFor = sessionId => contexts.get(sessionId)
   ctx.provide('mayoriTrajectoryContext', { forSession: contextFor })
   const revisions = new SessionProviders(sessionId => new RemoteMessageRevisionProvider(sessionId, async id => {
-      try { await ctx.sessions.refresh() } finally { ctx.uiWorkspace.openSession(id) }
+      await usePreparedSession(ctx.sessions, id, 'mayoriRevisions', () => ctx.uiWorkspace.openSession(id))
     }, seq => ctx.sessions.using(sessionId, { source: 'mayoriVariants' }, async reference => {
       const binding = await reference.ready
       await binding.session.loadThrough(seq)

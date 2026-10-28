@@ -14,6 +14,7 @@ export function createLocale(active = 'ru') {
     },
     register: (namespace, id, dictionary) => {
       const key = `${namespace}:${id}`, previous = dictionaries.get(key)
+      if (dictionaries.has(key)) throw new Error(`locale namespace "${namespace}" already has locale "${id}"`)
       dictionaries.set(key, dictionary); publish({})
       return () => { if (previous) dictionaries.set(key, previous); else dictionaries.delete(key); publish({}) }
     },

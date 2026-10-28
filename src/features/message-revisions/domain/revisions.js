@@ -56,7 +56,7 @@ export function authoredInput(events, messageId, content, time) {
   ].map((event, index) => ({ ...event, seq: events.length + index, time }))
 }
 
-/** Native parent links own branch navigation; no second version store is needed. */
+/** Public catalog lineage owns branch navigation; no second version store is needed. */
 export function branchRows(snapshot, sessionId) {
   const rows = snapshot.byId
   const rootOf = id => {

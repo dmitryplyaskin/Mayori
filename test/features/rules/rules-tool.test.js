@@ -3,6 +3,8 @@ import test from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { Session } from '@deepseek-ai/dsh-session'
 import * as Mechanics from '../../../src/host/mechanics-plugin.js'
 import { CryptoDiceProvider } from '../../../src/features/dice/host/provider.js'
@@ -12,7 +14,7 @@ import { readCheckResult } from '../../../src/features/rules/shared/result.js'
 
 test('mechanics compose reversible Dice and Rules services and both native tools', async t => {
   const ctx = new Context(); t.after(() => ctx.fiber.dispose())
-  await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime)
+  await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime); await ctx.plugin(NativeToolExecutor)
   const fiber = ctx.plugin(Mechanics); await fiber
   assert.deepEqual(ctx.tools.schemas().map(tool => tool.name).sort(), ['getRollDetails', 'resolveCheck', 'rollDice'])
   assert.match(ctx.tools.get('resolveCheck').description, /d20-attack/)
@@ -23,14 +25,14 @@ test('mechanics compose reversible Dice and Rules services and both native tools
 
 test('tool compact/full output and session restoration preserve natural-one outcomes without new draws', async t => {
   const ctx = new Context(); t.after(() => ctx.fiber.dispose())
-  await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime)
+  await ctx.plugin(SystemPrompt); await ctx.plugin(ToolRuntime); await ctx.plugin(NativeToolExecutor)
   let draws = 0
   new CryptoDiceProvider(ctx, {}, () => { draws++; return 1 })
   new NumericRulesProvider(ctx, ctx.mayoriDice)
   registerRulesTool(ctx)
   const session = Session.create('rules-session')
   for (const details of [false, true]) {
-    const result = await ctx.tools.execute({ name: 'resolveCheck', callId: `check-${details}`,
+    const result = await executeModelToolFixture(ctx, { name: 'resolveCheck', callId: `check-${details}`,
       arguments: { profile: 'd20-critical', target: 5, modifier: 6, details }, signal: new AbortController().signal })
     assert.equal(result.isError, false)
     const value = JSON.parse(result.content[0].text)
@@ -44,6 +46,6 @@ test('tool compact/full output and session restoration preserve natural-one outc
     assert.equal(readCheckResult(event.data.message.content, event.data.meta)?.check.outcome, 'critical_failure')
   }
   assert.equal(draws, 2)
-  const invalid = await ctx.tools.execute({ name: 'resolveCheck', callId: 'bad', arguments: { profile: 'standard', target: '12' }, signal: new AbortController().signal })
+  const invalid = await executeModelToolFixture(ctx, { name: 'resolveCheck', callId: 'bad', arguments: { profile: 'standard', target: '12' }, signal: new AbortController().signal })
   assert.equal(invalid.isError, true); assert.equal(draws, 2)
 })

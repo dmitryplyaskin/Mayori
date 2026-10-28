@@ -3,6 +3,8 @@ import test from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
+import { executeModelToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { Session } from '@deepseek-ai/dsh-session'
 import { CryptoDiceProvider } from '../../../src/features/dice/host/provider.js'
 import * as DicePlugin from '../../../src/host/dice-plugin.js'
@@ -12,7 +14,7 @@ async function runtime(t) {
   const ctx = new Context()
   t.after(() => ctx.fiber.dispose())
   await ctx.plugin(SystemPrompt)
-  await ctx.plugin(ToolRuntime)
+  await ctx.plugin(ToolRuntime); await ctx.plugin(NativeToolExecutor)
   return ctx
 }
 
@@ -22,7 +24,7 @@ test('registers the native tool and service through Cordis and removes both on u
   await fiber
   assert.equal(ctx.tools.schemas().find(tool => tool.name === 'rollDice').parameters.properties.rolls.oneOf.length, 2)
   assert.equal(ctx.tools.schemas().find(tool => tool.name === 'rollDice').parameters.properties.details.type, 'boolean')
-  const result = await ctx.tools.execute({ name: 'rollDice', callId: 'dice-1', arguments: { details: true, rolls: { one: 'd1', custom: 'd37' } }, signal: new AbortController().signal })
+  const result = await executeModelToolFixture(ctx, { name: 'rollDice', callId: 'dice-1', arguments: { details: true, rolls: { one: 'd1', custom: 'd37' } }, signal: new AbortController().signal })
   assert.equal(result.isError, false)
   const rendered = JSON.parse(result.content[0].text)
   assert.deepEqual(rendered, result.value)
@@ -41,7 +43,7 @@ test('consumer uses a replaceable provider; both response modes retain error tra
   new CryptoDiceProvider(ctx, {}, () => faces.shift())
   DicePlugin.registerDiceTool(ctx)
   for (const details of [false, true]) {
-    const result = await ctx.tools.execute({ name: 'rollDice', callId: `dice-error-${details}`,
+    const result = await executeModelToolFixture(ctx, { name: 'rollDice', callId: `dice-error-${details}`,
       arguments: { details, rolls: ['d6 / (d6 - 1)'] }, signal: new AbortController().signal })
     const value = JSON.parse(result.content[0].text)
     assert.deepEqual(value.values, [null])
@@ -61,12 +63,12 @@ test('schema failures become DSH tool errors before drawing; expression failures
   DicePlugin.registerDiceTool(ctx)
   for (const argumentsValue of [{}, { rolls: 6 },
     ...['true', 1, null, {}].map(details => ({ details, rolls: ['d6'] }))]) {
-    const result = await ctx.tools.execute({ name: 'rollDice', callId: 'invalid', arguments: argumentsValue, signal: new AbortController().signal })
+    const result = await executeModelToolFixture(ctx, { name: 'rollDice', callId: 'invalid', arguments: argumentsValue, signal: new AbortController().signal })
     assert.equal(result.isError, true)
     assert.match(result.content[0].text, /Error:/)
   }
   assert.equal(draws, 0)
-  const result = await ctx.tools.execute({ name: 'rollDice', callId: 'partial', arguments: { rolls: ['d6', 'd0'] }, signal: new AbortController().signal })
+  const result = await executeModelToolFixture(ctx, { name: 'rollDice', callId: 'partial', arguments: { rolls: ['d6', 'd0'] }, signal: new AbortController().signal })
   assert.equal(result.isError, false)
   assert.deepEqual(JSON.parse(result.content[0].text).values, [1, null])
   assert.equal(draws, 1)
@@ -78,7 +80,7 @@ test('compact logged content and metadata reconstruct all values and faces witho
   new CryptoDiceProvider(ctx, {}, () => { draws++; return 3 })
   DicePlugin.registerDiceTool(ctx)
   const args = { purpose: 'Проверка навыка', rolls: { action: ['2d6kh1 + 4'] } }
-  const result = await ctx.tools.execute({ name: 'rollDice', callId: 'recorded', arguments: args, signal: new AbortController().signal })
+  const result = await executeModelToolFixture(ctx, { name: 'rollDice', callId: 'recorded', arguments: args, signal: new AbortController().signal })
   const session = Session.create('dice-session')
   session.append('tool/result', { turn: 1, step: 1, message: {
     id: 'dice-result', role: 'tool', toolCallId: 'recorded', source: { kind: 'tool', callId: 'recorded' }, content: result.content,
@@ -103,7 +105,7 @@ test('details is opt-in and affects only model content, with the same complete c
   new CryptoDiceProvider(ctx, {}, () => { draws++; return 3 })
   DicePlugin.registerDiceTool(ctx)
   for (const options of [{}, { details: false }, { details: true }]) {
-    const result = await ctx.tools.execute({ name: 'rollDice', callId: 'projection',
+    const result = await executeModelToolFixture(ctx, { name: 'rollDice', callId: 'projection',
       arguments: { ...options, purpose: 'Атака', rolls: { hit: '2d6kh1 + 4' } }, signal: new AbortController().signal })
     assert.equal(result.isError, false)
     const body = JSON.parse(result.content[0].text)

@@ -50,6 +50,7 @@ test('product errors and import notices change language while unknown text and v
 
 test('DSH owns language selection, dictionary updates and reversible lifecycle', async () => {
   const locale = createLocale('en'), disposers = [], provided = {}
+  const releaseNative = locale.register('conversation', 'ru', { 'input.send': 'Отправить сообщение' })
   const ctx = { locale, provide: (name, service) => { provided[name] = service }, effect: callback => { disposers.push(callback()) } }
   const service = registerLocalization(ctx)
   try {
@@ -68,16 +69,20 @@ test('DSH owns language selection, dictionary updates and reversible lifecycle',
     assert.throws(() => service.setLanguage('xx'), /Unsupported/)
     stop(); assert.equal(locale.listenerCount(), 0)
   } finally { disposers.reverse().forEach(dispose => dispose()) }
-  assert.equal(locale.dictionaries.size, 0)
+  assert.equal(locale.dictionaries.size, 1, 'Native dictionaries remain owned by DSH')
+  releaseNative()
   assert.equal(locale.getSnapshot().locales.some(language => language.id === 'ru'), false)
   assert.equal(tr('Главная'), 'Главная')
 })
 
-test('an existing Russian language definition is reused', () => {
+test('existing DSH Russian language and dictionaries are reused without duplicate registration', () => {
   const locale = createLocale(), release = locale.addLanguage({ id: 'ru', label: 'Русский', fallback: 'en' })
+  const releaseNative = locale.register('conversation', 'ru', { 'input.send': 'Штатный перевод DSH' })
   const disposers = []
   registerLocalization({ locale, provide() {}, effect: callback => { disposers.push(callback()) } })
   disposers.reverse().forEach(dispose => dispose())
   assert.equal(locale.getSnapshot().locales.filter(language => language.id === 'ru').length, 1)
+  assert.equal(locale.bind('conversation')('input.send'), 'Штатный перевод DSH')
+  releaseNative()
   release()
 })

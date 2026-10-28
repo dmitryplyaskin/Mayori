@@ -218,3 +218,17 @@ test('archive refusal keeps membership and preserves the native active-work erro
   assert.deepEqual(provider.getArchiveSnapshot().archivedSessionIds, [])
   await assert.rejects(provider.restore('archived'), /offline/)
 })
+
+test('native independent forks use the Mayori list projection for branch menus and filters', () => {
+  const snapshot = catalog(
+    { id: 'original', title: 'Original', updatedAt: 1 },
+    { id: 'one', title: 'First', updatedAt: 2, projectionValues: { mayoriCharacterLineage: { originSessionId: 'original' } } },
+    { id: 'two', title: 'Second', updatedAt: 3, projectionValues: { mayoriCharacterLineage: { originSessionId: 'original' } } },
+  )
+  const provider = new SessionChatHistoryProvider({ list: { getSnapshot: () => snapshot } })
+  provider.publishDeleted([])
+  const view = provider.getSnapshot()
+  assert.deepEqual(historyRows(view, '', [], false, Infinity, { kind: 'branches' }).map(row => row.id), ['two', 'one'])
+  assert.deepEqual(branchRows(view, 'one').map(row => row.id), ['original', 'one', 'two'])
+  assert.equal(snapshot.byId.one.parentId, undefined, 'The native catalog remains unchanged')
+})

@@ -59,9 +59,11 @@
 - id: harness-dev-context
   disabled: true
 
-- id: tools
-  config:
-    mode: native
+- id: tool-executor-native
+  disabled: false
+
+- id: tool-executor-ptc
+  disabled: true
 
 - id: tool-working-directory
   disabled: true
@@ -75,6 +77,9 @@
   disabled: true
 
 - id: ui-deliverables
+  disabled: true
+
+- id: deliverable-file-references
   disabled: true
 
 - insert:

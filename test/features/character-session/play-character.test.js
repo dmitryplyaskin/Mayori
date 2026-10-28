@@ -4,11 +4,13 @@ import { startCharacterSession } from '../../../src/features/character-session/c
 
 function harness(workspace = true) {
   const calls = []
+  let discovered = false
   const services = {
     sessions: {
-      list: { getSnapshot: () => ({ ids: ['current'], byId: { current: { id: 'current', retainedBy: { mainView: 1 } } } }) },
+      list: { getSnapshot: () => ({ ids: ['current'], byId: { current: { id: 'current', retainedBy: { mainView: 1 } },
+        ...(discovered ? { new: { id: 'new' } } : {}) } }) },
       create: async () => { assert.fail('DSH create would replace the seeded chat with a blank session') },
-      refresh: async () => { calls.push(['refresh']) },
+      refresh: async () => { calls.push(['refresh']); discovered = true },
       async using(id, options, callback) {
         calls.push(['retain', id, options])
         try {

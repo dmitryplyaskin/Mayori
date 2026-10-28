@@ -1,4 +1,5 @@
 /** Browser orchestration from a gallery card to a selected chat session. */
+import { usePreparedSession } from '../../../client/infrastructure/prepared-session.js'
 
 function targetWorkspace(sessions, workspaces, sourceSessionId) {
   const current = sourceSessionId ?? Object.values(sessions.list.getSnapshot().byId).find(item => item.retainedBy?.mainView > 0)?.id
@@ -19,9 +20,7 @@ export async function startCharacterSession({ sessions, workspaces, uiWorkspace,
   }
 
   const { sessionId } = await library.start(card.id, workspaceId, greetingIndex)
-  await sessions.refresh()
-  await sessions.using(sessionId, { source: 'mayoriGallery' }, async (reference) => {
-    const binding = await reference.ready
+  await usePreparedSession(sessions, sessionId, 'mayoriGallery', async binding => {
     const renamed = await binding.session.rename(card.name)
     if (!renamed.ok) throw new Error(renamed.error.message)
     uiWorkspace.openSession(sessionId)

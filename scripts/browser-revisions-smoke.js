@@ -63,8 +63,11 @@ try {
   const branch = async from => {
     const picker = page.getByRole('button', { name: 'Ветка чата', exact: true })
     await picker.waitFor()
-    await page.waitForFunction(from => document.querySelector('.mayori-revision-branches .mayori-select-trigger')?.dataset.value !== from, from)
-    return picker.getAttribute('data-value')
+    const selected = await page.waitForFunction(from => {
+      const id = document.querySelector('.mayori-revision-branches .mayori-select-trigger')?.dataset.value
+      return id && id !== from ? id : false
+    }, from)
+    return selected.jsonValue()
   }
   const choose = async id => {
     await chooseMenuValue(page, 'Ветка чата', id)
@@ -73,7 +76,7 @@ try {
   const settle = id => rpc('/_mayori-smoke', { action: 'settle', sessionId: id })
   const editor = page.getByRole('dialog', { name: 'Редактировать сообщение', exact: true })
   await openChat(fixture.source)
-  await page.getByText(/^(?:Trajectory|Контекст)$/).click()
+  await page.getByText(/^(?:Trajectory|Траектория|Контекст)$/).click()
   await page.getByRole('button', { name: 'Показывать', exact: true }).waitFor()
   await chooseMenu(page, 'Запрос', 'Текущий сохранённый контекст')
   assert.equal(await page.getByRole('button', { name: 'Запрос', exact: true }).getAttribute('data-value'), 'current')

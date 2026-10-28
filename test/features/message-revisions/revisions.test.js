@@ -10,6 +10,8 @@ import { presetSelectionMessage, readPresetSelection } from '../../../src/featur
 import { readMessageEdits, revisedMessage } from '../../../src/features/message-revisions/domain/edits.js'
 import { messagePreview } from '../../../src/features/history/host/details.js'
 import { removedNode } from '../../../src/features/message-revisions/client/message.js'
+import { characterSnapshot } from '../../../src/features/character-session/domain/character.js'
+import { characterSelectionMessage, readCharacterSelection } from '../../../src/features/character-session/domain/snapshot.js'
 
 function harness({ process = false, attachment = false } = {}) {
   const source = Session.create('source', greetingSeed({ messageId: 'greeting', text: 'Original greeting' }))
@@ -325,7 +327,7 @@ test('manual assistant editing preserves the source and produces a replayable au
   assert.deepEqual(reopened.deriveMessages(), child.session.deriveMessages())
   assert.equal(reconstructTrajectoryContext(reopened.snapshotEvents(), 'current').requests.length, 0,
     'Manual authoring must not be presented as a model request')
-  assert.equal(child.session.header.parentSession, 'source')
+  assert.equal(child.session.header.parentSession, undefined, 'Ordinary branches do not declare a subagent creator')
   assert.equal(h.flushes.at(-1), child.id)
 })
 
@@ -592,4 +594,18 @@ test('branch navigation follows native durable lineage and excludes unrelated ch
     agent: { parentId: 'a', origin: 'subagent' },
   } }
   assert.deepEqual(branchRows(snapshot, 'c').map(row => row.id), ['a', 'b', 'c'])
+})
+
+test('repeated manual opening branches retain character snapshots ahead of the authored text', async () => {
+  const h = harness()
+  const character = characterSnapshot({ id: 'a'.repeat(64), name: 'Aster', data: { description: 'Original card' } })
+  h.source.append('user/message', characterSelectionMessage(character, 'character', 'source'), { surfaceOp: 'append' })
+  const greeting = h.source.snapshotEvents().find(event => event.type === 'assistant/message')
+  const first = await h.provider.edit('source', greeting.seq, 'First authored opening.', 'branch')
+  const child = h.agents.get(first.sessionId)
+  assert.equal(child.session.snapshotEvents()[child.session.surface.nodes[0]].type, 'system/message')
+  assert.deepEqual(readCharacterSelection(child.session.snapshotEvents()), character)
+  const reply = child.session.snapshotEvents().find(event => event.type === 'assistant/message')
+  const second = await h.provider.edit(child.id, reply.seq, 'Second authored opening.', 'branch')
+  assert.deepEqual(readCharacterSelection(h.agents.get(second.sessionId).session.snapshotEvents()), character)
 })

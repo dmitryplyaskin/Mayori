@@ -107,7 +107,7 @@ try {
   await openChat()
   await assertPortraits()
   const chat = page.getByText(/^(?:Chat|Чат)$/)
-  const trajectory = page.getByText(/^(?:Trajectory|Контекст)$/)
+  const trajectory = page.getByText(/^(?:Trajectory|Траектория|Контекст)$/)
   assert.ok((await chat.boundingBox()).x < (await trajectory.boundingBox()).x)
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => {

@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 if (!process.argv[2]) throw new Error('Usage: node scripts/storage-isolation-smoke.js <dsh-cli-bin.js> (or <pnpm.js> --published)')
 const entry = resolve(process.argv[2])
 const published = process.argv[3] === '--published'
-const prefix = published ? [entry, 'dlx', '@deepseek-ai/dsh@0.2.1-rc.2'] : [entry]
+const prefix = published ? [entry, 'dlx', '@deepseek-ai/dsh@0.2.2-alpha.2'] : [entry]
 const project = resolve(fileURLToPath(new URL('../', import.meta.url)))
 const home = await mkdtemp(join(tmpdir(), 'mayori-native-isolation-'))
 const dataRoot = join(home, 'rpg-data')
@@ -127,7 +127,14 @@ try {
   assert.match(dump, /mayoriStorage\.path\('sessions'\)/)
   assert.match(dump, /name: dsh-mayori\/storage/)
   const developerContext = dump.match(/- id: harness-dev-context\b[\s\S]*?(?=\r?\n- id:|$)/)?.[0]
-  assert.match(developerContext ?? '', /\bdisabled: true/, 'Mayori disables the rc.2 coding-context provider')
+  assert.match(developerContext ?? '', /\bdisabled: true/, 'Mayori disables the coding-context provider')
+  const nativeExecutor = dump.match(/- id: tool-executor-native\b[\s\S]*?(?=\r?\n- id:|$)/)?.[0]
+  const ptcExecutor = dump.match(/- id: tool-executor-ptc\b[\s\S]*?(?=\r?\n- id:|$)/)?.[0]
+  assert.ok(nativeExecutor, 'Mayori mounts the native executor')
+  assert.doesNotMatch(nativeExecutor, /\bdisabled: true/)
+  assert.match(ptcExecutor ?? '', /\bdisabled: true/, 'Mayori disables the PTC executor')
+  const fileReferences = dump.match(/- id: deliverable-file-references\b[\s\S]*?(?=\r?\n- id:|$)/)?.[0]
+  assert.match(fileReferences ?? '', /\bdisabled: true/, 'Mayori disables technical file-delivery guidance')
   const [mayori, coding] = await Promise.all([boot('mayori'), boot('coding')])
   const historyRpc = async (server, endpoint, payload = {}) => {
     const response = await fetch(new URL(`/mayori/characters/${endpoint}`, server.url), {

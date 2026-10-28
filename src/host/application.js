@@ -6,6 +6,7 @@ import { FileSystemRoleplayPresetProvider } from '../features/presets/host/provi
 import { LoggedSessionPresetProvider } from '../features/presets/host/session.js'
 import { buildDirectorPrompt } from './director.js'
 import { PersistentCharacterSessionProvider } from '../features/character-session/host/provider.js'
+import { registerCharacterLineage } from '../features/character-session/host/lineage.js'
 import { SessionTrajectoryContextProvider } from '../features/trajectory/host/context.js'
 import { SessionHistoryDetailsProvider } from '../features/history/host/details.js'
 import { PersistentChatDeletionProvider } from '../features/history/host/deletion.js'
@@ -38,7 +39,8 @@ export function registerHostCapabilities(ctx, config) {
   const presets = new FileSystemRoleplayPresetProvider(ctx, presetsPath, {
     name: 'Mayori', instructions: `You are Mayori, an AI game master for persistent, collaborative role-playing games.\n\n${buildDirectorPrompt(config)}`,
   })
-  ctx.inject(['webServer', 'agents', 'sessions', 'workspaceRegistry', 'agentPresets', 'sessionQuery', 'sessionController', 'sessionPersistence'], async consumerCtx => {
+  ctx.inject(['webServer', 'agents', 'sessions', 'workspaceRegistry', 'agentPresets', 'sessionQuery', 'sessionController', 'sessionPersistence', 'sessionProjections'], async consumerCtx => {
+    await registerCharacterLineage(consumerCtx)
     const characterSessions = new PersistentCharacterSessionProvider(consumerCtx, library, { campaignsRoot: campaignsPath, personas, media })
     const sessionPresets = new LoggedSessionPresetProvider(consumerCtx, presets)
     const trajectoryContext = new SessionTrajectoryContextProvider(consumerCtx)

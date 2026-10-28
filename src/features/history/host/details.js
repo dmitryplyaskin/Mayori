@@ -1,6 +1,7 @@
 /** Read-only presentation of saved character choices and session messages. */
 import { Service } from '@deepseek-ai/cordis'
 import { deriveEventMessage, foldSurface } from '@deepseek-ai/dsh-session'
+import { readCharacterSelection } from '../../character-session/domain/snapshot.js'
 import { FileSystemCharacterSessionStore } from '../../character-session/host/store.js'
 import { imageSource } from '../../media/shared/image.js'
 import { ByteCache, WorkQueue } from '../../../shared/resources.js'
@@ -97,7 +98,7 @@ export class SessionHistoryDetailsProvider extends HistoryDetailsService {
     if (this.pending.has(key)) return this.pending.get(key)
     const operation = this.work.run(async () => {
       const log = await this.ctx.sessionQuery.readSession(id)
-      const character = await this.selections.read(id)
+      const character = readCharacterSelection(log.events) ?? await this.selections.read(id)
         ?? (log.session.parentSession ? await this.selections.read(log.session.parentSession) : null)
       const image = this.media ? await this.media.put(character?.image) : character?.image
       const value = { characterName: character?.name ?? null, avatar: imageSource(image),

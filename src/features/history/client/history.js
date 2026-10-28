@@ -36,8 +36,13 @@ export class SessionChatHistoryProvider extends ChatHistoryService {
     if (this.source !== source || this.filteredIds !== this.deletedIds || this.phase !== this.deletionPhase) {
       const deleted = new Set(this.deletedIds)
       this.source = source; this.filteredIds = this.deletedIds; this.phase = this.deletionPhase
+      const byId = Object.fromEntries(Object.entries(source.byId).map(([id, row]) => {
+        const origin = row.projectionValues?.mayoriCharacterLineage?.originSessionId
+        return [id, origin && origin !== id ? { ...row, parentId: origin } : row]
+      }))
       this.snapshot = { ...source, phase: this.deletionPhase === 'pending' ? 'pending' : source.phase,
         state: this.deletionPhase === 'error' ? 'error' : source.state,
+        byId,
         ids: this.deletionPhase === 'ready' ? source.ids.filter(id => !deleted.has(id)) : [] }
     }
     return this.snapshot

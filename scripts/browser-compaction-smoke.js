@@ -31,7 +31,7 @@ try {
   await page.getByRole('button', { name: 'История чатов', exact: true }).click()
   await page.getByRole('searchbox', { name: 'Поиск по названию или ID чата' }).fill(sessionId)
   await page.locator('.mayori-history-row').first().click()
-  await page.getByText(/^(?:Trajectory|Контекст)$/).click()
+  await page.getByText(/^(?:Trajectory|Траектория|Контекст)$/).click()
   await page.getByRole('button', { name: 'Показывать', exact: true }).waitFor()
   await chooseMenu(page, 'Показывать', 'Контекст запроса')
   await chooseMenu(page, 'Запрос', 'Последний запрос')
