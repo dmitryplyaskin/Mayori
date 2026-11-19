@@ -56,8 +56,7 @@ button.mayori-dice-toggle { cursor: pointer; }
 .mayori-navigation-row { gap: 10px; min-inline-size: 0; inline-size: 100%; min-block-size: 36px; padding: 8px 12px; border-radius: 12px; text-align: start; }
 .mayori-navigation-glyph { display: flex; align-items: center; justify-content: center; flex: none; inline-size: 18px; }
 .mayori-navigation-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.mayori-navigation-region { flex: 1; min-block-size: 0; overflow: auto; }
-.mayori-navigation-footer { display: flex; flex-direction: column; flex: none; gap: 4px; }
+.mayori-navigation-footer { display: flex; flex-direction: column; flex: none; gap: 4px; margin-block-start: auto; }
 .mayori-navigation[data-collapsed=true] { --dsh-sidebar-inline-padding: 10px; padding: 18px 10px 6px; }
 .mayori-navigation[data-collapsed=true] .mayori-navigation-header { block-size: 36px; padding: 0; margin-block-end: 12px; }
 .mayori-navigation[data-collapsed=true] .mayori-navigation-toggle { inline-size: 36px; block-size: 36px; border-radius: 12px; }
@@ -65,7 +64,7 @@ button.mayori-dice-toggle { cursor: pointer; }
 html[data-windows-titlebar] .mayori-navigation-toggle { position: fixed; inset-block-start: calc((var(--dsh-windows-titlebar-height) - 28px) / 2); inset-inline-start: 12px; z-index: 30; -webkit-app-region: no-drag; inline-size: 28px; block-size: 28px; }
 html[data-windows-titlebar] .mayori-navigation-header { block-size: 40px; }
 html[data-windows-titlebar] .mayori-navigation[data-collapsed=true] { padding: 0; }
-html[data-windows-titlebar] .mayori-navigation[data-collapsed=true] :is(.mayori-navigation-panels, .mayori-navigation-region, .mayori-navigation-footer) { display: none; }
+html[data-windows-titlebar] .mayori-navigation[data-collapsed=true] :is(.mayori-navigation-panels, .mayori-navigation-footer) { display: none; }
 html[data-platform=darwin] .mayori-navigation { background: transparent; padding-block-start: 52px; }
 .mayori-message { position: relative; display: grid; grid-template-areas: 'avatar' 'content'; gap: 8px; min-inline-size: 0; }
 .mayori-message-content { grid-area: content; min-inline-size: 0; }

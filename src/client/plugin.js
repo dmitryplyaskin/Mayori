@@ -7,7 +7,7 @@ import { SessionChatHistoryProvider } from '../features/history/client/history.j
 import { ChatHistoryPanel, ChatHistoryIcon } from '../features/history/client/panel.jsx'
 import { CharacterGalleryPanel, CharacterGalleryIcon } from '../features/characters/client/gallery.jsx'
 import { startCharacterSession } from '../features/character-session/client/start.js'
-import { MayoriSidebar, MayoriMark, MayoriBrandName, MayoriNavigationSidebar, MayoriLeadingControls } from './shell/sidebar.jsx'
+import { MayoriMark, MayoriBrandName, MayoriNavigationSidebar, MayoriLeadingControls } from './shell/sidebar.jsx'
 import { RemotePersonaProvider } from '../features/personas/client/personas.js'
 import { RemoteCharacterChatProvider } from '../features/character-session/client/chat.js'
 import { PersonaPanel, PersonaIcon } from '../features/personas/client/panel.jsx'
@@ -117,9 +117,6 @@ export function apply(ctx) {
   ctx.slots.inject('conversation.hero.brand.mark', () => ctx.slots.register({
     name: 'conversation.hero.brand.mark', priority: -100,
   }, MayoriMark))
-  ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({
-    name: 'sidebar.workspaces', priority: -100,
-  }, MayoriSidebar))
   for (const [slotName, Component] of [['sidebar', MayoriNavigationSidebar], ['shell.leading', MayoriLeadingControls]]) {
     ctx.slots.inject(slotName, () => ctx.effect(() => {
       let installed = false
@@ -130,13 +127,15 @@ export function apply(ctx) {
         if (!stock) return
         installed = true
         const prefix = `mayori.navigation.${slotName}`
+        const children = { ...stock.children }
+        delete children['sidebar.workspaces']
         disposers.push(ctx.slots.register({
           name: slotName, priority: -100, store: stock.store, locale: stock.locale,
-          children: mirroredChildren(stock.children, prefix),
-          inject: (...args) => ({ ...stock.inject?.(...args), stockChildren: stock.children,
+          children: mirroredChildren(children, prefix),
+          inject: (...args) => ({ ...stock.inject?.(...args), stockChildren: children,
             childPrefix: prefix, openHome: () => ctx.layout.selectPanel('mayori-home') }),
         }, Component))
-        for (const name of Object.keys(stock.children ?? {})) disposers.push(mirrorSlot(ctx, name, `${prefix}.${name}`))
+        for (const name of Object.keys(children)) disposers.push(mirrorSlot(ctx, name, `${prefix}.${name}`))
       }
       const unsubscribe = ctx.slots.subscribe(slotName, register)
       register()

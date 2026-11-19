@@ -29,11 +29,6 @@ export function MayoriBrandName() {
   return <span>Mayori Engine</span>
 }
 
-/** Workspace-region occupant. Settings retains its own public slot. */
-export function MayoriSidebar() {
-  return null
-}
-
 /** The fully hidden desktop sidebar only needs its expand control. */
 export function MayoriLeadingControls({ toggleSidebar, useShortcuts, t }) {
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'sidebar.left.toggle'))
@@ -47,14 +42,14 @@ export function MayoriLeadingControls({ toggleSidebar, useShortcuts, t }) {
 }
 
 /** Each panel subscribes to selection through the sidebar's public runtime. */
-function NavigationRow({ id, label, wide, usePanelInfo, selectPanel, renderSlot }) {
+function NavigationRow({ id, label, wide, usePanelInfo, selectPanel, renderFactorySlot }) {
   const active = usePanelInfo(info => info.activePanelId === id)
   return (
     <Tooltip label={label} side="right" delayMs={500} disabled={wide}><button type="button" className="mayori-navigation-row" aria-label={label}
       aria-current={active ? 'page' : undefined}
       onClick={() => selectPanel(id)}>
       <span className="mayori-navigation-glyph" aria-hidden="true">
-        {renderSlot('sidebar.panellist', { size: wide ? 16 : 18, active }, { only: id })}
+        {renderFactorySlot('sidebar.panel.icon', { id, size: wide ? 16 : 18, active })}
       </span>
       {wide && <span className="mayori-navigation-label">{label}</span>}
     </button></Tooltip>
@@ -65,7 +60,7 @@ function NavigationRow({ id, label, wide, usePanelInfo, selectPanel, renderSlot 
 export function MayoriNavigationSidebar(props) {
   const { stockChildren, childPrefix } = props
   const { collapsed, width, openHome, toggleSidebar, selectPanel,
-    usePanels, usePanelInfo, useShortcuts, t, renderSlot } = remapChildProps(props, stockChildren, childPrefix)
+    usePanels, usePanelInfo, useShortcuts, t, renderSlot, renderFactorySlot } = remapChildProps(props, stockChildren, childPrefix)
   const panels = usePanels(snapshot => snapshot)
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'sidebar.left.toggle'))
   const wide = !collapsed
@@ -88,11 +83,8 @@ export function MayoriNavigationSidebar(props) {
       </div>
       {panels.length > 0 && <nav className="mayori-navigation-panels" aria-label={t('panels.label')}>
         {panels.map(({ id, label }) => <NavigationRow key={id} id={id} label={label} wide={wide}
-          usePanelInfo={usePanelInfo} selectPanel={selectPanel} renderSlot={renderSlot} />)}
+          usePanelInfo={usePanelInfo} selectPanel={selectPanel} renderFactorySlot={renderFactorySlot} />)}
       </nav>}
-      <div className="mayori-navigation-region">
-        {renderSlot('sidebar.workspaces', { wide, expandSidebar: () => { if (collapsed) toggleSidebar() } })}
-      </div>
       <div className="mayori-navigation-footer">
         {renderSlot('sidebar.footer.action', { wide })}
         {renderSlot('sidebar.settings', { wide })}

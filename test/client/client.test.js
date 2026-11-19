@@ -125,7 +125,7 @@ test('registers reversible Mayori client contributions', async () => {
       'conversation.chat.assistant-actions', 'conversation.input.permission', 'conversation.composer.bar',
       'sidebar.footer.action',
       'tool.call.toolview', 'tool.call.toolview',
-      'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark', 'sidebar.workspaces', 'sidebar', 'shell.leading',
+      'sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark', 'sidebar', 'shell.leading',
       'main', 'sidebar.panellist', 'main.conversation', 'main', 'main', 'main', 'main', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'sidebar.panellist', 'conversation.chat.node', 'conversation.chat.flow', 'conversation.view', 'conversation.session.header',
     ])
     for (const slot of slotInjections) slot.callback()
@@ -135,10 +135,6 @@ test('registers reversible Mayori client contributions', async () => {
     assert.equal(typeof settings.options.inject().preferences.update, 'function')
     assert.equal(registrations.find(item => item.options.name === 'tool.call.toolview').options.key, 'rollDice')
     assert.deepEqual(registrations.filter(item => item.options.name === 'tool.call.toolview').map(item => item.options.key), ['rollDice', 'resolveCheck'])
-    const slotRegistration = registrations.find(item => item.options.name === 'sidebar.workspaces')
-    assert.equal(slotRegistration.options.name, 'sidebar.workspaces')
-    assert.equal(slotRegistration.options.priority, -100)
-    assert.equal(typeof slotRegistration.component, 'function')
     const sidebar = registrations.find(item => item.options.key === 'mayori-characters').options.inject()
     assert.equal(registrations.find(item => item.options.key === 'mayori-history').options.inject().history, provided.mayoriHistory)
     assert.deepEqual(registrations.filter(item => item.options.name === 'sidebar.panellist').map(item => [item.options.id, item.options.label()]), [['mayori-home', 'Главная'], ['mayori-characters', 'Персонажи'], ['mayori-history', 'История чатов'], ['mayori-personas', 'Персоны'], ['mayori-presets', 'Пресеты']])
@@ -408,7 +404,7 @@ test('sidebar omits New Session while preserving home, panels, toggle, settings 
   const toggleSidebar = () => { toggled++ }
   const stock = { options: {}, locale: 'sidebar', store: { sidebar: true },
     children: Object.fromEntries(['sidebar.brand.name', 'sidebar.brand.mark', 'sidebar.toggle.badge',
-      'sidebar.panellist', 'sidebar.workspaces', 'sidebar.settings', 'sidebar.footer.action'].map(name => [name, { kind: 'single', scope: 'root' }])),
+      'sidebar.workspaces', 'sidebar.settings', 'sidebar.footer.action'].map(name => [name, { kind: 'single', scope: 'root' }])),
     component() {}, inject: () => ({ startSession, toggleSidebar, selectPanel: id => selected.push(id), hooks: { panels: 'stock panels' } }) }
   const previousDocument = globalThis.document
   globalThis.document = { createElement: () => ({ dataset: {}, remove() {} }), head: { appendChild() {} } }
@@ -429,14 +425,22 @@ test('sidebar omits New Session while preserving home, panels, toggle, settings 
     assert.equal(renderer.options.store, stock.store)
     assert.equal(renderer.options.locale, stock.locale)
     assert.ok(renderer.options.children['mayori.navigation.sidebar.sidebar.brand.name'])
+    assert.ok(stock.children['sidebar.workspaces'])
+    assert.equal(renderer.options.children['mayori.navigation.sidebar.sidebar.workspaces'], undefined)
     const props = renderer.options.inject()
     const rendered = []
+    const factories = []
     const componentProps = { ...props, collapsed: false, width: 280,
       usePanels: selector => selector([{ id: 'mayori-home', label: 'Главная' }]),
       usePanelInfo: selector => selector({ activePanelId: 'mayori-home' }),
       useShortcuts: selector => selector([{ id: 'sidebar.left.toggle', aria: 'Control+b' }]),
       t: key => key,
-      renderSlot: (name, owner, options) => { rendered.push({ name, owner, options }); return React.createElement('span', null, name) },
+      renderSlot: (name, owner, options) => {
+        assert.ok(Object.hasOwn(renderer.options.children, name), `Undeclared sidebar child: ${name}`)
+        rendered.push({ name, owner, options })
+        return React.createElement('span', null, name)
+      },
+      renderFactorySlot: (name, owner) => { factories.push([name, owner]); return null },
     }
     const element = renderer.component(componentProps)
     assert.equal(element.props.style.width, 280)
@@ -453,7 +457,7 @@ test('sidebar omits New Session while preserving home, panels, toggle, settings 
     assert.deepEqual(selected, ['mayori-home', 'mayori-home'])
     assert.ok(rendered.some(row => row.name === 'mayori.navigation.sidebar.sidebar.brand.name'))
     assert.ok(rendered.some(row => row.name === 'mayori.navigation.sidebar.sidebar.settings' && row.owner.wide))
-    assert.ok(rendered.some(row => row.name === 'mayori.navigation.sidebar.sidebar.panellist' && row.options.only === 'mayori-home'))
+    assert.deepEqual(factories, [['sidebar.panel.icon', { id: 'mayori-home', size: 16, active: true }]])
     for (const collapsed of [false, true]) {
       const html = renderToStaticMarkup(React.createElement(renderer.component, { ...componentProps, collapsed }))
       assert.doesNotMatch(html, /New Session|session\.new|newSession/)

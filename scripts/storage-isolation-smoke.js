@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 if (!process.argv[2]) throw new Error('Usage: node scripts/storage-isolation-smoke.js <dsh-cli-bin.js> (or <pnpm.js> --published)')
 const entry = resolve(process.argv[2])
 const published = process.argv[3] === '--published'
-const prefix = published ? [entry, 'dlx', '@deepseek-ai/dsh@0.2.2-alpha.2'] : [entry]
+const prefix = published ? [entry, 'dlx', '@deepseek-ai/dsh@0.2.2-rc.5'] : [entry]
 const project = resolve(fileURLToPath(new URL('../', import.meta.url)))
 const home = await mkdtemp(join(tmpdir(), 'mayori-native-isolation-'))
 const dataRoot = join(home, 'rpg-data')
@@ -57,7 +57,7 @@ export function apply(ctx) {
       }
       const configs = Object.fromEntries([...ctx.loader.entries()].filter(entry =>
         ['session-persistence-jsonl', 'storage-json', 'attachment-local', 'credentials', 'session-query-sqlite', 'mayori-director'].includes(entry.options.id)
-      ).map(entry => [entry.options.id, entry.fiber.config]))
+      ).map(entry => [entry.options.id, entry.fiber.effectiveConfig]))
       const ids = (await ctx.sessionPersistence.list()).map(item => item.header.id)
       const rows = await ctx.sessionController.list({}, new AbortController().signal)
       res.setHeader('content-type', 'application/json')

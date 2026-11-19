@@ -10,37 +10,23 @@ const url = new URL(process.argv[2])
 assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
 const output = process.argv[3]
 if (output) await mkdir(output, { recursive: true })
-async function rpc(endpoint, payload = {}) {
-  const response = await fetch(new URL(`/mayori/characters/${endpoint}`, url), {
+async function call(path, payload = {}) {
+  const response = await fetch(new URL(path, url), {
     method: 'POST', headers: { 'content-type': 'application/json', origin: url.origin, 'sec-fetch-site': 'same-origin' }, body: JSON.stringify(payload),
   })
   const result = await response.json()
   assert.ok(response.ok && result.ok, JSON.stringify(result))
   return result.value
 }
+const rpc = (endpoint, payload) => call(`/mayori/characters/${endpoint}`, payload)
+await call('/_mayori-smoke', { action: 'active-sessions' })
 const prefix = `История ${Date.now()}`
-const campaign = await rpc('prepare-campaign')
-const probe = await fetch(new URL('/_storage-probe', url), { method: 'POST',
-  headers: { 'content-type': 'application/json', origin: url.origin },
-  body: JSON.stringify({ action: 'create', path: campaign.path, title: 'History smoke fixture' }),
-}).then(response => response.json())
-assert.ok(probe.created?.workspaceId, 'Run in a temporary profile with storage-isolation-probe')
 const names = [`${prefix} Астра`, `${prefix} Яр`]
-const ids = []
 for (const name of names) {
-  const imported = await rpc('import', { files: [{ name: 'history.json', type: 'application/json',
+  await rpc('import', { files: [{ name: 'history.json', type: 'application/json',
     base64: Buffer.from(JSON.stringify({ spec: 'chara_card_v2', spec_version: '2.0', data: {
-      name, description: 'Test character.', first_mes: 'Привет.', alternate_greetings: [],
+      name, description: 'Test character.', first_mes: `Привет, ${name}.`, alternate_greetings: [],
     } })).toString('base64') }] })
-  const character = (await rpc('list', { search: name })).cards.find(card => card.name === name)
-  assert.ok(character, JSON.stringify(imported))
-  const { sessionId } = await rpc('start', { characterId: character.id, workspaceId: probe.created.workspaceId })
-  const adopted = await fetch(new URL('/_storage-probe', url), { method: 'POST',
-    headers: { 'content-type': 'application/json', origin: url.origin },
-    body: JSON.stringify({ action: 'create', path: campaign.path, title: name, sessionId }),
-  }).then(response => response.json())
-  assert.equal(adopted.created?.sessionId, sessionId)
-  ids.push(sessionId)
 }
 const browser = await chromium.launch({ headless: true,
   ...(process.env.MAYORI_CHROMIUM_PATH ? { executablePath: process.env.MAYORI_CHROMIUM_PATH } : {}) })
@@ -48,12 +34,34 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
+  page.on('console', message => {
+    if (message.type() === 'error' && message.text().startsWith('slot entry crashed')) errors.push(message.text().split('\n')[0])
+  })
   await page.goto(url.href)
   await page.getByRole('button', { name: 'История чатов', exact: true }).waitFor()
-  try { await page.getByRole('button', { name: 'Configure later', exact: true }).click({ timeout: 10000 }) } catch {}
+  try { await page.getByRole('button', { name: /^(?:Continue|Продолжить|Configure later)$/ }).click({ timeout: 5000 }) } catch {}
+  await page.locator('.mayori-navigation').waitFor()
+  const ids = []
+  const greeting = name => page.locator('.mayori-message-character').filter({ hasText: `Привет, ${name}.` })
+  for (const name of names) {
+    await page.getByRole('button', { name: 'Персонажи', exact: true }).click()
+    await page.getByLabel('Поиск', { exact: true }).fill(name)
+    const started = page.waitForResponse(response => new URL(response.url()).pathname === '/mayori/characters/start')
+    await page.locator('.mayori-card').filter({ hasText: name }).getByRole('button', { name: 'Играть' }).click()
+    const result = await (await started).json()
+    assert.ok(result.ok, JSON.stringify(result))
+    ids.push(result.value.sessionId)
+    await greeting(name).waitFor()
+  }
+  assert.notEqual(ids[0], ids[1])
   await page.getByRole('button', { name: 'История чатов', exact: true }).click()
   const panel = page.locator('.mayori-history-panel')
   const rows = panel.locator('.mayori-history-item')
+  await panel.getByRole('searchbox').fill(prefix)
+  await rows.nth(1).waitFor()
+  await rows.filter({ hasText: 'Яр' }).locator('.mayori-history-row').click()
+  await greeting(names[1]).waitFor()
+  await page.getByRole('button', { name: 'История чатов', exact: true }).click()
   await panel.getByRole('searchbox').fill(prefix)
   await rows.nth(1).waitFor()
   async function choose(label, value) {
@@ -105,7 +113,9 @@ try {
     assert.ok(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1), `history overflows at ${width}px`)
     if (output) await page.screenshot({ path: join(output, `history-${width}.png`), fullPage: true })
   }
-  assert.deepEqual(errors, [])
   assert.ok((await rpc('history-deleted')).includes(ids[0]))
-  console.log(JSON.stringify({ ok: true, filters: true, sorting: true, deletion: true, reload: true, focus: true, responsive: true, output }))
+  await rows.first().locator('.mayori-history-row').click()
+  await greeting(names[1]).waitFor()
+  assert.deepEqual(errors, [])
+  console.log(JSON.stringify({ ok: true, galleryStart: true, reopen: true, filters: true, sorting: true, deletion: true, reload: true, focus: true, responsive: true, output }))
 } finally { await browser.close() }

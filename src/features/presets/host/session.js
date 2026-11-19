@@ -1,6 +1,9 @@
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { joinContextSections } from '@deepseek-ai/dsh-system-prompt'
 import { SessionPresetService } from './service.js'
 import { PRESET_SECTION, PRESET_SOURCE, presetContext, presetSelectionMessage, readPresetSelection } from '../shared/preset.js'
+
+const WORKING_DIRECTORY_CONTEXT = 'working-directory:current'
 
 /** Restore from the exact inherited log prefix, never the parent's current catalog. */
 export class LoggedSessionPresetProvider extends SessionPresetService {
@@ -33,25 +36,54 @@ export class LoggedSessionPresetProvider extends SessionPresetService {
     const section = agent.ctx.systemPrompt.section({
       name: PRESET_SECTION, order: 10, interpolate: false, text: presetContext(preset),
     })
+    let directoryContext
     let prefix
     try {
+      // An agent-scoped registration shadows DSH's required global contribution.
+      directoryContext = agent.ctx.systemPrompt.context({
+        name: WORKING_DIRECTORY_CONTEXT,
+        order: agent.ctx.systemPrompt.getContextOrder('WORKING_DIRECTORY'),
+        text: '',
+      })
       prefix = agent.ctx.on('agent/pre-step', async (_payload, next) => {
-        // Retire text notices from earlier versions without rewriting past requests.
-        const events = agent.session.snapshotEvents()
-        for (const seq of [...agent.session.surface.nodes]) {
-          const event = events[seq]
-          if (event?.type !== 'user/message' || event.data.source?.kind !== PRESET_SOURCE || event.data.content.length === 0) continue
-          const { id: _id, ...snapshot } = event.data
-          agent.session.append('user/message', createUserMessage({ ...snapshot, content: [] }),
-            { surfaceOp: { op: 'replace', startSeq: seq, endSeq: seq }, sourceEventSeqs: [seq] })
-        }
+        this._retireLegacyContext(agent.session)
         const decision = await next()
         return decision.kind === 'enter' ? { ...decision, startsRequestSeries: true } : decision
       })
-    } catch (error) { section(); throw error }
-    const dispose = this.ctx.effect(() => () => { prefix(); section() }, `mayori: session preset (${agent.id})`)
+    } catch (error) {
+      directoryContext?.()
+      section()
+      throw error
+    }
+    const dispose = this.ctx.effect(() => () => {
+      prefix()
+      directoryContext()
+      section()
+    }, `mayori: session preset (${agent.id})`)
     this._bindings.set(agent, dispose)
     this._selections.set(agent, preset)
+  }
+
+  /** Retire obsolete model text through logged replacements at the next turn. */
+  _retireLegacyContext(session) {
+    const events = session.snapshotEvents()
+    for (const seq of [...session.surface.nodes]) {
+      const event = events[seq]
+      if (event?.type !== 'user/message') continue
+      const { id: _id, ...snapshot } = event.data
+      const { source, content } = snapshot
+      let replacement
+      if (source.kind === PRESET_SOURCE && content.length > 0) {
+        replacement = createUserMessage({ ...snapshot, content: [] })
+      } else if (source.kind === 'runtime-context' && source.sections?.some(section => section.name === WORKING_DIRECTORY_CONTEXT)) {
+        const sections = source.sections.filter(section => section.name !== WORKING_DIRECTORY_CONTEXT)
+        replacement = createUserMessage({ ...snapshot, source: { ...source, sections },
+          content: sections.length ? [{ type: 'text', text: joinContextSections(sections) }] : [],
+        })
+      }
+      if (replacement) session.append('user/message', replacement,
+        { surfaceOp: { op: 'replace', startSeq: seq, endSeq: seq }, sourceEventSeqs: [seq] })
+    }
   }
   _idle(agent) {
     if (this.ctx.agents.get(agent.id) !== agent || agent.status !== 'idle'

@@ -72,11 +72,12 @@ assert.equal(modelInput.messages[0].role, 'system')
 const systemText = modelInput.messages[0].content.map(block => block.text ?? '').join('')
 assert.match(systemText, /You are Mayori, an AI game master/)
 assert.doesNotMatch(systemText, /DeepSeek Harness|coding assistant|implementation checkout|working directory|Web GUI|DSH_WEB_URL|dev:web|Vite|window\.__DSH_BOOT__|replacement server|campaign files|tools SDK|run_code|Do not call present|existing file|Office documents/)
-const runtimeContexts = modelInput.messages.filter(message => message.source?.kind === 'runtime-context')
-assert.equal(runtimeContexts.length, 1, 'DSH records its required working-directory snapshot')
-assert.deepEqual(runtimeContexts[0].source.sections.map(section => section.name), ['working-directory:current'],
-  'RPG requests must not include optional technical runtime contexts')
-assert.match(runtimeContexts[0].source.sections[0].text, /^Current working directory: ".+"\.$/)
+const runtimeContexts = turn.requests.flatMap(({ messages }) => messages.filter(message => message.source?.kind === 'runtime-context'))
+assert.ok(!runtimeContexts.some(({ source, content }) =>
+  source.sections?.some(section => section.name === 'working-directory:current')
+  || content.some(block => block.text?.includes('Current working directory:'))
+), 'Mayori requests must omit the working-directory reminder, including after resuming')
+if (!resuming) assert.equal(runtimeContexts.length, 0, 'New Mayori chats must not include technical runtime snapshots')
 assert.ok(!(modelInput.tools ?? []).some(tool => tool.name === 'working_directory'),
   'RPG requests must not expose the coding working-directory tool')
 assert.ok(systemText.indexOf('Protect player agency.') < systemText.indexOf('<mayori-character-card>'))

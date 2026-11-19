@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { createScope, scopeOf } from '@deepseek-ai/dsh-scope'
-import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
+import SystemPrompt, { renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import { createSystemMessage } from '@deepseek-ai/dsh-llm'
 import { Session } from '@deepseek-ai/dsh-session'
 import { FileSystemPresetStore } from '../../../src/features/presets/host/store.js'
@@ -140,6 +140,45 @@ test('legacy preset notices are retired before a new request without erasing the
   assert.equal(agent.session.deriveMessages().some(message => message.content.some(block => block.text?.includes('selected role-playing'))), false)
   assert.deepEqual(readPresetSelection(agent.session.snapshotEvents()), preset)
   assert.deepEqual(agent.session.snapshotEvents().at(-1).sourceEventSeqs, [old.seq])
+})
+
+test('Mayori suppresses the required working-directory context at request admission', async t => {
+  const h = await runtime(t)
+  const directory = { name: 'working-directory:current', order: 0, text: 'Current working directory: "C:\\campaign".' }
+  h.ctx.systemPrompt.context({ ...directory, required: true })
+  const agent = await h.create('chat')
+  const prompt = h.ctx.systemPrompt
+  const context = { scope: scopeOf(agent.ctx) }
+  assert.deepEqual(renderContextSections(prompt.refreshContext(await prompt.assemble(context), context)), [])
+  assert.deepEqual(renderContextSections(prompt.refreshContext(await prompt.assemble())), [{ name: directory.name, text: directory.text }])
+  await h.ctx.emit('agent/disposed', { agent })
+  assert.deepEqual(renderContextSections(prompt.refreshContext(await prompt.assemble(context), context)), [{ name: directory.name, text: directory.text }])
+})
+
+test('the next turn retires saved directory reminders and preserves other context and historical requests', async t => {
+  const h = await runtime(t)
+  const seed = Session.create('directory-seed', greetingSeed({ messageId: 'opening', text: 'Opening' }))
+  const directory = { name: 'working-directory:current', text: 'Current working directory: "C:\\campaign".' }
+  const rules = { name: 'campaign:rules', text: 'Use the campaign rules.' }
+  for (const sections of [[directory], [directory, rules]]) {
+    seed.append('user/message', { id: `reminder-${sections.length}`, role: 'user',
+      source: { kind: 'runtime-context', form: 'snapshot', sections },
+      content: [{ type: 'text', text: `<system-reminder>\n${sections.map(section => section.text).join('\n\n')}\n</system-reminder>` }],
+    }, { surfaceOp: 'append' })
+  }
+  const historicalEvents = seed.snapshotEvents()
+  const agent = await h.create('chat', historicalEvents)
+  const prepare = () => agent.ctx.waterfall('agent/pre-step', { agent, signal: new AbortController().signal }, () => ({ kind: 'enter', messages: [] }))
+  await prepare()
+  const reminders = agent.session.deriveMessages().filter(message => message.source.kind === 'runtime-context')
+  assert.deepEqual(reminders.map(message => message.source.sections), [[], [rules]])
+  assert.deepEqual(reminders[0].content, [])
+  assert.match(reminders[1].content[0].text, /Use the campaign rules/)
+  assert.doesNotMatch(reminders[1].content[0].text, /Current working directory/)
+  assert.deepEqual(agent.session.snapshotEvents().slice(0, historicalEvents.length), historicalEvents)
+  const seq = agent.session.seq
+  await prepare()
+  assert.equal(agent.session.seq, seq)
 })
 
 test('restart and fork restore the exact recorded selection after editing and deleting the catalog', async t => {
