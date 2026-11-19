@@ -76,17 +76,20 @@ html[data-platform=darwin] .mayori-navigation { background: transparent; padding
 .mayori-message-actions button:hover:not([aria-disabled="true"]) { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }
 .mayori-revision-status { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .mayori-message-actions button:is(:disabled, [aria-disabled="true"]) { cursor: default; opacity: 0.5; }
-.mayori-message-actions button:focus-visible, .mayori-message-editor :is(button, textarea):focus-visible { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 2px; }
-.mayori-message-editor { box-sizing: border-box; inline-size: min(720px, calc(100vw - 32px)); max-block-size: calc(100dvh - 32px); margin: auto; padding: 24px; overflow: auto; border: 1px solid var(--dsw-alias-border-l2); border-radius: 16px; background: var(--dsw-alias-bg-layer-1, Canvas); color: var(--dsw-alias-label-primary, CanvasText); }
-.mayori-message-editor::backdrop { background: oklch(0 0 0 / 0.56); }
-.mayori-message-editor form { display: grid; gap: 12px; }
-.mayori-message-editor h2, .mayori-message-editor p { margin: 0; }
-.mayori-message-editor h2 { font-size: 20px; }
-.mayori-message-editor p { line-height: 1.5; }
-.mayori-message-confirm { inline-size: min(360px, calc(100vw - 32px)); }
-.mayori-message-editor textarea { box-sizing: border-box; inline-size: 100%; min-block-size: 180px; max-block-size: 45dvh; resize: vertical; padding: 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); color: inherit; font: inherit; font-size: 16px; line-height: 1.5; }
+.mayori-message-actions button:focus-visible, :is(.mayori-message-editor, .mayori-message-confirm) :is(button, textarea):focus-visible { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 2px; }
+.mayori-message-confirm { box-sizing: border-box; inline-size: min(360px, calc(100vw - 32px)); max-block-size: calc(100dvh - 32px); margin: auto; padding: 24px; overflow: auto; border: 1px solid var(--dsw-alias-border-l2); border-radius: 16px; background: var(--dsw-alias-bg-layer-1, Canvas); color: var(--dsw-alias-label-primary, CanvasText); }
+.mayori-message-confirm::backdrop { background: oklch(0 0 0 / 0.56); }
+.mayori-message-confirm form { display: grid; gap: 12px; }
+.mayori-message-confirm h2 { margin: 0; font-size: 20px; }
+:is(.mayori-message-editor, .mayori-message-confirm) p { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
+.mayori-message-editor { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-block: 4px; }
+.mayori-message-user .mayori-message-editor { max-inline-size: 36rem; margin-inline-start: auto; }
+.mayori-message-editor textarea { box-sizing: border-box; inline-size: 100%; min-block-size: 5em; max-block-size: 48dvh; field-sizing: content; resize: vertical; padding: 10px 12px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2, Canvas); color: inherit; font: inherit; font-size: max(16px, 1em); line-height: 1.5; }
 .mayori-message-editor-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; }
 .mayori-message-editor-actions button { min-block-size: 44px; padding: 8px 16px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); color: inherit; font: inherit; cursor: pointer; }
+.mayori-message-editor .mayori-message-editor-actions { gap: 6px; }
+.mayori-message-editor .mayori-message-editor-actions button { min-block-size: 36px; padding: 6px 10px; font-size: 14px; }
+.mayori-message-editor button[value=current] { background: var(--dsw-alias-label-primary, CanvasText); color: var(--dsw-alias-bg-layer-1, Canvas); }
 .mayori-message-editor-actions button:disabled { cursor: default; opacity: 0.5; }
 .mayori-revision-branches { grid-column: 1 / -1; min-inline-size: 0; padding-block: 8px; font-size: 12px; color: var(--dsw-alias-label-secondary); }
 .mayori-revision-branches { display: flex; align-items: center; gap: 8px; }

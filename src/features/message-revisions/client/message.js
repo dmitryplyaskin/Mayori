@@ -1,8 +1,9 @@
-import { createElement, useEffect, useSyncExternalStore } from 'react'
+import { createElement, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { remapChildProps } from '../../../client/infrastructure/slot-mirror.js'
 import { EDIT_SOURCE, REMOVE_SOURCE, RESTORE_SOURCE } from '../domain/edits.js'
 import { VARIANT_SOURCE } from '../domain/variants.js'
 import { AnswerVariantNavigation } from './variants.js'
+import { MessageEditContext } from './editor-state.js'
 
 /** Logged author corrections update their original rows, not a second context bubble. */
 export function RevisionContextMessage({ stock, stockChildren, childPrefix, ...props }) {
@@ -51,19 +52,29 @@ export function visibleRevisionEntries(entries, nodes, groups, edits) {
   })
 }
 
-export function RevisionChatFlow({ stock, stockChildren, childPrefix, revisionFor, IconButton, ...props }) {
+export function RevisionChatFlow(props) {
+  return createElement(SessionRevisionFlow, { ...props, key: props.sessionId })
+}
+
+function SessionRevisionFlow({ stock, stockChildren, childPrefix, revisionFor, IconButton, ...props }) {
   const revisions = revisionFor(props.sessionId)
   const snapshot = useSyncExternalStore(revisions.subscribe, revisions.getSnapshot, revisions.getSnapshot)
   const nodes = props.useChat(state => state.nodes)
   const groups = props.useConversation(state => state.views.grouped('chat'))
   const activity = props.useSession?.(state => state.running || (state.pendingSubmissions?.length ?? 0) > 0)
+  const [draft, setDraft] = useState(null)
+  const editing = useMemo(() => ({ draft, setDraft }), [draft])
   useEffect(() => { void revisions.refresh() }, [revisions, activity])
-  return [createElement(stock, { ...remapChildProps(props, stockChildren, childPrefix), key: 'flow',
-    entries: visibleRevisionEntries(props.entries, nodes, groups, snapshot.edits) }),
-  ...(!activity ? snapshot.variants.filter(group => group.replySeq === null
-    || !nodes.values().some(node => node.kind === 'assistant-step' && node.data.finalNode?.seq === group.replySeq))
-    .map(group => createElement(AnswerVariantNavigation,
-    { key: group.groupId, group, revisions, useSession: props.useSession, IconButton })) : [])]
+  useEffect(() => {
+    if (draft && snapshot.edits[draft.seq]?.deleted) setDraft(null)
+  }, [draft, snapshot.edits])
+  return createElement(MessageEditContext.Provider, { value: editing },
+    createElement(stock, { ...remapChildProps(props, stockChildren, childPrefix),
+      entries: visibleRevisionEntries(props.entries, nodes, groups, snapshot.edits) }),
+    !activity && snapshot.variants.filter(group => group.replySeq === null
+      || !nodes.values().some(node => node.kind === 'assistant-step' && node.data.finalNode?.seq === group.replySeq))
+      .map(group => createElement(AnswerVariantNavigation,
+        { key: group.groupId, group, revisions, useSession: props.useSession, IconButton })))
 }
 
 /** Apply a logged text edit to the native display/copy node without inventing model output. */

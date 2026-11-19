@@ -21,6 +21,7 @@ async function loadBuiltClient(runtime = {}) {
     const exports = handoff.factory((id) => {
       required.push(id)
       if (id === 'react') return runtime.react ?? {
+        createContext: React.createContext,
         forwardRef: React.forwardRef,
         useId() { return 'avatar-title' },
         useEffect() {}, useMemo(factory) { return factory() }, useRef(value) { return { current: value } },

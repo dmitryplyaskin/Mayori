@@ -185,7 +185,7 @@ export function ChatHistoryPanel({ history }) {
       </div>
     </li>)}</ul>
     {rows.length > 0 && <Pagination pagination={pagination} total={rows.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />}
-    {removing && createPortal(<dialog ref={dialogRef} className="mayori-message-editor mayori-message-confirm" aria-labelledby={dialogTitle}
+    {removing && createPortal(<dialog ref={dialogRef} className="mayori-message-confirm" aria-labelledby={dialogTitle}
       onCancel={event => { event.preventDefault(); closeRemoval() }} onKeyDown={event => event.stopPropagation()}>
       <form onSubmit={remove}>
         <h2 id={dialogTitle}>{tr("Удалить чат «{p1}»?", { p1: removing.title })}</h2>

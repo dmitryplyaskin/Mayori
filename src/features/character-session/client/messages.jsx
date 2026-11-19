@@ -1,9 +1,11 @@
 import { tr } from '../../localization/client/service.js'
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
+import { useContext, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { remapChildProps } from '../../../client/infrastructure/slot-mirror.js'
 import { GreetingMessage } from './greeting.jsx'
 import { MessageRevisionControls, UserRevisionToolbar } from '../../message-revisions/client/controls.jsx'
+import { InlineMessageEditor } from '../../message-revisions/client/editor.jsx'
+import { MessageEditContext } from '../../message-revisions/client/editor-state.js'
 import { originalImage } from '../../media/shared/image.js'
 import { editedNode, removedNode } from '../../message-revisions/client/message.js'
 import { AnswerVariants } from '../../message-revisions/client/variants.js'
@@ -85,12 +87,13 @@ function MessageWithAvatar({ assistant, name, image, children, actions }) {
   </div>
 }
 
-/** Session snapshots own portraits; the stock renderer still owns message content. */
+/** Session snapshots own portraits; the stock renderer still owns saved message content. */
 export function CharacterMessage({ stock, stockChildren, childPrefix, chatFor, revisionFor, ...props }) {
   const chat = chatFor(props.sessionId)
   const snapshot = useSyncExternalStore(chat.subscribe, chat.getSnapshot, chat.getSnapshot)
   const mapped = remapChildProps(props, stockChildren, childPrefix)
   const revisions = revisionFor?.(props.sessionId)
+  const draft = useContext(MessageEditContext)?.draft
   const revisionSnapshot = useSyncExternalStore(revisions?.subscribe ?? (() => () => {}),
     revisions?.getSnapshot ?? (() => null), revisions?.getSnapshot ?? (() => null))
   const activity = props.useSession?.(state => state.running || (state.pendingSubmissions?.length ?? 0) > 0)
@@ -115,13 +118,20 @@ export function CharacterMessage({ stock, stockChildren, childPrefix, chatFor, r
   const person = assistant ? snapshot.value.character : snapshot.value.persona
   const name = person?.name || (assistant ? tr("Персонаж") : tr("Игрок"))
   const seq = assistant ? props.node.data.finalNode?.seq : props.node.data.seq
-  const editable = !assistant && revisionFor && props.useSession && Number.isSafeInteger(seq) && seq > 0
+  const editable = !assistant && revisions && props.useSession && Number.isSafeInteger(seq) && seq > 0
     && props.node.data.content?.some(block => block.type === 'text' && block.text.trim())
+  const editing = draft && draft.seq === seq && revisions && props.useSession
+  const editor = editing && <InlineMessageEditor key={seq} draft={draft} revisions={revisions} useSession={props.useSession} />
+  const data = mapped.node.data
   return <MessageWithAvatar assistant={assistant} name={name} image={assistant ? person?.image : person?.avatar}
-    actions={editable && <MessageRevisionControls revisions={revisionFor(props.sessionId)} seq={seq}
+    actions={editable && <MessageRevisionControls revisions={revisions} seq={seq}
       useSession={props.useSession} canRepeat={false} />}>
-    {content}
-    {assistant && revisions && props.useSession && props.groupPart !== 'reasoning' && <AnswerVariants
+    {!assistant && editor}
+    {editing ? <Stock {...mapped} node={{ ...mapped.node, data: assistant
+      ? { ...data, blocks: data.blocks.filter(block => block.kind !== 'text') }
+      : { ...data, content: data.content.filter(block => block.type !== 'text') } }} /> : content}
+    {assistant && editor}
+    {!editing && assistant && revisions && props.useSession && <AnswerVariants
       revisions={revisions} seq={seq} useSession={props.useSession} IconButton={IconButton} />}
   </MessageWithAvatar>
 }

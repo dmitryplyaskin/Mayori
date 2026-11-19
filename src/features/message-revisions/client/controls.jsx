@@ -1,10 +1,11 @@
 import { tr, noticeText } from '../../localization/client/service.js'
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
+import { useContext, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { Select } from '../../../client/components/select.jsx'
 import { branchRows } from '../domain/revisions.js'
 import { IconButton } from '../../../client/components/icon-button.jsx'
 import { assertSafeEdit, assertCurrentRegeneration } from './revisions.js'
+import { MessageEditContext } from './editor-state.js'
 
 function RevisionIcon({ repeat, remove }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
@@ -45,42 +46,43 @@ export function AssistantRevisionActions({ chatFor, revisionFor, sessionId, clos
 
 /** The author chooses where to save; editing never starts model work. */
 export function MessageRevisionControls({ revisions, seq, canRepeat, useSession }) {
+  const editing = useContext(MessageEditContext)
   const snapshot = useSyncExternalStore(revisions.subscribe, revisions.getSnapshot, revisions.getSnapshot)
   const activity = useSession(state => state.running || state.awaitingFirstTurn || state.pendingSubmissions.length > 0)
   const dialog = useRef(null)
   const trigger = useRef(null)
-  const field = useRef(null)
   const epoch = useRef(0)
   const pending = useRef(false)
   const titleId = useId()
-  const textId = useId()
-  const errorId = useId()
-  const [editor, setEditor] = useState(null)
-  const [text, setText] = useState('')
+  const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   useEffect(() => () => { ++epoch.current }, [])
   useEffect(() => {
-    if (editor) dialog.current?.showModal()
+    if (confirming) dialog.current?.showModal()
     else trigger.current?.focus()
-  }, [editor])
-  const busy = activity || snapshot.busy || loading
+  }, [confirming])
+  const busy = activity || snapshot.busy || loading || Boolean(editing?.draft)
   const open = async (mode, button) => {
     if (busy || pending.current) return
     pending.current = true
     const revision = ++epoch.current
-    trigger.current = button; setError(''); setLoading(true)
+    setError(''); setLoading(true)
     try {
       const value = await revisions.inspect(seq)
       if (revision !== epoch.current) return
-      if (mode === 'edit') assertSafeEdit(value)
-      if (mode === 'regenerate') {
+      if (mode === 'edit') {
+        assertSafeEdit(value)
+        editing.setDraft(current => current ?? { seq, text: value.text, role: value.role, trigger: button })
+      } else if (mode === 'regenerate') {
         assertCurrentRegeneration(value)
         if (!value.canRegenerate) throw new Error(value.regenerateError || tr("У этой реплики нет хода игрока для повторной генерации."))
+        await revisions.regenerate(seq)
+      } else {
+        if (!value.canDelete) throw new Error(tr("Перезапустите Mayori и обновите страницу для удаления сообщений."))
+        trigger.current = button
+        setConfirming(true)
       }
-      if (mode === 'delete' && !value.canDelete) throw new Error(tr("Перезапустите Mayori и обновите страницу для удаления сообщений."))
-      if (mode === 'regenerate') await revisions.regenerate(seq)
-      else { setText(mode === 'edit' ? value.text : ''); setEditor({ mode, ...value }) }
     } catch (failure) { if (revision === epoch.current) setError(failure.message) }
     finally { pending.current = false; if (revision === epoch.current) setLoading(false) }
   }
@@ -89,47 +91,35 @@ export function MessageRevisionControls({ revisions, seq, canRepeat, useSession 
     event.preventDefault()
     event.stopPropagation()
     if (busy || pending.current) return
-    if (editor.mode === 'edit' && !text.trim()) { setError(tr("Введите текст сообщения.")); field.current?.focus(); return }
     pending.current = true; setError('')
     const revision = epoch.current
     try {
-      if (editor.mode === 'edit') await revisions.edit(seq, text, event.nativeEvent?.submitter?.value === 'branch' ? 'branch' : 'current')
-      else await revisions.remove(seq)
+      await revisions.remove(seq)
       if (revision === epoch.current) dialog.current?.close()
     } catch (failure) { if (revision === epoch.current) setError(failure.message) }
     finally { pending.current = false }
   }
   return <>
     <span className="mayori-message-actions">
-      <IconButton label={tr("Редактировать")} aria-haspopup="dialog" aria-disabled={busy || undefined}
-        onClick={event => { void open('edit', event.currentTarget) }}><RevisionIcon /></IconButton>
+      {editing && <IconButton label={tr("Редактировать")} aria-expanded={editing.draft?.seq === seq}
+        aria-disabled={busy || undefined} onClick={event => { void open('edit', event.currentTarget) }}><RevisionIcon /></IconButton>}
       {canRepeat && <IconButton label={tr("Повторить ответ")} aria-disabled={busy || undefined}
         onClick={event => { void open('regenerate', event.currentTarget) }}><RevisionIcon repeat /></IconButton>}
       <IconButton label={tr("Удалить сообщение")} aria-haspopup="dialog" aria-disabled={busy || undefined}
         onClick={event => { void open('delete', event.currentTarget) }}><RevisionIcon remove /></IconButton>
       <span className="mayori-revision-status" role="status">{loading ? tr("Загружаем реплику…") : snapshot.busy ? tr("Сохраняем…") : ''}</span>
     </span>
-    {error && !editor && <p role="alert" className="mayori-error">{noticeText(error)}</p>}
-    {editor && createPortal(<dialog ref={dialog} className={`mayori-message-editor${editor.mode === 'delete' ? ' mayori-message-confirm' : ''}`} aria-labelledby={titleId}
+    {error && !confirming && <p role="alert" className="mayori-error">{noticeText(error)}</p>}
+    {confirming && createPortal(<dialog ref={dialog} className="mayori-message-confirm" aria-labelledby={titleId}
       onCancel={event => { if (snapshot.busy) event.preventDefault() }}
       onKeyDown={event => { event.stopPropagation() }}
-      onClose={() => { setEditor(null); setError('') }}>
+      onClose={() => { setConfirming(false); setError('') }}>
       <form onSubmit={submit}>
-        <h2 id={titleId}>{editor.mode === 'edit' ? tr("Редактировать сообщение") : tr("Удалить сообщение?")}</h2>
-        {editor.mode === 'edit' && <>
-          <label htmlFor={textId}>{editor.role === 'user' ? tr("Реплика игрока") : tr("Реплика персонажа")}</label>
-          <textarea ref={field} id={textId} autoFocus value={text} disabled={snapshot.busy}
-            aria-invalid={error && !text.trim() ? true : undefined} aria-describedby={error ? errorId : undefined}
-            onChange={event => { setText(event.target.value); setError('') }}
-            onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); event.currentTarget.form.requestSubmit() } }} />
-        </>}
-        {error && <p id={errorId} role="alert" className="mayori-error">{noticeText(error)}</p>}
+        <h2 id={titleId}>{tr("Удалить сообщение?")}</h2>
+        {error && <p role="alert" className="mayori-error">{noticeText(error)}</p>}
         <div className="mayori-message-editor-actions">
-          <button type="button" autoFocus={editor.mode === 'delete'} disabled={snapshot.busy} onClick={close}>{tr("Отмена")}</button>
-          {editor.mode === 'edit' ? <>
-            <button type="submit" value="current" disabled={busy}>{tr("Сохранить в чате")}</button>
-            <button type="submit" value="branch" disabled={busy}>{tr("Создать ветку")}</button>
-          </> : <button type="submit" disabled={busy}>{snapshot.busy ? tr("Удаляем…") : tr("Удалить")}</button>}
+          <button type="button" autoFocus disabled={snapshot.busy} onClick={close}>{tr("Отмена")}</button>
+          <button type="submit" disabled={busy}>{snapshot.busy ? tr("Удаляем…") : tr("Удалить")}</button>
         </div>
       </form>
     </dialog>, document.body)}

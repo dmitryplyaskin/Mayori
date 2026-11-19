@@ -1,14 +1,17 @@
 import { tr, noticeText } from '../../localization/client/service.js'
-import { createElement, useRef, useState, useSyncExternalStore } from 'react'
+import { createElement, useContext, useRef, useState, useSyncExternalStore } from 'react'
+import { MessageEditContext } from './editor-state.js'
 
 /** Saved answers use the same compact, cyclic navigation as authored greetings. */
 export function AnswerVariantNavigation({ revisions, group, useSession, IconButton }) {
   const snapshot = useSyncExternalStore(revisions.subscribe, revisions.getSnapshot, revisions.getSnapshot)
   const activity = useSession(state => state.running || state.awaitingFirstTurn || state.pendingSubmissions.length > 0)
+  const draft = useContext(MessageEditContext)?.draft
+  const busy = snapshot.busy || activity || Boolean(draft)
   const pending = useRef(false)
   const [error, setError] = useState('')
   const swipe = async direction => {
-    if (pending.current || snapshot.busy || activity || !group.count) return
+    if (pending.current || busy || !group.count) return
     pending.current = true; setError('')
     const index = group.index < 0 ? (direction < 0 ? group.count - 1 : 0)
       : (group.index + direction + group.count) % group.count
@@ -25,7 +28,6 @@ export function AnswerVariantNavigation({ revisions, group, useSession, IconButt
     }
   }
   if (group.count < 2 && group.index >= 0) return null
-  const busy = snapshot.busy || activity
   return createElement('div', { className: 'mayori-answer-variants', 'data-answer-variant-group': group.groupId,
     'data-answer-variant-chat': revisions.sessionId },
     createElement('div', { className: 'mayori-greeting-swipes', 'aria-label': tr("Варианты ответа") },
