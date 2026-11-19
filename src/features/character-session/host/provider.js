@@ -160,8 +160,8 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
   async create(characterId, workspaceId, greetingIndex = 0) {
     validateCardId(characterId)
     if (!Number.isSafeInteger(greetingIndex) || greetingIndex < 0) throw new TypeError('Некорректный вариант приветствия.')
-    const workspace = this.ctx.workspaceRegistry.get(workspaceId)
-    if (!workspace) throw new Error('Кампания не найдена. Обновите страницу.')
+    const selectedWorkspace = workspaceId === undefined ? undefined : this.ctx.workspaceRegistry.get(workspaceId)
+    if (workspaceId !== undefined && !selectedWorkspace) throw new Error('Кампания не найдена. Обновите страницу.')
     const card = this._library.get ? await this._library.get(characterId) : (await this._library.list()).find(card => card.id === characterId)
     if (!card) throw new Error('Персонаж больше не найден в галерее.')
     const character = characterSnapshot(card)
@@ -175,6 +175,7 @@ export class PersistentCharacterSessionProvider extends CharacterSessionService 
     character.greeting = { index: greetingIndex, messageId: randomUUID(),
       text: renderTemplate(greetings[greetingIndex], character, character.persona, character.templateTime) }
     const preset = await this.ctx.agentPresets.resolve()
+    const workspace = selectedWorkspace ?? await this.ctx.workspaceRegistry.create((await this.prepareCampaign()).path)
     await this._store.save(sessionId, character, () => {})
     const handle = await this.ctx.agents.create({
       sessionId, meta: { cwd: workspace.path, agentPreset: preset.id },

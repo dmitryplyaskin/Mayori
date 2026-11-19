@@ -23,7 +23,7 @@ test('new command loads the invoking character and starts a fresh chat only once
   await command.ui.run(session)
   finishRead()
   await operation
-  assert.deepEqual(created, [[character, 'source']])
+  assert.deepEqual(created, [[character]])
   assert.equal(command.available(session), true)
 })
 

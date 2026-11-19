@@ -84,7 +84,7 @@ export function createMayoriRoute({ library, personas, presets, sessionPresets, 
         } else if (endpoint === 'prepare-campaign') {
           sendJson(res, 200, { ok: true, value: await characterSessions.prepareCampaign() })
         } else if (endpoint === 'start') {
-          if (payload === null || typeof payload !== 'object') throw new TypeError('Ожидались персонаж и кампания.')
+          if (payload === null || typeof payload !== 'object') throw new TypeError('Ожидался персонаж.')
           sendJson(res, 200, { ok: true, value: await characterSessions.create(payload.characterId, payload.workspaceId, payload.greetingIndex) })
         } else if (endpoint === 'play') {
           if (payload === null || typeof payload !== 'object') throw new TypeError('Ожидались персонаж и сессия.')

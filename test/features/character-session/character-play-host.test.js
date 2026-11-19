@@ -240,12 +240,25 @@ test('creates a durable closed greeting seed before releasing the temporary agen
   assert.deepEqual(readCharacterSelection(seed), await h.store.read(result.sessionId))
   assert.equal((await h.store.read(result.sessionId)).greeting.messageId, seed[4].data.message.id)
   assert.equal(options.meta.agentPreset, 'mayori')
+  assert.equal(options.meta.cwd, '/campaigns/default')
   assert.deepEqual(h.calls.map(call => call[0]), ['mount', 'attach', 'flush', 'dispose'])
   assert.equal(h.agents.has(result.sessionId), false)
   const resumed = { ...h.agent, id: result.sessionId }
   h.agents.set(resumed.id, resumed)
   await h.listeners.get('agent/created')({ agent: resumed })
   assert.ok(!h.events.some(event => event.type === 'assistant/message'), 'Resume binds context without appending any greeting')
+})
+
+test('a new character chat chooses the Mayori campaign even when another workspace exists', async t => {
+  const h = await creationHarness(t)
+  h.ctx.workspaceRegistry.create = async path => {
+    assert.equal(path, join(h.root, 'default'))
+    assert.ok((await stat(path)).isDirectory())
+    return { path, attachSession: async id => h.calls.push(['attach-default', id]) }
+  }
+  const { sessionId } = await h.provider.create(CARD_ID)
+  assert.equal(h.created[0].meta.cwd, join(h.root, 'default'))
+  assert.ok(h.calls.some(([action, id]) => action === 'attach-default' && id === sessionId))
 })
 
 test('alternate seed expands player identity and contains only the selected opening', async t => {

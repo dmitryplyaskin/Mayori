@@ -32,7 +32,7 @@ async function command(args) {
 const probePath = join(home, 'probe.mjs')
 await writeFile(probePath, `
 export const name = 'storage-isolation-probe'
-export const inject = ['webServer', 'workspaceRegistry', 'sessionController', 'sessions', 'sessionPersistence', 'agents', 'loader', 'appExit']
+export const inject = ['webServer', 'workspaceRegistry', 'workspaceController', 'sessionController', 'sessions', 'sessionPersistence', 'agents', 'loader', 'appExit']
 export function apply(ctx) {
   ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/_storage-probe', handler: async (req, res) => {
     try {
@@ -49,6 +49,9 @@ export function apply(ctx) {
         return
       }
       let created
+      if (input.action === 'initialize-default') {
+        await ctx.workspaceController.initializeDefault(new AbortController().signal)
+      }
       if (input.action === 'create') {
         const workspace = await ctx.workspaceRegistry.create(input.path)
         created = { ...await ctx.sessionController.create({ workspaceId: workspace.id, sessionId: input.sessionId }), workspaceId: workspace.id }
@@ -56,12 +59,13 @@ export function apply(ctx) {
         await ctx.sessions.flush(ctx.agents.get(created.sessionId).session)
       }
       const configs = Object.fromEntries([...ctx.loader.entries()].filter(entry =>
-        ['session-persistence-jsonl', 'storage-json', 'attachment-local', 'credentials', 'session-query-sqlite', 'mayori-director'].includes(entry.options.id)
+        ['session-persistence-jsonl', 'storage-json', 'workspace-controller', 'attachment-local', 'credentials', 'session-query-sqlite', 'mayori-director'].includes(entry.options.id)
       ).map(entry => [entry.options.id, entry.fiber.effectiveConfig]))
       const ids = (await ctx.sessionPersistence.list()).map(item => item.header.id)
       const rows = await ctx.sessionController.list({}, new AbortController().signal)
       res.setHeader('content-type', 'application/json')
-      res.end(JSON.stringify({ ids, rows: rows.items.map(item => item.sessionId), configs, created }))
+      const workspaces = ctx.workspaceRegistry.list().map(({ path, sessionIds }) => ({ path, sessionIds }))
+      res.end(JSON.stringify({ ids, rows: rows.items.map(item => item.sessionId), configs, created, workspaces }))
     } catch (error) { res.writeHead(500); res.end(JSON.stringify({ error: error.message })) }
   } }))
 }
@@ -126,6 +130,8 @@ try {
   await writeFile(join(home, 'mayori.dump.yml'), dump)
   assert.match(dump, /mayoriStorage\.path\('sessions'\)/)
   assert.match(dump, /name: dsh-mayori\/storage/)
+  assert.match(dump, /documentsDirectory: .*mayoriStorage\.path\('workspaces'\)/)
+  assert.match(dump, /mode: DISABLED/)
   const developerContext = dump.match(/- id: harness-dev-context\b[\s\S]*?(?=\r?\n- id:|$)/)?.[0]
   assert.match(developerContext ?? '', /\bdisabled: true/, 'Mayori disables the coding-context provider')
   const nativeExecutor = dump.match(/- id: tool-executor-native\b[\s\S]*?(?=\r?\n- id:|$)/)?.[0]
@@ -145,18 +151,33 @@ try {
     assert.ok(response.ok && result.ok, JSON.stringify(result))
     return result.value
   }
+  const firstUse = await mayori.call({ action: 'initialize-default' })
+  assert.deepEqual(firstUse.workspaces, [{ path: join(dataRoot, 'workspaces', 'deepseek-harness', 'default-workspace'), sessionIds: [] }])
   const rpg = await mayori.call({ action: 'create', path: workspace, title: 'RPG isolation' })
   const code = await coding.call({ action: 'create', path: workspace, title: 'Coding isolation' })
+  await historyRpc(mayori, 'import', { files: [{ name: 'isolation.json', base64: Buffer.from(JSON.stringify({
+    spec: 'chara_card_v2', spec_version: '2.0', data: { name: 'RPG witness', description: 'Isolation test.', first_mes: 'Welcome.' },
+  })).toString('base64') }] })
+  const { cards: [card] } = await historyRpc(mayori, 'list')
+  const { sessionId: characterChat } = await historyRpc(mayori, 'start', { characterId: card.id })
   const assertCatalog = (result, expected, excluded) => {
     assert.ok(result.ids.includes(expected))
     assert.ok(!result.ids.includes(excluded))
     assert.ok(result.rows.includes(expected))
     assert.ok(!result.rows.includes(excluded))
   }
-  assertCatalog(await mayori.call({}), rpg.created.sessionId, code.created.sessionId)
-  assertCatalog(await coding.call({}), code.created.sessionId, rpg.created.sessionId)
+  const rpgCatalog = await mayori.call({})
+  const codeCatalog = await coding.call({})
+  assertCatalog(rpgCatalog, rpg.created.sessionId, code.created.sessionId)
+  assertCatalog(codeCatalog, code.created.sessionId, rpg.created.sessionId)
+  assertCatalog(rpgCatalog, characterChat, code.created.sessionId)
+  assertCatalog(codeCatalog, code.created.sessionId, characterChat)
+  assert.deepEqual(rpgCatalog.workspaces.find(({ sessionIds }) => sessionIds.includes(characterChat)),
+    { path: join(dataRoot, 'mayori', 'campaigns', 'default'), sessionIds: [characterChat] })
   assert.equal(rpg.configs['session-persistence-jsonl'].root, join(dataRoot, 'sessions'))
   assert.equal(rpg.configs['storage-json'].root, join(dataRoot, 'storages'))
+  assert.equal(rpg.configs['workspace-controller'].documentsDirectory, join(dataRoot, 'workspaces'))
+  assert.equal(code.configs['workspace-controller'].documentsDirectory, undefined)
   assert.equal(rpg.configs['attachment-local'].dshHome, dataRoot)
   assert.equal(rpg.configs.credentials.dshHome, dataRoot)
   assert.equal(rpg.configs['session-query-sqlite'].path, join(dataRoot, 'cache', 'session-search.sqlite'))
@@ -169,10 +190,14 @@ try {
   assert.deepEqual(await historyRpc(mayori, 'history-remove', { id: rpg.created.sessionId }), [rpg.created.sessionId])
   await Promise.all([stop(mayori.child), stop(coding.child)])
   const [resumedMayori, resumedCoding] = await Promise.all([boot('mayori'), boot('coding')])
-  assertCatalog(await resumedMayori.call({}), rpg.created.sessionId, code.created.sessionId)
-  assertCatalog(await resumedCoding.call({}), code.created.sessionId, rpg.created.sessionId)
+  const resumedRpgCatalog = await resumedMayori.call({})
+  const resumedCodeCatalog = await resumedCoding.call({})
+  assertCatalog(resumedRpgCatalog, rpg.created.sessionId, code.created.sessionId)
+  assertCatalog(resumedCodeCatalog, code.created.sessionId, rpg.created.sessionId)
+  assertCatalog(resumedRpgCatalog, characterChat, code.created.sessionId)
+  assertCatalog(resumedCodeCatalog, code.created.sessionId, characterChat)
   assert.deepEqual(await historyRpc(resumedMayori, 'history-deleted'), [rpg.created.sessionId])
-  console.log(JSON.stringify({ ok: true, home, sharedWorkspace: true, nativeLaunch: true, coldIsolation: true }))
+  console.log(JSON.stringify({ ok: true, home, sharedWorkspace: true, privateCharacterWorkspace: true, nativeLaunch: true, coldIsolation: true }))
 } finally {
   await Promise.all(processes.map(stop))
 }

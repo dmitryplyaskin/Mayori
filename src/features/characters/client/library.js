@@ -12,7 +12,6 @@ export class CharacterLibraryService {
   refresh() { throw new Error('CharacterLibraryService.refresh() is not implemented') }
   importFiles() { throw new Error('CharacterLibraryService.importFiles() is not implemented') }
   remove() { throw new Error('CharacterLibraryService.remove() is not implemented') }
-  prepareCampaign() { throw new Error('CharacterLibraryService.prepareCampaign() is not implemented') }
   play() { throw new Error('CharacterLibraryService.play() is not implemented') }
   start() { throw new Error('CharacterLibraryService.start() is not implemented') }
   get() { throw new Error('CharacterLibraryService.get() is not implemented') }
@@ -83,16 +82,12 @@ export class RemoteCharacterLibraryProvider extends CharacterLibraryService {
   }
   async refreshAll() { await Promise.all([this.refresh(), this.#gallery?.refresh()]) }
 
-  async start(characterId, workspaceId, greetingIndex = 0) {
-    return call('start', { characterId, workspaceId, greetingIndex })
+  async start(characterId, greetingIndex = 0) {
+    return call('start', { characterId, greetingIndex })
   }
 
   async play(characterId, sessionId) {
     return call('play', { characterId, sessionId })
-  }
-
-  async prepareCampaign() {
-    return call('prepare-campaign', {})
   }
 
   async #ensureLoaded() {

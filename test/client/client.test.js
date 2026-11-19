@@ -155,10 +155,10 @@ test('registers reversible Mayori client contributions', async () => {
     assert.equal(trajectory.options.label, 'Trajectory')
     assert.equal(trajectory.options.inject().contextFor('test-session'), provided.mayoriTrajectoryContext.forSession('test-session'))
     assert.equal(sidebar.library, provided.mayoriCharacters)
-    provided.mayoriCharacters.start = async (characterId, workspaceId) => { played.push([characterId, workspaceId]); return { sessionId: 'character-session' } }
+    provided.mayoriCharacters.start = async (...args) => { played.push(args); return { sessionId: 'character-session' } }
     await sidebar.startCharacter({ id: 'a'.repeat(64), name: 'Aster' })
     assert.deepEqual(created, [], 'The saved greeting must be resumed without DSH create replacing its identity')
-    assert.deepEqual(played, [['a'.repeat(64), 'campaign']])
+    assert.deepEqual(played, [['a'.repeat(64), 0]])
     assert.deepEqual(renamed, [['character-session', 'Aster']])
     assert.deepEqual(opened, ['character-session'])
     assert.equal(appended.dataset.plugin, 'dsh-mayori')

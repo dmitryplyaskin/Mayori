@@ -16,6 +16,11 @@
   config:
     root: !!js ctx.mayoriStorage.path('storages')
 
+- id: workspace-controller
+  inject: [mayoriStorage]
+  config:
+    documentsDirectory: !!js ctx.mayoriStorage.path('workspaces')
+
 - id: attachment-local
   inject: [mayoriStorage]
   config:
@@ -31,6 +36,10 @@
   config:
     path: !!js ctx.mayoriStorage.path('cache', 'session-search.sqlite')
     openAt: never
+
+- id: session-telemetry-otel
+  config:
+    mode: DISABLED
 
 - id: webserver
   config:

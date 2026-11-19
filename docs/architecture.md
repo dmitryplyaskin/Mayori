@@ -109,12 +109,14 @@ Mayori и изменения `process.env.DSH_HOME`. Профиль и паке�
   через публичный entry `dsh-mayori/storage`. Валидируемый `Config.root` допускает
   другой абсолютный каталог или путь с `~/` для тестов и развёртываний.
 - **Consumers** — native DSH session persistence, storage-json (Workspace registry
-  и projection cache), attachment-local, credentials-local, session-query-sqlite
-  и Mayori director. Строки bundle явно inject `mayoriStorage` и получают пути
+  и projection cache), attachment-local, credentials-local, session-query-sqlite,
+  workspace-controller и Mayori director. Строки bundle явно inject `mayoriStorage` и получают пути
   до активации своих providers. Cordis владеет зависимостями и unload.
 
 Никакой новый формат истории или фильтрация чужих чатов в browser не вводится:
 каждый профиль читает собственный corpus из настроенных native хранилищ.
+Автосоздание первого Workspace в DSH использует `~/.dsh-mayori/workspaces` вместо системной папки «Документы».
+Режим `DISABLED` в `session-telemetry-otel` отключает отправку журнала чата через телеметрию DSH.
 Session search выключен по умолчанию; при включении его отдельный индекс
 находится под корнем Mayori. Настройки плагинов сохраняются штатно в профиле;
 служебные данные установки, анонимная идентичность и технический индекс загрузок
@@ -176,13 +178,13 @@ Browser `CharacterLibraryService.refresh()` повторяет чтение ка
 
 ### Character Session
 
-Browser-команда `/new` — action contribution в `ctx.commandUi`. Consumer читает Character Chat для sessionId вызова и запускает существующий `startCharacterSession` с явным `sourceSessionId`, чтобы сохранить кампанию при изменении навигации во время запроса. Host `create()` сохраняет новый snapshot текущей карточки галереи с основным приветствием и привязанной к персонажу персоной, либо default-персоной; preset provider выбирает default для новой сессии. Команда не форкает журнал и не меняет исходную сессию. Повторный вызов на время создания блокируется; ошибки передаются в штатный `conversation.input` исходного чата.
+Browser-команда `/new` — action contribution в `ctx.commandUi`. Consumer читает персонажа из чата, в котором вызвали команду, и запускает `startCharacterSession` в рабочей папке Mayori. Host `create()` сохраняет новый snapshot текущей карточки галереи с основным приветствием и привязанной к персонажу персоной, либо default-персоной; preset provider выбирает default для новой сессии. Команда не форкает журнал и не меняет исходную сессию. Повторный вызов на время создания блокируется; ошибки передаются в штатный `conversation.input` исходного чата.
 
 Запуск игры образует отдельный capability seam:
 
-- **Service Definition** — Host `CharacterSessionService.prepareCampaign()`, `create(characterId, workspaceId, greetingIndex)`, `state(sessionId)`, `swipe(sessionId, index)`, `setPersona(sessionId, personaId)` и legacy `select(sessionId, characterId)`;
+- **Service Definition** — Host `CharacterSessionService.prepareCampaign()`, `create(characterId, workspaceId?, greetingIndex)`, `state(sessionId)`, `swipe(sessionId, index)`, `setPersona(sessionId, personaId)` и legacy `select(sessionId, characterId)`;
 - **Provider** — `PersistentCharacterSessionProvider`, который идемпотентно создаёт `~/.dsh-mayori/mayori/campaigns/default` (корень задаётся валидируемым `campaignsPath`), разрешает карточку через Character Library и хранит неизменяемую связь Session → snapshot в файловом `FileSystemCharacterSessionStore` под `campaignsPath/selections`;
-- **Consumer** — browser gallery, которая при отсутствии кампаний регистрирует подготовленный каталог через `workspaces.create`, получает подготовленный sessionId через Host `start`, обновляет клиентский каталог через `sessions.refresh()` и открывает сохранённую Session по её точному ID через `sessions.using`, ожидает `reference.ready`, задаёт имя и открывает чат через `uiWorkspace.openSession`. Временный reference освобождается как при успехе, так и при ошибке; навигация получает собственный mainView reference до освобождения временного.
+- **Consumers** — домашняя панель, галерея и `/new` получают подготовленный sessionId через Host `start`. Host регистрирует или переиспользует Workspace для `campaignsPath/default`, если запрос не указывает `workspaceId` явно. Browser обновляет каталог через `sessions.refresh()`, получает сохранённую Session по её ID через `sessions.using`, ожидает `reference.ready`, задаёт имя и открывает чат через `uiWorkspace.openSession`. Временный reference освобождается как при успехе, так и при ошибке; навигация получает собственный mainView reference до освобождения временного.
 
 Хранилище выбора содержит стандартные поля Character Card, долговечную ссылку на аватар и сохранённое выбранное приветствие (индекс, итоговый текст и стабильный messageId); неизвестные поля и `extensions` остаются ресурсами каталога. Аватар исключён из модельной проекции. Старый snapshot без поля image один раз дополняется картинкой из доступного каталога при restore, либо null, если карточка удалена. Legacy data URI поддерживаются и переводятся в media references при восстановлении. Запись версионирована, имя файла — SHA-256 идентификатора сессии. Snapshot готовится во временном файле с flush, затем публикуется без перезаписи существующей записи. Выбор выполняется через `agent.runMaintenance`, чтобы ввод не начал ход посреди записи. Повтор того же выбора идемпотентен; другой персонаж требует нового чата.
 

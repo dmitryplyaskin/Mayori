@@ -20,7 +20,7 @@ export function newChatCommand({ chatFor, startCharacter, notify, icon }) {
           const snapshot = chat.getSnapshot()
           if (snapshot.status !== 'ready') throw new Error(snapshot.error || tr("Не удалось прочитать текущий чат."))
           if (!snapshot.value?.character) throw new Error(tr("Откройте чат персонажа из галереи."))
-          await startCharacter(snapshot.value.character, sessionId)
+          await startCharacter(snapshot.value.character)
         } catch (error) {
           notify(sessionId, error instanceof Error ? error.message : String(error))
         } finally { pending.delete(sessionId) }

@@ -62,12 +62,12 @@ export function apply(ctx) {
   ctx.provide('mayoriSessionPresets', { forSession: presetFor })
   const chats = new SessionProviders(id => new RemoteCharacterChatProvider(id))
   const chatFor = sessionId => chats.get(sessionId)
+  const startCharacter = (card, greetingIndex) => startCharacterSession({ sessions: ctx.sessions,
+    uiWorkspace: ctx.uiWorkspace, library }, card, greetingIndex)
   const commands = [
     presetCommand({ presets, presetFor, icon: PresetIcon }),
     personaCommand({ personas, chatFor, icon: PersonaIcon }),
-    newChatCommand({ chatFor, icon: CharacterGalleryIcon,
-      startCharacter: (card, sourceSessionId) => startCharacterSession({ sessions: ctx.sessions,
-        workspaces: ctx.workspaces, uiWorkspace: ctx.uiWorkspace, library, sourceSessionId }, card),
+    newChatCommand({ chatFor, startCharacter, icon: CharacterGalleryIcon,
       notify: (sessionId, text) => {
         const scope = ctx.sessions.scope(sessionId)
         scope?.get('conversation')?.input.for(scope).notify('error', text)
@@ -145,9 +145,7 @@ export function apply(ctx) {
   const history = new SessionChatHistoryProvider(ctx.sessions, ctx.uiWorkspace, ctx.workspaces)
   ctx.effect(() => () => history.dispose(), 'mayori: history cache')
   ctx.provide('mayoriHistory', history)
-  const homeProps = () => ({ history, library, personas, selectPanel: id => ctx.layout.selectPanel(id),
-    startCharacter: (card, greetingIndex) => startCharacterSession({ sessions: ctx.sessions,
-      workspaces: ctx.workspaces, uiWorkspace: ctx.uiWorkspace, library }, card, greetingIndex) })
+  const homeProps = () => ({ history, library, personas, startCharacter, selectPanel: id => ctx.layout.selectPanel(id) })
   ctx.slots.inject('main', () => ctx.slots.register({
     name: 'main', key: 'mayori-home', inject: homeProps,
   }, HomePanel))
@@ -177,13 +175,7 @@ export function apply(ctx) {
   }, 'mayori: home conversation'))
   ctx.slots.inject('main', () => ctx.slots.register({
     name: 'main', key: 'mayori-characters',
-    inject: () => ({
-      library,
-      personas,
-      startCharacter: (card, greetingIndex) => startCharacterSession({
-        sessions: ctx.sessions, workspaces: ctx.workspaces, uiWorkspace: ctx.uiWorkspace, library,
-      }, card, greetingIndex),
-    }),
+    inject: () => ({ library, personas, startCharacter }),
   }, CharacterGalleryPanel))
   ctx.slots.inject('main', () => ctx.slots.register({
     name: 'main', key: 'mayori-history', inject: () => ({ history }),

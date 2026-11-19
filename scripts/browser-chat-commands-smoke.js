@@ -102,7 +102,9 @@ try {
     && response.request().postDataJSON().sessionId !== sessionId)
   await typeCommand('new')
   await composer.press('Enter')
-  const newSessionId = (await (await started).json()).value.sessionId
+  const response = await started
+  assert.equal(response.request().postDataJSON().workspaceId, undefined)
+  const newSessionId = (await response.json()).value.sessionId
   assert.notEqual(newSessionId, sessionId)
   assert.equal((await nextState).request().postDataJSON().sessionId, newSessionId)
   const newState = await rpc('session-state', { sessionId: newSessionId })
